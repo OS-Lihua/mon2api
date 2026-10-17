@@ -9,6 +9,10 @@ Tag format:
 
 ## Unreleased
 
+- Improve landing-page code readability and copy feedback, scroll-aware navigation, FAQ focus, and mobile menu dismissal with focus restoration.
+
+- Add an explicit development-only console preview so frontend review does not require database or chain services; keep backend actions blocked.
+
 - Default contracts, wallet network metadata and Web/worker startup to Monad testnet (10143); isolate its runtime directory, disable demo identities by default, and retain the configured network during RPC failures. Require explicit local mode for isolated EVM tests.
 
 - Add wallet-authenticated versioned REST APIs for merchant resource management, consumer budget sessions, API keys, request ledgers and settlements; add key-scoped usage lookup, strict OpenAPI contracts, local HTTP smoke coverage, and Chinese merchant/consumer integration guides.
