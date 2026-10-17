@@ -14,6 +14,7 @@ import {
 import { mnemonicToAccount } from "viem/accounts";
 import { foundry } from "viem/chains";
 import { escrowAbi, tokenAbi } from "../src/lib/abi";
+import { inspectEscrowOwnerGuard } from "../src/server/services/escrow-version";
 import type { ChainConfig } from "../src/server/services/runtime";
 
 // Public development mnemonic, identical to the application's demo wallets.
@@ -132,6 +133,13 @@ async function main() {
 				"Saved escrow terms do not match the local demo configuration.",
 			);
 		}
+		if (
+			(await inspectEscrowOwnerGuard(client, escrow, account(0).address)) ===
+			"legacy"
+		)
+			console.warn(
+				"Saved escrow lacks the session owner guard. New sessions are blocked; existing sessions can still settle, close and withdraw. Use a separate MON2API_DATA_DIR and DATABASE_URL for a guarded deployment.",
+			);
 		console.log(`Reusing local escrow ${escrow}`);
 		console.log("MON2API_CHAIN_READY");
 		return;

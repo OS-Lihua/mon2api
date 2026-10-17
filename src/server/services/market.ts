@@ -1,10 +1,9 @@
-import { escrowAbi } from "~/lib/abi";
 import { ensureChainBinding } from "./runtime";
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { sealData } from "iron-session";
-import { keccak256, parseEventLogs, stringToHex } from "viem";
+import { getAddress, keccak256, stringToHex } from "viem";
 import type { z } from "zod";
 import { db } from "~/server/db";
 import type { OpenSessionResult, Snapshot, Viewer } from "~/shared/mon2api";
@@ -14,8 +13,10 @@ import {
 	clients,
 	demoOpen,
 	demoWithdraw,
+	findSessionOpen,
 	readSession,
 } from "./chain";
+import { inspectEscrowOwnerGuard } from "./escrow-version";
 import type { listingInput, openSessionInput } from "./mon2api.schema";
 import {
 	chainConfig,
@@ -84,12 +85,33 @@ export async function openSession(
 	input: z.infer<typeof openSessionInput>,
 ): Promise<OpenSessionResult> {
 	await ensureChainBinding();
+	const { config, publicClient } = clients();
+	let ownerGuard: "guarded" | "legacy";
+	try {
+		ownerGuard = await inspectEscrowOwnerGuard(
+			publicClient,
+			getAddress(config.escrow),
+			getAddress(user.address),
+		);
+	} catch {
+		throw new AppError(
+			"unsupported_escrow",
+			"托管合约无法验证会话 ID 所有权，请检查链上部署；已有会话仍可结算、关闭和提现。",
+			503,
+		);
+	}
+	if (ownerGuard === "legacy")
+		throw new AppError(
+			"unsupported_escrow",
+			"当前托管合约不支持安全开通新会话，请使用隔离的新部署。已有会话仍可结算、关闭和提现。",
+			409,
+		);
 	const listing = await db.listing.findUnique({
 		where: { id: input.listingId },
 	});
 	if (!listing?.enabled)
 		throw new AppError("unavailable", "资源当前未上架。", 409);
-	const id = `0x${randomBytes(32).toString("hex")}`;
+	const id = `0x${user.address.slice(2).toLowerCase()}${randomBytes(12).toString("hex")}`;
 	const expiresAt = Math.floor(Date.now() / 1000) + 3600;
 	const termsHash = keccak256(
 		stringToHex(
@@ -137,43 +159,25 @@ export async function confirmSession(user: Viewer, id: string, hash?: string) {
 	const lease = await db.lease.findUnique({ where: { id } });
 	if (!lease || lease.consumer !== user.address)
 		throw new AppError("not_found", "会话不存在。", 404);
-	if (hash) {
-		const { config, publicClient } = clients();
-		const receipt = await publicClient.waitForTransactionReceipt({
-			hash: hash as `0x${string}`,
-			confirmations: config.mode === "local" ? 1 : 6,
-		});
-		const opened = parseEventLogs({
-			abi: escrowAbi,
-			eventName: "SessionOpened",
-			logs: receipt.logs,
-		});
-		if (
-			!opened.some((event) => event.args.id.toLowerCase() === id.toLowerCase())
-		)
-			throw new AppError(
-				"invalid_transaction",
-				"交易没有创建此租赁会话。",
-				409,
-			);
-		if (
-			receipt.status !== "success" ||
-			receipt.to?.toLowerCase() !== config.escrow.toLowerCase() ||
-			receipt.from.toLowerCase() !== user.address
-		)
-			throw new AppError(
-				"invalid_transaction",
-				"交易与此钱包或合约不符。",
-				409,
-			);
-	}
+	const opened = await findSessionOpen(id, hash as `0x${string}` | undefined);
+	if (!opened) throw new AppError("unconfirmed", "链上开通交易尚未确认。", 409);
+	const { event, receipt } = opened;
+	if (
+		event.args.consumer.toLowerCase() !== user.address.toLowerCase() ||
+		event.args.provider.toLowerCase() !== lease.provider.toLowerCase() ||
+		event.args.termsHash.toLowerCase() !== lease.termsHash.toLowerCase() ||
+		event.args.budget !== BigInt(lease.budget) ||
+		event.args.expiresAt !==
+			BigInt(Math.floor(lease.expiresAt.getTime() / 1000))
+	)
+		throw new AppError("invalid_transaction", "开通交易与租赁条款不符。", 409);
 	const onchain = await readSession(id);
 	if (
 		onchain.closed ||
 		onchain.closeAfter ||
-		onchain.consumer.toLowerCase() !== user.address ||
-		onchain.provider.toLowerCase() !== lease.provider ||
-		onchain.termsHash !== lease.termsHash ||
+		onchain.consumer.toLowerCase() !== user.address.toLowerCase() ||
+		onchain.provider.toLowerCase() !== lease.provider.toLowerCase() ||
+		onchain.termsHash.toLowerCase() !== lease.termsHash.toLowerCase() ||
 		onchain.budget !== lease.budget ||
 		onchain.expiresAt !== Math.floor(lease.expiresAt.getTime() / 1000)
 	)
@@ -184,7 +188,7 @@ export async function confirmSession(user: Viewer, id: string, hash?: string) {
 		);
 	await db.lease.updateMany({
 		where: { id, status: "DRAFT" },
-		data: { status: "ACTIVE", openTx: hash },
+		data: { status: "ACTIVE", openTx: receipt.transactionHash },
 	});
 	return { id, status: "ACTIVE" };
 }
@@ -229,7 +233,7 @@ export async function authenticateKey(authorization: string | null) {
 }
 export async function withdraw(user: Viewer) {
 	const balances = await chainBalances(user.address);
-	if (!balances.claimable)
+	if (BigInt(balances.claimable) === 0n)
 		throw new AppError("empty_balance", "当前没有可提现收入或退款。", 409);
 	return user.demo
 		? { mode: "demo" as const, txHash: await demoWithdraw(user.address) }
@@ -281,7 +285,10 @@ export async function snapshot(user: Viewer | null): Promise<Snapshot> {
 		ready: false,
 		explorer: "",
 	};
-	let balances = { claimable: 0, walletBalance: 0 };
+	let balances: Pick<Snapshot["metrics"], "claimable" | "walletBalance"> = {
+		claimable: null,
+		walletBalance: null,
+	};
 	try {
 		const config = chainConfig();
 		const { publicClient } = clients();
@@ -318,8 +325,12 @@ export async function snapshot(user: Viewer | null): Promise<Snapshot> {
 			inputTokens: requests.reduce((n, r) => n + (r.inputTokens || 0), 0),
 			outputTokens: requests.reduce((n, r) => n + (r.outputTokens || 0), 0),
 			spent: leases.reduce((n, s) => n + s.spent, 0),
-			pending: leases.reduce((n, s) => n + s.spent - s.settled, 0),
+			pending: leases.reduce(
+				(n, s) => n + s.spent - s.settled - s.writtenOff,
+				0,
+			),
 			settled: leases.reduce((n, s) => n + s.settled, 0),
+			writtenOff: leases.reduce((n, s) => n + s.writtenOff, 0),
 			...balances,
 		},
 		listings: listingRows.map((l) => ({
@@ -350,6 +361,7 @@ export async function snapshot(user: Viewer | null): Promise<Snapshot> {
 			spent: s.spent,
 			reserved: s.reserved,
 			settled: s.settled,
+			writtenOff: s.writtenOff,
 			status: s.status,
 			expiresAt: s.expiresAt.toISOString(),
 			openTx: s.openTx,
@@ -361,8 +373,8 @@ export async function snapshot(user: Viewer | null): Promise<Snapshot> {
 			listingName: r.session.listing.name,
 			model: r.session.model,
 			status: r.status,
-			inputTokens: r.inputTokens || 0,
-			outputTokens: r.outputTokens || 0,
+			inputTokens: r.inputTokens,
+			outputTokens: r.outputTokens,
 			cost: r.cost,
 			usageSource: r.usageSource,
 			upstreamRequestId: r.upstreamId,

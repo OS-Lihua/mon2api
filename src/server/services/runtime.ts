@@ -35,6 +35,10 @@ export function chainConfig(): ChainConfig {
 		throw new Error("Local chain configuration must use loopback chain 31337.");
 	if (value.mode === "monad-testnet" && value.chainId !== 10143)
 		throw new Error("Only Monad testnet is supported.");
+	if (process.env.MON2API_MODE && process.env.MON2API_MODE !== value.mode)
+		throw new Error(
+			"MON2API_MODE does not match the active chain configuration.",
+		);
 	return value;
 }
 export function sessionPassword(): string {
@@ -56,7 +60,8 @@ export function sessionPassword(): string {
 }
 export const demoEnabled = () =>
 	process.env.ALLOW_DEMO === "true" &&
-	process.env.MON2API_MODE !== "monad-testnet";
+	process.env.MON2API_MODE !== "monad-testnet" &&
+	chainConfig().mode === "local";
 export function validateConnectorUrl(raw: string): string {
 	const url = new URL(raw);
 	const origins = (process.env.UPSTREAM_ALLOWED_ORIGINS || "")

@@ -12,8 +12,11 @@ export type EngineInput = {
 	conversationId: string;
 };
 
+export type EngineFinishReason = "stop" | "length" | "content_filter";
+
 export type EngineResult = {
 	text: string;
+	finishReason: EngineFinishReason;
 	inputTokens: number | null;
 	outputTokens: number | null;
 	usageSource: "demo" | "upstream_reported" | "missing";
@@ -84,6 +87,7 @@ async function runDemo(
 	if (signal?.aborted) throw aborted(false);
 	return {
 		text,
+		finishReason: units.length < Array.from(answer).length ? "length" : "stop",
 		inputTokens: input.messages.reduce(
 			(total, message) => total + demoUnits(message.content),
 			0,
@@ -176,7 +180,7 @@ export async function runEngine(
 			response.request_id ?? response.response.headers.get("x-request-id");
 		cancelStream = () => response.data.controller.abort();
 		let text = "";
-		let sawFinish = false;
+		let finishReason: EngineFinishReason | null = null;
 		let inputTokens: number | null = null;
 		let outputTokens: number | null = null;
 		for await (const chunk of response.data) {
@@ -184,7 +188,12 @@ export async function runEngine(
 			if (!upstreamRequestId && chunk.id) upstreamRequestId = chunk.id;
 			for (const choice of chunk.choices) {
 				if (choice.index !== 0) continue;
-				if (choice.delta.tool_calls?.length) {
+				if (
+					choice.delta.tool_calls?.length ||
+					choice.delta.function_call ||
+					choice.finish_reason === "tool_calls" ||
+					choice.finish_reason === "function_call"
+				) {
 					throw new EngineFailure(
 						"invalid_response",
 						"Provider returned unsupported tool calls.",
@@ -193,7 +202,22 @@ export async function runEngine(
 						upstreamRequestId,
 					);
 				}
-				if (choice.finish_reason) sawFinish = true;
+				if (choice.finish_reason != null) {
+					if (
+						choice.finish_reason !== "stop" &&
+						choice.finish_reason !== "length" &&
+						choice.finish_reason !== "content_filter"
+					) {
+						throw new EngineFailure(
+							"invalid_response",
+							"Provider returned an unsupported finish reason.",
+							502,
+							true,
+							upstreamRequestId,
+						);
+					}
+					finishReason = choice.finish_reason;
+				}
 				const delta = choice.delta.content;
 				if (delta) {
 					text += delta;
@@ -211,7 +235,7 @@ export async function runEngine(
 			}
 		}
 		if (signal?.aborted) throw aborted(true, upstreamRequestId);
-		if (!sawFinish) {
+		if (finishReason === null) {
 			throw new EngineFailure(
 				"incomplete_stream",
 				"Provider stream ended before completion.",
@@ -223,6 +247,7 @@ export async function runEngine(
 		const pendingReview = inputTokens === null || outputTokens === null;
 		return {
 			text,
+			finishReason,
 			inputTokens,
 			outputTokens,
 			usageSource: pendingReview ? "missing" : "upstream_reported",

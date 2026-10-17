@@ -14,7 +14,10 @@ const snapshotSchema = z.object({
 		rpcUrl: z.string().url(),
 		ready: z.boolean(),
 	}),
-	metrics: z.object({ claimable: integer, walletBalance: integer }),
+	metrics: z.object({
+		claimable: z.string().regex(/^\d+$/).nullable(),
+		walletBalance: z.string().regex(/^\d+$/).nullable(),
+	}),
 	listings: z.array(
 		z.object({
 			id: z.string(),
@@ -304,39 +307,61 @@ async function main() {
 
 	step = "settlement and replay";
 	const txResult = z.object({ txHash: hash.nullable() });
-	const settled = await trpc("settle", { sessionId: opened.id }, txResult);
-	check(settled.txHash, "Settlement did not produce a transaction.");
-	const afterSettlement = await snapshot();
+	for (let attempt = 0; attempt < bills.length; attempt++) {
+		state = await snapshot();
+		if (lease(state, opened.id).settled === spent) break;
+		await trpc("settle", { sessionId: opened.id }, txResult);
+	}
+	state = await snapshot();
 	check(
-		lease(afterSettlement, opened.id).settled === spent,
+		lease(state, opened.id).settled === spent,
 		"Settled amount does not match usage bills.",
 	);
 	check(
-		afterSettlement.requests
+		state.requests
 			.filter((item) => item.sessionId === opened.id)
 			.every((item) => item.settled),
 		"Bills did not become settled.",
+	);
+	const confirmed = state.settlements.filter(
+		(item) => item.sessionId === opened.id,
+	);
+	check(
+		confirmed.length > 0 &&
+			confirmed.every(
+				(item) => item.status === "CONFIRMED" && item.txHash !== null,
+			) &&
+			confirmed.reduce((sum, item) => sum + item.amount, 0) === spent,
+		"Confirmed settlement transactions do not reconcile to usage bills.",
 	);
 	const replaySettlement = await trpc(
 		"settle",
 		{ sessionId: opened.id },
 		txResult,
 	);
-	state = await snapshot();
+	const afterReplaySettlement = await snapshot();
 	check(
 		replaySettlement.txHash === null &&
-			lease(state, opened.id).settled === spent,
+			lease(afterReplaySettlement, opened.id).settled === spent,
 		"Repeated settlement changed the amount.",
 	);
 	check(
-		state.settlements.filter((item) => item.sessionId === opened.id).length ===
-			1,
+		afterReplaySettlement.settlements.filter(
+			(item) => item.sessionId === opened.id,
+		).length === confirmed.length,
 		"Repeated settlement created another batch.",
 	);
-	pass(`chain settlement + replay protection; tx ${settled.txHash}`);
+	state = afterReplaySettlement;
+	pass(
+		`chain settlement + replay protection; ${confirmed.length} confirmed batch(es), tx ${confirmed.map((item) => item.txHash).join(", ")}`,
+	);
 
 	step = "close, refund and key revocation";
 	const beforeCloseClaimable = state.metrics.claimable;
+	check(
+		beforeCloseClaimable !== null,
+		"Consumer balance could not be read before close.",
+	);
 	const closed = await trpc("closeSession", { sessionId: opened.id }, txResult);
 	state = await snapshot();
 	check(
@@ -346,7 +371,12 @@ async function main() {
 	activeSessionId = null;
 	const refund = 5_000_000 - spent;
 	check(
-		state.metrics.claimable >= beforeCloseClaimable + refund,
+		state.metrics.claimable !== null,
+		"Consumer refund balance could not be read.",
+	);
+	check(
+		BigInt(state.metrics.claimable) >=
+			BigInt(beforeCloseClaimable) + BigInt(refund),
 		"Unused budget did not become a consumer refund.",
 	);
 	const accessKey = state.keys.find((item) => item.sessionId === opened.id);
@@ -378,8 +408,10 @@ async function main() {
 		"Northstar must belong to the demo provider.",
 	);
 	check(
-		providerBefore.metrics.claimable > 0,
-		"Provider has no claimable settlement revenue.",
+		providerBefore.metrics.claimable !== null &&
+			BigInt(providerBefore.metrics.claimable) > 0n &&
+			providerBefore.metrics.walletBalance !== null,
+		"Provider balance or settlement revenue could not be read.",
 	);
 	const withdrawal = await trpc(
 		"withdraw",
@@ -388,8 +420,13 @@ async function main() {
 	);
 	const providerAfter = await snapshot();
 	check(
-		providerAfter.metrics.walletBalance >=
-			providerBefore.metrics.walletBalance + providerBefore.metrics.claimable,
+		providerAfter.metrics.walletBalance !== null,
+		"Provider balance could not be read after withdrawal.",
+	);
+	check(
+		BigInt(providerAfter.metrics.walletBalance) >=
+			BigInt(providerBefore.metrics.walletBalance) +
+				BigInt(providerBefore.metrics.claimable),
 		"Provider wallet did not receive claimable revenue.",
 	);
 	pass(

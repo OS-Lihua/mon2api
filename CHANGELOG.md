@@ -9,6 +9,19 @@ Tag format:
 
 ## Unreleased
 
+- Bind escrow session IDs to the consumer wallet, preventing another wallet from occupying a pending ID; generate matching random IDs for new leases and cover the attack on a local EVM.
+- Document the AI and Web3 native product roadmap for model pricing, Magpie/CC Switch, Monad payments, CLI and MCP, with current capability boundaries.
+- Refresh the mon2api console with a mineral palette, a resource-to-settlement flow, clearer prices and states, accessible activity data, and responsive navigation. Label provider-listed prices and declared model IDs; show demo resources and the absence of comparable official prices without implying a discount. Keep desktop cards spacious and let users expand recent billing and API key records on demand.
+- Accept verified escrow opening events routed through contract wallets; bound worker scans and add an indexed active-lease audit.
+- Retain late upstream usage evidence when the worker moves an interrupted request to review; keep its reservation until manual resolution.
+- Preserve exact micro dUSD amounts in budget and price inputs; show small charges and large chain balances without floating-point rounding, and mark unavailable RPC balances clearly.
+- Document a working official OpenAI SDK example with per-request idempotency keys and guidance for lost responses.
+- Add a five-minute local product demo guide and make end-to-end settlement verification tolerate automatic worker batches.
+- Verify lease opening events and chain confirmations before activation, including hash-free recovery and current close state.
+- Continue collecting upstream usage after a REST stream disconnect; show unknown usage as pending review instead of zero.
+- Restrict demo identities to the configured loopback chain and resume interrupted session closures in the settlement worker.
+- Generate an OpenAPI streaming schema that accepts interim null finish reasons; require stable chat idempotency keys and add database constraints for prepaid lease balances.
+
 - Replace the single injected wallet button with RainbowKit/wagmi wallet selection, Chinese sign-in guidance, account/network menus and optional WalletConnect support; clear stale wallet sessions on account changes.
 - Refresh the console with a graphite sidebar, purple actions and more readable content.
 - Add mon2api resource marketplace, consumer/provider console and standard gateway connector.

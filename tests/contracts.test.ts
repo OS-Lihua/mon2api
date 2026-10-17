@@ -25,7 +25,9 @@ import {
 import { escrowAbi, tokenAbi } from "../src/lib/abi";
 
 type Artifact = { abi: Abi; bytecode: Hex };
-const sessionId = keccak256(stringToHex("session-one"));
+const sessionSuffix = keccak256(stringToHex("session-one")).slice(-24);
+const sessionId = (consumer: Address) =>
+	`0x${consumer.slice(2).toLowerCase()}${sessionSuffix}` as Hex;
 const termsHash = keccak256(stringToHex("fixed price terms"));
 const receiptHash = keccak256(stringToHex("usage batch"));
 const budget = 10_000n;
@@ -87,6 +89,7 @@ async function deployFixture() {
 	if (!escrowReceipt.contractAddress)
 		throw new Error("Escrow deployment did not return an address");
 	const escrow = escrowReceipt.contractAddress;
+	const id = sessionId(consumer.account.address);
 	await consumer.writeContract({
 		address: token,
 		abi: tokenAbi,
@@ -107,7 +110,7 @@ async function deployFixture() {
 			abi: escrowAbi,
 			functionName: "openSession",
 			args: [
-				sessionId,
+				id,
 				supplier.account.address,
 				termsHash,
 				budget,
@@ -120,21 +123,21 @@ async function deployFixture() {
 			address: escrow,
 			abi: escrowAbi,
 			functionName: "settle",
-			args: [sessionId, amount, nonce, receiptHash],
+			args: [id, amount, nonce, receiptHash],
 		});
 	const close = () =>
 		meter.writeContract({
 			address: escrow,
 			abi: escrowAbi,
 			functionName: "closeSession",
-			args: [sessionId],
+			args: [id],
 		});
 	const session = () =>
 		client.readContract({
 			address: escrow,
 			abi: escrowAbi,
 			functionName: "sessions",
-			args: [sessionId],
+			args: [id],
 		});
 	const claimable = (owner: Address) =>
 		client.readContract({
@@ -164,6 +167,7 @@ async function deployFixture() {
 		stranger,
 		token,
 		escrow,
+		id,
 		open,
 		settle,
 		close,
@@ -220,6 +224,27 @@ describe("UsageEscrow with a real local EVM", { timeout: 30_000 }, () => {
 		await expect(f.open()).rejects.toThrow("session exists");
 	});
 
+	it("prevents a different wallet from occupying a consumer's session ID", async () => {
+		const f = fixture;
+		const block = await f.client.getBlock();
+		await expect(
+			f.stranger.writeContract({
+				address: f.escrow,
+				abi: escrowAbi,
+				functionName: "openSession",
+				args: [
+					f.id,
+					f.supplier.account.address,
+					termsHash,
+					1n,
+					block.timestamp + 300n,
+				],
+			}),
+		).rejects.toThrow("session owner mismatch");
+		await f.open();
+		expect((await f.session())[0]).toBe(f.consumer.account.address);
+	});
+
 	it("conserves all deposited tokens through settlement, refund and withdrawals", async () => {
 		const f = fixture;
 		await f.open();
@@ -259,7 +284,7 @@ describe("UsageEscrow with a real local EVM", { timeout: 30_000 }, () => {
 				address: f.escrow,
 				abi: escrowAbi,
 				functionName: "settle",
-				args: [sessionId, 100n, 0n, receiptHash],
+				args: [f.id, 100n, 0n, receiptHash],
 			}),
 		).rejects.toThrow("meter only");
 		await expect(
@@ -267,7 +292,7 @@ describe("UsageEscrow with a real local EVM", { timeout: 30_000 }, () => {
 				address: f.escrow,
 				abi: escrowAbi,
 				functionName: "requestClose",
-				args: [sessionId],
+				args: [f.id],
 			}),
 		).rejects.toThrow("cannot close");
 		await expect(
@@ -275,7 +300,7 @@ describe("UsageEscrow with a real local EVM", { timeout: 30_000 }, () => {
 				address: f.escrow,
 				abi: escrowAbi,
 				functionName: "closeSession",
-				args: [sessionId],
+				args: [f.id],
 			}),
 		).rejects.toThrow("await settlement window");
 		expect((await f.session())[4]).toBe(0n);
@@ -292,7 +317,7 @@ describe("UsageEscrow with a real local EVM", { timeout: 30_000 }, () => {
 				address: f.escrow,
 				abi: escrowAbi,
 				functionName: "settle",
-				args: [sessionId, 100n, 0n, `0x${"00".repeat(32)}`],
+				args: [f.id, 100n, 0n, `0x${"00".repeat(32)}`],
 			}),
 		).rejects.toThrow("invalid receipt");
 		await f.settle(100n, 0n);
@@ -323,14 +348,14 @@ describe("UsageEscrow with a real local EVM", { timeout: 30_000 }, () => {
 			address: f.escrow,
 			abi: escrowAbi,
 			functionName: "requestClose",
-			args: [sessionId],
+			args: [f.id],
 		});
 		await expect(
 			f.consumer.writeContract({
 				address: f.escrow,
 				abi: escrowAbi,
 				functionName: "requestClose",
-				args: [sessionId],
+				args: [f.id],
 			}),
 		).rejects.toThrow("cannot close");
 		await f.settle(1_000n, 0n);
@@ -340,7 +365,7 @@ describe("UsageEscrow with a real local EVM", { timeout: 30_000 }, () => {
 			address: f.escrow,
 			abi: escrowAbi,
 			functionName: "closeSession",
-			args: [sessionId],
+			args: [f.id],
 		});
 		expect(await f.claimable(f.consumer.account.address)).toBe(9_000n);
 		expect((await f.session())[8]).toBe(true);
@@ -356,7 +381,7 @@ describe("UsageEscrow with a real local EVM", { timeout: 30_000 }, () => {
 			address: f.escrow,
 			abi: escrowAbi,
 			functionName: "closeSession",
-			args: [sessionId],
+			args: [f.id],
 		});
 		expect(await f.claimable(f.consumer.account.address)).toBe(budget);
 		expect(await f.claimable(f.stranger.account.address)).toBe(0n);
@@ -377,7 +402,7 @@ describe("UsageEscrow with a real local EVM", { timeout: 30_000 }, () => {
 			address: f.escrow,
 			abi: escrowAbi,
 			functionName: "requestClose",
-			args: [sessionId],
+			args: [f.id],
 		});
 		expect((await f.session())[7]).toBe(expiry + 120n);
 		await f.advance(71);
@@ -385,7 +410,7 @@ describe("UsageEscrow with a real local EVM", { timeout: 30_000 }, () => {
 			address: f.escrow,
 			abi: escrowAbi,
 			functionName: "closeSession",
-			args: [sessionId],
+			args: [f.id],
 		});
 		expect(await f.claimable(f.consumer.account.address)).toBe(budget);
 	});

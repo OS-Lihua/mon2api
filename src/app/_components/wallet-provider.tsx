@@ -86,9 +86,22 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 	if (!network) {
 		return (
 			<div className="wallet-loading" role="status">
-				{snapshot.error
-					? "连接服务暂不可用，请刷新重试。"
-					: "正在载入 mon2api…"}
+				<strong>mon2api</strong>
+				<span>
+					{snapshot.error
+						? "连接服务暂不可用，请确认服务已启动。"
+						: "正在载入资源网络…"}
+				</span>
+				{snapshot.error && (
+					<button
+						className="button primary"
+						disabled={snapshot.isFetching}
+						onClick={() => void snapshot.refetch()}
+						type="button"
+					>
+						重新连接
+					</button>
+				)}
 			</div>
 		);
 	}
@@ -250,9 +263,9 @@ function WalletSessionProvider({ children }: { children: React.ReactNode }) {
 					locale="zh-CN"
 					modalSize="compact"
 					theme={lightTheme({
-						accentColor: "#6e48eb",
+						accentColor: "#176b70",
 						accentColorForeground: "#ffffff",
-						borderRadius: "large",
+						borderRadius: "medium",
 						fontStack: "system",
 						overlayBlur: "small",
 					})}

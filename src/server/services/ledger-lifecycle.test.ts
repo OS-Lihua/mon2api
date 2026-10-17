@@ -1,0 +1,750 @@
+import type { Lease, MeterRequest, Prisma, Settlement } from "@prisma/client";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { runChat } from "./metering";
+import { EngineFailure, type EngineResult } from "./pool-engine";
+import { resolveReview } from "./review";
+import {
+	closeSession,
+	processSettlementQueue,
+	settleSession,
+} from "./settlement";
+
+const mocks = vi.hoisted(() => ({
+	db: {
+		$transaction: vi.fn(),
+		lease: {
+			findUnique: vi.fn(),
+			findUniqueOrThrow: vi.fn(),
+			findMany: vi.fn(),
+			update: vi.fn(),
+			updateMany: vi.fn(),
+		},
+		listing: { findUniqueOrThrow: vi.fn(), updateMany: vi.fn() },
+		meterRequest: {
+			findUnique: vi.fn(),
+			findUniqueOrThrow: vi.fn(),
+			findMany: vi.fn(),
+			count: vi.fn(),
+			create: vi.fn(),
+			updateMany: vi.fn(),
+		},
+		settlement: { findFirst: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
+		ledgerEntry: { create: vi.fn(), createMany: vi.fn() },
+		accessKey: { updateMany: vi.fn() },
+	},
+	lock: vi.fn(),
+	runEngine: vi.fn(),
+	readSession: vi.fn(),
+	findSettlement: vi.fn(),
+	findSessionClose: vi.fn(),
+	sendSettlement: vi.fn(),
+	sendClose: vi.fn(),
+}));
+vi.mock("~/server/db", () => ({ db: mocks.db }));
+vi.mock("./auth", () => ({
+	AppError: class extends Error {
+		constructor(
+			public code: string,
+			message: string,
+			public status = 400,
+		) {
+			super(message);
+		}
+	},
+}));
+vi.mock("./runtime", () => ({
+	ensureChainBinding: vi.fn(),
+	demoEnabled: () => true,
+	sessionPassword: () => "unused",
+	validateConnectorUrl: (value: string) => value,
+}));
+vi.mock("./market", () => ({ lock: mocks.lock }));
+vi.mock("./chain", () => ({
+	readSession: mocks.readSession,
+	findSettlement: mocks.findSettlement,
+	findSessionClose: mocks.findSessionClose,
+	sendSettlement: mocks.sendSettlement,
+	sendClose: mocks.sendClose,
+}));
+vi.mock("./pool-engine", async (original) => ({
+	...(await original<typeof import("./pool-engine")>()),
+	runEngine: mocks.runEngine,
+}));
+const sessionId = `0x${"12".repeat(32)}`;
+const hash = `0x${"34".repeat(32)}`;
+const closeHash = `0x${"56".repeat(32)}`;
+const listing = {
+	id: "listing",
+	enabled: true,
+	concurrency: 2,
+	kind: "demo",
+	secret: null,
+};
+let lease: Lease;
+let requests: MeterRequest[];
+let jobs: Settlement[];
+let entries: {
+	kind: string;
+	amount: number;
+	requestId?: string | null;
+}[];
+let chain: {
+	closed: boolean;
+	nonce: number;
+	spent: number;
+	budget: number;
+	closeAfter: number;
+	expiresAt: number;
+};
+let transactionTail: Promise<unknown>;
+function request(overrides: Partial<MeterRequest> = {}): MeterRequest {
+	return {
+		id: `request-${requests.length}`,
+		sessionId,
+		idempotencyKey: `key-${requests.length}`,
+		reservation: 133,
+		cost: 0,
+		inputTokens: null,
+		outputTokens: null,
+		status: "RUNNING",
+		usageSource: "missing",
+		upstreamId: null,
+		errorCode: null,
+		settlementId: null,
+		createdAt: new Date(),
+		updatedAt: new Date(),
+		...overrides,
+	};
+}
+function job(overrides: Partial<Settlement> = {}): Settlement {
+	return {
+		id: `job-${jobs.length}`,
+		sessionId,
+		nonce: jobs.length,
+		amount: 20,
+		cumulative: 20,
+		receiptsHash: hash,
+		status: "READY",
+		txHash: null,
+		createdAt: new Date(),
+		...overrides,
+	};
+}
+function deferred<T>() {
+	let resolve!: (value: T) => void;
+	let reject!: (reason: unknown) => void;
+	const promise = new Promise<T>((yes, no) => {
+		resolve = yes;
+		reject = no;
+	});
+	return { promise, resolve, reject };
+}
+function changedNumber(
+	current: number,
+	value: number | Prisma.IntFieldUpdateOperationsInput | undefined,
+) {
+	if (typeof value === "number") return value;
+	return (
+		value?.set ?? current + (value?.increment ?? 0) - (value?.decrement ?? 0)
+	);
+}
+beforeEach(() => {
+	vi.clearAllMocks();
+	lease = {
+		id: sessionId,
+		listingId: listing.id,
+		consumer: "consumer",
+		provider: "provider",
+		model: "test",
+		inputRate: 1000000,
+		outputRate: 1000000,
+		termsHash: hash,
+		budget: 1000,
+		spent: 0,
+		reserved: 0,
+		settled: 0,
+		writtenOff: 0,
+		status: "ACTIVE",
+		expiresAt: new Date(Date.now() + 3600000),
+		openTx: null,
+		closeTx: null,
+		createdAt: new Date(),
+	};
+	requests = [];
+	jobs = [];
+	entries = [];
+	transactionTail = Promise.resolve();
+	chain = {
+		closed: false,
+		nonce: 0,
+		spent: 0,
+		budget: 1000,
+		closeAfter: 0,
+		expiresAt: Math.floor(Date.now() / 1000) + 3600,
+	};
+	// Serialize test transactions and roll back failed callbacks. Real production
+	// ordering is enforced by PostgreSQL advisory locks, asserted below.
+	mocks.db.$transaction.mockImplementation(
+		(fn: (tx: typeof mocks.db) => Promise<unknown>) => {
+			const result = transactionTail.then(async () => {
+				const snapshot = structuredClone({ lease, requests, jobs, entries });
+				try {
+					return await fn(mocks.db);
+				} catch (error) {
+					({ lease, requests, jobs, entries } = snapshot);
+					throw error;
+				}
+			});
+			transactionTail = result.catch(() => undefined);
+			return result;
+		},
+	);
+	mocks.db.lease.findUnique.mockImplementation(async () => ({
+		...lease,
+		listing,
+	}));
+	mocks.db.lease.findUniqueOrThrow.mockImplementation(async () => ({
+		...lease,
+	}));
+	mocks.db.lease.findMany.mockImplementation(
+		async ({ where }: Prisma.LeaseFindManyArgs) => {
+			const pending =
+				jobs.some((r) => r.status === "READY") ||
+				requests.some(
+					(r) => r.status === "COMPLETED" && r.cost > 0 && !r.settlementId,
+				);
+			if (where?.status === "ACTIVE")
+				return lease.status === "ACTIVE" ? [{ id: sessionId }] : [];
+			return pending || lease.status === "CLOSING" ? [{ id: sessionId }] : [];
+		},
+	);
+	mocks.db.lease.update.mockImplementation(
+		async ({ data }: Prisma.LeaseUpdateArgs) => {
+			lease.spent = changedNumber(lease.spent, data.spent);
+			lease.reserved = changedNumber(lease.reserved, data.reserved);
+			lease.settled = changedNumber(lease.settled, data.settled);
+			lease.writtenOff = changedNumber(lease.writtenOff, data.writtenOff);
+			if (typeof data.status === "string") lease.status = data.status;
+			if (typeof data.closeTx === "string") lease.closeTx = data.closeTx;
+			return { ...lease };
+		},
+	);
+	mocks.db.lease.updateMany.mockImplementation(
+		async ({ data }: Prisma.LeaseUpdateManyArgs) => {
+			if (lease.status === "CLOSED") return { count: 0 };
+			if (typeof data.status === "string") lease.status = data.status;
+			return { count: 1 };
+		},
+	);
+	mocks.db.listing.findUniqueOrThrow.mockResolvedValue(listing);
+	mocks.db.meterRequest.findUnique.mockResolvedValue(null);
+	mocks.db.meterRequest.findUniqueOrThrow.mockImplementation(
+		async ({ where }: Prisma.MeterRequestFindUniqueOrThrowArgs) => {
+			const row = requests.find((r) => r.id === where.id);
+			if (!row) throw new Error("Missing request");
+			return { ...row, session: { ...lease } };
+		},
+	);
+	mocks.db.meterRequest.create.mockImplementation(
+		async ({ data }: Prisma.MeterRequestCreateArgs) => {
+			const row = request({ reservation: data.reservation });
+			requests.push(row);
+			return { ...row };
+		},
+	);
+	mocks.db.meterRequest.count.mockImplementation(
+		async ({ where }: Prisma.MeterRequestCountArgs) =>
+			requests.filter((r) =>
+				typeof where?.status === "string"
+					? r.status === where.status
+					: ["RUNNING", "REVIEW"].includes(r.status),
+			).length,
+	);
+	mocks.db.meterRequest.findMany.mockImplementation(
+		async ({ where }: Prisma.MeterRequestFindManyArgs) =>
+			requests
+				.filter(
+					(r) =>
+						r.status === where?.status &&
+						(where?.status === "RUNNING"
+							? r.createdAt.getTime() < Date.now() - 90000
+							: !r.settlementId && r.cost > 0),
+				)
+				.map((r) => ({ ...r })),
+	);
+	mocks.db.meterRequest.updateMany.mockImplementation(
+		async ({ where, data }: Prisma.MeterRequestUpdateManyArgs) => {
+			let count = 0;
+			for (const row of requests) {
+				if (where?.id && typeof where.id === "string" && row.id !== where.id)
+					continue;
+				if (
+					where?.id &&
+					typeof where.id === "object" &&
+					Array.isArray(where.id.in) &&
+					!where.id.in.includes(row.id)
+				)
+					continue;
+				if (typeof where?.status === "string" && row.status !== where.status)
+					continue;
+				if (
+					typeof where?.errorCode === "string" &&
+					row.errorCode !== where.errorCode
+				)
+					continue;
+				if (where?.createdAt && row.createdAt.getTime() >= Date.now() - 90000)
+					continue;
+				Object.assign(row, data);
+				count++;
+			}
+			return { count };
+		},
+	);
+	mocks.db.settlement.findFirst.mockImplementation(
+		async ({ where, orderBy }: Prisma.SettlementFindFirstArgs) => {
+			const sorted = jobs
+				.filter((r) => !where?.status || r.status === where.status)
+				.sort((a, b) => a.nonce - b.nonce);
+			const row =
+				Array.isArray(orderBy) || orderBy?.nonce !== "desc"
+					? sorted[0]
+					: sorted.at(-1);
+			return row ? { ...row } : null;
+		},
+	);
+	mocks.db.settlement.create.mockImplementation(
+		async ({ data }: Prisma.SettlementCreateArgs) => {
+			const row = job({
+				amount: data.amount,
+				cumulative: data.cumulative,
+				nonce: data.nonce,
+				receiptsHash: data.receiptsHash,
+			});
+			jobs.push(row);
+			return { ...row };
+		},
+	);
+	mocks.db.settlement.updateMany.mockImplementation(
+		async ({ where, data }: Prisma.SettlementUpdateManyArgs) => {
+			const row = jobs.find(
+				(r) => r.id === where?.id && r.status === where.status,
+			);
+			if (!row) return { count: 0 };
+			Object.assign(row, data);
+			return { count: 1 };
+		},
+	);
+	mocks.db.ledgerEntry.create.mockImplementation(
+		async ({ data }: Prisma.LedgerEntryCreateArgs) => {
+			entries.push(data);
+		},
+	);
+	mocks.db.ledgerEntry.createMany.mockImplementation(
+		async ({ data }: Prisma.LedgerEntryCreateManyArgs) => {
+			for (const row of Array.isArray(data) ? data : [data]) entries.push(row);
+		},
+	);
+	mocks.db.accessKey.updateMany.mockResolvedValue({ count: 1 });
+	mocks.readSession.mockImplementation(async () => ({ ...chain }));
+	mocks.findSessionClose.mockImplementation(async () => ({
+		txHash: closeHash,
+		state: { ...chain },
+	}));
+	mocks.findSettlement.mockResolvedValue(hash);
+	mocks.sendSettlement.mockImplementation(
+		async (_id: string, cumulative: number, nonce: number) => {
+			chain.spent = cumulative;
+			chain.nonce = nonce + 1;
+			return hash;
+		},
+	);
+});
+const args = {
+	sessionId,
+	messages: [{ role: "user" as const, content: "hello" }],
+	idempotencyKey: "request-0001",
+	maxTokens: 128,
+	conversationId: "test",
+};
+const result: EngineResult = {
+	text: "done",
+	finishReason: "stop",
+	inputTokens: 5,
+	outputTokens: 15,
+	pendingReview: false,
+	usageSource: "demo",
+	upstreamRequestId: "upstream-late",
+};
+async function interruptAndResolve() {
+	const row = requests[0];
+	if (!row) throw new Error("Missing running request");
+	row.createdAt = new Date(Date.now() - 100000);
+	await processSettlementQueue();
+	expect(row.status).toBe("REVIEW");
+	await resolveReview(row.id, 5, 10, "invoice-verified");
+}
+describe("metering lifecycle guards", () => {
+	it("captures and releases one reservation after a normal completion", async () => {
+		mocks.runEngine.mockResolvedValue(result);
+		await expect(runChat("consumer", args)).resolves.toMatchObject({
+			cost: 20,
+		});
+		expect(lease).toMatchObject({ spent: 20, reserved: 0 });
+		expect(entries.map((r) => r.kind)).toEqual([
+			"RESERVE",
+			"CAPTURE",
+			"RELEASE",
+		]);
+	});
+	it("rolls back capture and retains the reservation if ledger persistence fails", async () => {
+		mocks.runEngine.mockResolvedValue(result);
+		mocks.db.ledgerEntry.createMany.mockRejectedValueOnce(
+			new Error("ledger write failed"),
+		);
+		await expect(runChat("consumer", args)).rejects.toMatchObject({
+			code: "execution_pending_review",
+		});
+		expect(lease).toMatchObject({ spent: 0, reserved: 133 });
+		expect(requests[0]).toMatchObject({ status: "REVIEW", cost: 0 });
+		expect(entries.map((r) => r.kind)).toEqual(["RESERVE"]);
+	});
+	it("keeps a REVIEW reservation and records missing usage without capture", async () => {
+		mocks.runEngine.mockResolvedValue({
+			...result,
+			inputTokens: null,
+			pendingReview: true,
+		});
+		await expect(runChat("consumer", args)).rejects.toMatchObject({
+			code: "usage_pending_review",
+		});
+		expect(lease).toMatchObject({ spent: 0, reserved: 133 });
+		expect(requests[0]).toMatchObject({
+			status: "REVIEW",
+			errorCode: "usage_missing",
+		});
+	});
+	it.each(["completed", "review", "failure"])(
+		"preserves operator evidence and charges once when a late %s arrives",
+		async (kind) => {
+			const engine = deferred<EngineResult>();
+			const started = deferred<void>();
+			mocks.runEngine.mockImplementation(() => {
+				started.resolve();
+				return engine.promise;
+			});
+			const response = runChat("consumer", args);
+			const rejection = expect(response).rejects.toBeInstanceOf(Error);
+			await started.promise;
+			await interruptAndResolve();
+			if (kind === "failure")
+				engine.reject(
+					new EngineFailure("upstream_unavailable", "late", 503, false),
+				);
+			else
+				engine.resolve(
+					kind === "review"
+						? { ...result, pendingReview: true, inputTokens: null }
+						: result,
+				);
+			await rejection;
+			expect(lease).toMatchObject({ spent: 15, reserved: 0 });
+			expect(requests[0]).toMatchObject({
+				status: "COMPLETED",
+				cost: 15,
+				inputTokens: 5,
+				outputTokens: 10,
+				usageSource: "operator_verified",
+				errorCode: "evidence:invoice-verified",
+			});
+			expect(
+				entries.filter((r) => ["CAPTURE", "REVIEW_CAPTURE"].includes(r.kind)),
+			).toEqual([
+				{
+					sessionId,
+					requestId: "request-0",
+					kind: "REVIEW_CAPTURE",
+					amount: 15,
+				},
+			]);
+			expect(mocks.lock).toHaveBeenCalledWith(mocks.db, sessionId);
+			await expect(
+				resolveReview("request-0", 0, 0, "second"),
+			).rejects.toMatchObject({ code: "not_review" });
+		},
+	);
+	it("saves late upstream usage for review without releasing or capturing the reservation", async () => {
+		mocks.runEngine.mockImplementation(async () => {
+			const row = requests[0];
+			if (!row) throw new Error("Missing request");
+			row.createdAt = new Date(Date.now() - 100000);
+			await processSettlementQueue();
+			return result;
+		});
+		await expect(runChat("consumer", args)).rejects.toMatchObject({
+			code: "usage_pending_review",
+		});
+		expect(lease).toMatchObject({ spent: 0, reserved: 133 });
+		expect(requests[0]).toMatchObject({
+			status: "REVIEW",
+			errorCode: "late_usage_reported",
+			inputTokens: 5,
+			outputTokens: 15,
+			upstreamId: "upstream-late",
+			usageSource: "demo",
+		});
+		expect(entries.map((entry) => entry.kind)).toEqual(["RESERVE"]);
+	});
+	it("saves partial late usage in REVIEW after the worker marks an interruption", async () => {
+		mocks.runEngine.mockImplementation(async () => {
+			const row = requests[0];
+			if (!row) throw new Error("Missing request");
+			row.createdAt = new Date(Date.now() - 100000);
+			await processSettlementQueue();
+			return { ...result, inputTokens: null, pendingReview: true };
+		});
+		await expect(runChat("consumer", args)).rejects.toMatchObject({
+			code: "usage_pending_review",
+		});
+		expect(requests[0]).toMatchObject({
+			status: "REVIEW",
+			errorCode: "usage_missing",
+			inputTokens: null,
+			outputTokens: 15,
+			upstreamId: "upstream-late",
+		});
+		expect(lease).toMatchObject({ spent: 0, reserved: 133 });
+	});
+});
+describe("settlement recovery and forced chain close", () => {
+	it("does not confirm recovery before the receipt validator completes", async () => {
+		jobs.push(job());
+		lease.spent = 20;
+		chain.spent = 20;
+		chain.nonce = 1;
+		const receipt = deferred<string>();
+		const started = deferred<void>();
+		mocks.findSettlement.mockImplementation(() => {
+			started.resolve();
+			return receipt.promise;
+		});
+		const settling = settleSession(sessionId);
+		await started.promise;
+		expect(jobs[0]?.status).toBe("READY");
+		expect(lease.settled).toBe(0);
+		receipt.resolve(hash);
+		await settling;
+		expect(mocks.findSettlement).toHaveBeenCalledWith(sessionId, 0, hash, 20);
+		expect(jobs[0]?.status).toBe("CONFIRMED");
+		expect(lease.settled).toBe(20);
+	});
+	it("uses the same receipt validator after a send failure", async () => {
+		jobs.push(job());
+		lease.spent = 20;
+		mocks.sendSettlement.mockImplementation(async () => {
+			chain.spent = 20;
+			chain.nonce = 1;
+			throw new Error("crash after broadcast");
+		});
+		await settleSession(sessionId);
+		expect(mocks.findSettlement).toHaveBeenCalledWith(sessionId, 0, hash, 20);
+		expect(entries).toEqual([{ sessionId, kind: "SETTLE", amount: 20 }]);
+	});
+	it("leaves READY and balances untouched when receipt confirmation fails", async () => {
+		jobs.push(job());
+		lease.spent = 20;
+		chain.spent = 20;
+		chain.nonce = 1;
+		mocks.findSettlement.mockRejectedValue(
+			new Error("unconfirmed / invalid receipt"),
+		);
+		await expect(settleSession(sessionId)).rejects.toThrow("invalid receipt");
+		expect(jobs[0]?.status).toBe("READY");
+		expect(lease.settled).toBe(0);
+		expect(entries).toEqual([]);
+	});
+	it("recovers a paid batch, writes off later fees and preserves all usage", async () => {
+		jobs.push(job());
+		requests.push(
+			request({
+				id: "paid",
+				status: "COMPLETED",
+				cost: 20,
+				settlementId: "job-0",
+			}),
+			request({
+				id: "unpaid",
+				status: "COMPLETED",
+				cost: 30,
+				inputTokens: 10,
+				outputTokens: 20,
+				errorCode: "evidence:bill-2",
+				usageSource: "operator_verified",
+			}),
+		);
+		lease.spent = 50;
+		chain = { ...chain, closed: true, spent: 20, nonce: 1 };
+		await settleSession(sessionId);
+		expect(jobs.map((r) => [r.status, r.amount])).toEqual([
+			["CONFIRMED", 20],
+			["UNCOLLECTIBLE", 30],
+		]);
+		expect(lease).toMatchObject({
+			spent: 50,
+			settled: 20,
+			writtenOff: 30,
+			status: "CLOSED",
+			closeTx: closeHash,
+		});
+		expect(requests[1]).toMatchObject({
+			cost: 30,
+			inputTokens: 10,
+			outputTokens: 20,
+			errorCode: "evidence:bill-2",
+			settlementId: "job-1",
+		});
+		expect(entries.filter((r) => r.kind === "OPERATING_LOSS")).toEqual([
+			{ sessionId, kind: "OPERATING_LOSS", amount: 30 },
+		]);
+		await settleSession(sessionId);
+		await closeSession(sessionId, "consumer");
+		expect(lease.writtenOff).toBe(30);
+		expect(entries.filter((r) => r.kind === "OPERATING_LOSS")).toHaveLength(1);
+		expect(await processSettlementQueue()).toEqual([]);
+		expect(mocks.sendSettlement).not.toHaveBeenCalled();
+		expect(mocks.sendClose).not.toHaveBeenCalled();
+	});
+	it("keeps a zero-charge review outcome and its evidence without retrying it", async () => {
+		requests.push(request({ status: "REVIEW" }));
+		lease.reserved = 133;
+		chain.closed = true;
+		await resolveReview("request-0", 0, 0, "zero-usage-confirmed");
+		await processSettlementQueue();
+		expect(requests[0]).toMatchObject({
+			status: "COMPLETED",
+			cost: 0,
+			usageSource: "operator_verified",
+			errorCode: "evidence:zero-usage-confirmed",
+		});
+		expect(lease).toMatchObject({
+			status: "CLOSED",
+			spent: 0,
+			reserved: 0,
+			settled: 0,
+			writtenOff: 0,
+		});
+		expect(jobs).toEqual([]);
+		expect(await processSettlementQueue()).toEqual([]);
+	});
+	it("resumes an interrupted close from the worker after settlement", async () => {
+		lease.status = "CLOSING";
+		mocks.sendClose.mockImplementation(async () => {
+			chain.closed = true;
+			return closeHash;
+		});
+		expect(await processSettlementQueue()).toEqual([{ sessionId, ok: true }]);
+		expect(lease).toMatchObject({ status: "CLOSED", closeTx: closeHash });
+		expect(
+			entries.filter((entry) => entry.kind === "REFUND_AVAILABLE"),
+		).toHaveLength(1);
+		expect(mocks.sendClose).toHaveBeenCalledOnce();
+		expect(await processSettlementQueue()).toEqual([]);
+	});
+
+	it("keeps normal close refund accounting exactly once", async () => {
+		mocks.sendClose.mockImplementation(async () => {
+			chain.closed = true;
+			return closeHash;
+		});
+		await expect(closeSession(sessionId, "consumer")).resolves.toEqual({
+			txHash: closeHash,
+		});
+		await closeSession(sessionId, "consumer");
+		expect(lease).toMatchObject({
+			status: "CLOSED",
+			settled: 0,
+			writtenOff: 0,
+			closeTx: closeHash,
+		});
+		expect(entries.filter((r) => r.kind === "REFUND_AVAILABLE")).toEqual([
+			{ sessionId, kind: "REFUND_AVAILABLE", amount: 1000 },
+		]);
+	});
+	it("does not write off on an unconfirmed close or unexplained chain spend", async () => {
+		jobs.push(job());
+		lease.spent = 20;
+		chain.closed = true;
+		mocks.findSessionClose.mockRejectedValueOnce(
+			new Error("close is unconfirmed"),
+		);
+		await expect(settleSession(sessionId)).rejects.toThrow("unconfirmed");
+		expect(jobs[0]?.status).toBe("READY");
+		expect(lease.writtenOff).toBe(0);
+		chain.spent = 9;
+		await expect(settleSession(sessionId)).rejects.toMatchObject({
+			code: "settlement_conflict",
+		});
+		expect(lease).toMatchObject({ status: "ACTIVE", writtenOff: 0 });
+	});
+	it("rolls back a loss transition if its ledger entry cannot be stored", async () => {
+		jobs.push(job());
+		lease.spent = 20;
+		chain.closed = true;
+		mocks.db.ledgerEntry.create.mockRejectedValueOnce(
+			new Error("loss ledger failed"),
+		);
+		await expect(settleSession(sessionId)).rejects.toThrow(
+			"loss ledger failed",
+		);
+		expect(jobs[0]?.status).toBe("READY");
+		expect(lease).toMatchObject({
+			status: "ACTIVE",
+			writtenOff: 0,
+			settled: 0,
+		});
+		await settleSession(sessionId);
+		expect(lease.writtenOff).toBe(20);
+		expect(entries.filter((r) => r.kind === "OPERATING_LOSS")).toHaveLength(1);
+	});
+	it("records concurrent closure retries only once", async () => {
+		jobs.push(job());
+		lease.spent = 20;
+		chain.closed = true;
+		await Promise.all([settleSession(sessionId), settleSession(sessionId)]);
+		expect(lease).toMatchObject({
+			spent: 20,
+			settled: 0,
+			writtenOff: 20,
+			status: "CLOSED",
+		});
+		expect(entries.filter((r) => r.kind === "OPERATING_LOSS")).toHaveLength(1);
+		expect(entries.filter((r) => r.kind === "REFUND_AVAILABLE")).toHaveLength(
+			1,
+		);
+	});
+	it("closes locally with REVIEW held, then writes off a later operator capture", async () => {
+		requests.push(request({ status: "REVIEW" }));
+		lease.reserved = 133;
+		chain.closed = true;
+		await closeSession(sessionId, "consumer");
+		expect(lease).toMatchObject({
+			status: "CLOSED",
+			reserved: 133,
+			writtenOff: 0,
+		});
+		await resolveReview("request-0", 5, 10, "late-invoice");
+		await processSettlementQueue();
+		expect(lease).toMatchObject({
+			status: "CLOSED",
+			reserved: 0,
+			spent: 15,
+			settled: 0,
+			writtenOff: 15,
+		});
+		expect(requests[0]).toMatchObject({
+			cost: 15,
+			usageSource: "operator_verified",
+			errorCode: "evidence:late-invoice",
+		});
+		expect(jobs[0]?.status).toBe("UNCOLLECTIBLE");
+	});
+});

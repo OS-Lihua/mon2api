@@ -11,8 +11,9 @@ if (process.env.NEXT_PUBLIC_SENTRY_DSN !== undefined) {
 	});
 }
 
-if (process.env.NEXT_PUBLIC_POSTHOG_KEY !== undefined) {
-	posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY, {
+const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+if (posthogKey?.trim()) {
+	posthog.init(posthogKey, {
 		api_host:
 			process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com",
 		capture_pageview: true,

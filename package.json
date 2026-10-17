@@ -41,6 +41,7 @@
 		"test:recovery": "tsx scripts/recovery-smoke.ts"
 	},
 	"dependencies": {
+		"@asteasolutions/zod-to-openapi": "^7.3.4",
 		"@openzeppelin/contracts": "^5.4.0",
 		"@prisma/client": "^6.19.3",
 		"@rainbow-me/rainbowkit": "^2.2.11",
@@ -77,6 +78,7 @@
 		"@types/node": "^20.19.43",
 		"@types/react": "^19.2.18",
 		"@types/react-dom": "^19.2.7",
+		"ajv": "^8.17.1",
 		"dotenv": "^17.4.2",
 		"ganache": "^7.9.2",
 		"lefthook": "^2.1.12",

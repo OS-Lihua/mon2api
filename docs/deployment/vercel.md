@@ -10,9 +10,9 @@
 MON2API_MODE=monad-testnet MON2API_DATA_DIR=.runtime-testnet pnpm deploy:testnet
 ```
 
-脚本只接受chain10143，拒绝主网。`DEPLOYER_PRIVATE_KEY`、`METER_PRIVATE_KEY`、`TREASURY_ADDRESS`必须显式配置。可选 `TESTNET_TOKEN_ADDRESS` 使用现有6位精度测试代币；否则部署公开mint的DemoUSD。指定目录的chain.json只包含公开部署信息。脚本存在不代表已完成测试网部署。
+脚本只接受chain10143，拒绝主网。`DEPLOYER_PRIVATE_KEY`、`METER_PRIVATE_KEY`、`TREASURY_ADDRESS`必须显式配置。可选 `TESTNET_TOKEN_ADDRESS` 使用现有6位精度测试代币；否则部署公开mint的DemoUSD。指定目录的chain.json只包含公开部署信息。新版合约已在测试网独立完成链上资金验证，公开交易见[演示文档](../PRODUCT_DEMO.md#monad-测试网合约证据)；Web/数据库与浏览器钱包的完整接入仍待验收。
 
-运行服务配置 `MON2API_MODE=monad-testnet`、`ALLOW_DEMO=false`、独立 `DATABASE_URL`、`APP_ORIGIN`、至少32字符随机 `SESSION_PASSWORD`、`METER_PRIVATE_KEY`、`UPSTREAM_ALLOWED_ORIGINS` 和 `MON2API_DATA_DIR`。每套部署绑定chain ID、代币与合约地址，不能静默替换。资金确认在测试网等待6个区块。
+运行服务配置 `MON2API_MODE=monad-testnet`、`ALLOW_DEMO=false`、独立 `DATABASE_URL`、`APP_ORIGIN`、至少32字符随机 `SESSION_PASSWORD`、`METER_PRIVATE_KEY`、`UPSTREAM_ALLOWED_ORIGINS` 和 `MON2API_DATA_DIR`。每套部署绑定chain ID、代币与合约地址，不能静默替换。资金确认在测试网等待6个区块。新版托管合约要求会话 ID 的前 20 字节为消费者地址；升级已有部署时必须使用新的合约地址、数据目录和数据库，不要将旧会话绑定到新合约。
 
 ## Web和worker
 

@@ -7,6 +7,7 @@ import {
 	getAddress,
 	type Hex,
 	http,
+	parseEventLogs,
 } from "viem";
 import { mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
 import { escrowAbi, tokenAbi } from "~/lib/abi";
@@ -67,7 +68,7 @@ export async function serializedChain<T>(action: () => Promise<T>): Promise<T> {
 	global.mon2apiChainQueue = result.catch(() => undefined);
 	return result;
 }
-export async function readSession(id: string) {
+export async function readSession(id: string, blockNumber?: bigint) {
 	const { config, publicClient } = clients();
 	const [
 		consumer,
@@ -84,6 +85,7 @@ export async function readSession(id: string) {
 		abi: escrowAbi,
 		functionName: "sessions",
 		args: [id as Hex],
+		blockNumber,
 	});
 	return {
 		consumer,
@@ -96,6 +98,52 @@ export async function readSession(id: string) {
 		closeAfter: Number(closeAfter),
 		closed,
 	};
+}
+/** Recover and verify a canonical session-opening receipt before activating a lease. */
+export async function findSessionOpen(id: string, hash?: Hex) {
+	const { config, publicClient } = clients();
+	const escrow = getAddress(config.escrow);
+	if (!hash) {
+		const logs = await publicClient.getContractEvents({
+			address: escrow,
+			abi: escrowAbi,
+			eventName: "SessionOpened",
+			args: { id: id as Hex },
+			fromBlock: BigInt(config.deploymentBlock),
+			toBlock: "latest",
+			strict: true,
+		});
+		hash = logs.find((log) => !log.removed)?.transactionHash;
+	}
+	if (!hash) return null;
+	const waited = await publicClient.waitForTransactionReceipt({
+		hash,
+		confirmations: config.mode === "local" ? 1 : 6,
+	});
+	const receipt = await publicClient.getTransactionReceipt({
+		hash: waited.transactionHash,
+	});
+	const [block, tip] = await Promise.all([
+		publicClient.getBlock({ blockNumber: receipt.blockNumber }),
+		publicClient.getBlockNumber(),
+	]);
+	if (
+		block.hash !== receipt.blockHash ||
+		tip - receipt.blockNumber < (config.mode === "local" ? 0n : 5n)
+	)
+		return null;
+	const event = parseEventLogs({
+		abi: escrowAbi,
+		eventName: "SessionOpened",
+		logs: receipt.logs,
+		strict: true,
+	}).find(
+		(log) =>
+			log.address.toLowerCase() === escrow.toLowerCase() &&
+			log.args.id.toLowerCase() === id.toLowerCase(),
+	);
+	if (receipt.status !== "success" || !event) return null;
+	return { receipt, event };
 }
 export async function chainBalances(address: string) {
 	const { config, publicClient } = clients();
@@ -114,7 +162,10 @@ export async function chainBalances(address: string) {
 			args: [owner],
 		}),
 	]);
-	return { claimable: Number(claimable), walletBalance: Number(walletBalance) };
+	return {
+		claimable: claimable.toString(),
+		walletBalance: walletBalance.toString(),
+	};
 }
 export async function sendSettlement(
 	id: string,
@@ -123,10 +174,15 @@ export async function sendSettlement(
 	receiptsHash: string,
 ) {
 	return serializedChain(async () => {
-		const { config, publicClient } = clients();
+		const { config } = clients();
 		const current = await readSession(id);
 		if (current.nonce > nonce) {
-			const recovered = await findSettlement(id, nonce, receiptsHash);
+			const recovered = await findSettlement(
+				id,
+				nonce,
+				receiptsHash,
+				cumulative,
+			);
 			if (recovered && current.spent >= cumulative) return recovered;
 			throw new Error("Settlement receipt does not match chain state.");
 		}
@@ -136,12 +192,7 @@ export async function sendSettlement(
 			functionName: "settle",
 			args: [id as Hex, BigInt(cumulative), BigInt(nonce), receiptsHash as Hex],
 		});
-		const receipt = await publicClient.waitForTransactionReceipt({
-			hash,
-			confirmations: config.mode === "local" ? 1 : 6,
-		});
-		if (receipt.status !== "success") throw new Error("Settlement reverted.");
-		return hash;
+		return confirmSettlement(hash, id, nonce, receiptsHash, cumulative);
 	});
 }
 export async function sendClose(id: string) {
@@ -236,10 +287,83 @@ export async function demoWithdraw(address: string) {
 		return hash;
 	});
 }
+/** Validate the canonical receipt as well as every field of the committed bill. */
+export async function confirmSettlement(
+	hash: Hex,
+	id: string,
+	nonce: number,
+	receiptsHash: string,
+	cumulative: number,
+): Promise<Hex> {
+	const { config, publicClient } = clients();
+	const receipt = await publicClient.waitForTransactionReceipt({
+		hash,
+		confirmations: config.mode === "local" ? 1 : 6,
+	});
+	if (receipt.status !== "success") throw new Error("Settlement reverted.");
+	const events = parseEventLogs({
+		abi: escrowAbi,
+		eventName: "UsageSettled",
+		logs: receipt.logs,
+		strict: true,
+	}).filter(
+		(event) => event.address.toLowerCase() === config.escrow.toLowerCase(),
+	);
+	if (
+		!events.some(
+			(event) =>
+				event.args.id.toLowerCase() === id.toLowerCase() &&
+				event.args.nonce === BigInt(nonce) &&
+				event.args.receiptsHash.toLowerCase() === receiptsHash.toLowerCase() &&
+				event.args.cumulativeSpent === BigInt(cumulative),
+		)
+	)
+		throw new Error("Settlement receipt does not match the committed bill.");
+	return receipt.transactionHash;
+}
+
+/** A closed latest state is provisional until its close event is confirmed. */
+export async function findSessionClose(id: string) {
+	const { config, publicClient } = clients();
+	const logs = await publicClient.getContractEvents({
+		address: getAddress(config.escrow),
+		abi: escrowAbi,
+		eventName: "SessionClosed",
+		args: { id: id as Hex },
+		fromBlock: BigInt(config.deploymentBlock),
+		toBlock: "latest",
+		strict: true,
+	});
+	const hash = logs.find((log) => !log.removed)?.transactionHash;
+	if (!hash) throw new Error("Closed session receipt not found.");
+	const receipt = await publicClient.waitForTransactionReceipt({
+		hash,
+		confirmations: config.mode === "local" ? 1 : 6,
+	});
+	const events = parseEventLogs({
+		abi: escrowAbi,
+		eventName: "SessionClosed",
+		logs: receipt.logs,
+		strict: true,
+	});
+	const event = events.find(
+		(log) =>
+			log.address.toLowerCase() === config.escrow.toLowerCase() &&
+			log.args.id.toLowerCase() === id.toLowerCase(),
+	);
+	if (receipt.status !== "success" || !event)
+		throw new Error("Closed session receipt does not match.");
+	const state = await readSession(id, receipt.blockNumber);
+	if (!state.closed || event.args.refund !== BigInt(state.budget - state.spent))
+		throw new Error("Closed session state does not match its receipt.");
+	return { txHash: receipt.transactionHash, state };
+}
+
 export async function findSettlement(
 	id: string,
 	nonce: number,
 	receiptsHash: string,
+	cumulative: number,
 ): Promise<Hex | null> {
 	const { config, publicClient } = clients();
 	const logs = await publicClient.getContractEvents({
@@ -250,10 +374,14 @@ export async function findSettlement(
 		fromBlock: BigInt(config.deploymentBlock),
 		toBlock: "latest",
 	});
-	return (
-		logs.find(
-			(l) => l.args.receiptsHash?.toLowerCase() === receiptsHash.toLowerCase(),
-		)?.transactionHash || null
-	);
+	const hash = logs.find(
+		(log) =>
+			!log.removed &&
+			log.args.receiptsHash?.toLowerCase() === receiptsHash.toLowerCase() &&
+			log.args.cumulativeSpent === BigInt(cumulative),
+	)?.transactionHash;
+	return hash
+		? confirmSettlement(hash, id, nonce, receiptsHash, cumulative)
+		: null;
 }
 export type { Address };

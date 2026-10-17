@@ -1,20 +1,23 @@
 import { ensureChainBinding } from "./runtime";
 import "server-only";
+import type { Prisma } from "@prisma/client";
 import { keccak256, stringToHex } from "viem";
 import { db } from "~/server/db";
 import { AppError } from "./auth";
 import {
+	findSessionClose,
 	findSettlement,
 	readSession,
 	sendClose,
 	sendSettlement,
 } from "./chain";
 import { lock } from "./market";
-
 export async function settleSession(
 	sessionId: string,
 	caller?: string,
-): Promise<{ txHash: string | null }> {
+): Promise<{
+	txHash: string | null;
+}> {
 	await ensureChainBinding();
 	const lease = await db.lease.findUnique({ where: { id: sessionId } });
 	if (
@@ -22,76 +25,144 @@ export async function settleSession(
 		(caller && lease.consumer !== caller && lease.provider !== caller)
 	)
 		throw new AppError("not_found", "会话不存在。", 404);
-	const job = await db.$transaction(async (tx) => {
-		await lock(tx, sessionId);
-		const existing = await tx.settlement.findFirst({
-			where: { sessionId, status: "READY" },
-			orderBy: { nonce: "asc" },
-		});
-		if (existing) return existing;
-		const current = await tx.lease.findUniqueOrThrow({
-			where: { id: sessionId },
-		});
-		const requests = await tx.meterRequest.findMany({
-			where: { sessionId, status: "COMPLETED", settlementId: null },
-			orderBy: { id: "asc" },
-		});
-		const amount = requests.reduce((n, r) => n + r.cost, 0);
-		if (!amount) return null;
-		const previous = await tx.settlement.findFirst({
-			where: { sessionId, status: "CONFIRMED" },
-			orderBy: { nonce: "desc" },
-		});
-		const cumulative = current.settled + amount;
-		const receiptsHash = keccak256(
-			stringToHex(
-				JSON.stringify(
-					requests.map((r) => ({
-						id: r.id,
-						cost: r.cost,
-						input: r.inputTokens,
-						output: r.outputTokens,
-						source: r.usageSource,
-						upstream: r.upstreamId,
-					})),
+	let lastHash: string | null = null;
+	// A chain close can follow an unrecorded successful batch. Recover that batch
+	// before classifying later earned usage as an operating loss.
+	for (;;) {
+		const job = await db.$transaction(async (tx) => {
+			await lock(tx, sessionId);
+			const existing = await tx.settlement.findFirst({
+				where: { sessionId, status: "READY" },
+				orderBy: { nonce: "asc" },
+			});
+			if (existing) return existing;
+			const current = await tx.lease.findUniqueOrThrow({
+				where: { id: sessionId },
+			});
+			const requests = await tx.meterRequest.findMany({
+				where: {
+					sessionId,
+					status: "COMPLETED",
+					settlementId: null,
+					cost: { gt: 0 },
+				},
+				orderBy: { id: "asc" },
+			});
+			const amount = requests.reduce((n, r) => n + r.cost, 0);
+			if (!amount) return null;
+			const previous = await tx.settlement.findFirst({
+				where: { sessionId },
+				orderBy: { nonce: "desc" },
+			});
+			const receiptsHash = keccak256(
+				stringToHex(
+					JSON.stringify(
+						requests.map((r) => ({
+							id: r.id,
+							cost: r.cost,
+							input: r.inputTokens,
+							output: r.outputTokens,
+							source: r.usageSource,
+							upstream: r.upstreamId,
+						})),
+					),
 				),
-			),
-		);
-		const created = await tx.settlement.create({
-			data: {
+			);
+			const created = await tx.settlement.create({
+				data: {
+					sessionId,
+					amount,
+					cumulative: current.settled + current.writtenOff + amount,
+					nonce: previous ? previous.nonce + 1 : 0,
+					receiptsHash,
+				},
+			});
+			await tx.meterRequest.updateMany({
+				where: { id: { in: requests.map((r) => r.id) } },
+				data: { settlementId: created.id },
+			});
+			return created;
+		});
+		let state = await readSession(sessionId);
+		if (job && state.nonce > job.nonce) {
+			const txHash = await findSettlement(
 				sessionId,
-				amount,
-				cumulative,
-				nonce: previous ? previous.nonce + 1 : 0,
-				receiptsHash,
-			},
-		});
-		await tx.meterRequest.updateMany({
-			where: { id: { in: requests.map((r) => r.id) } },
-			data: { settlementId: created.id },
-		});
-		return created;
-	});
-	if (!job) return { txHash: null };
-	// The durable outbox is committed before sending. Recovery matches its nonce
-	// and receipt hash against events, including a crash before txHash was saved.
-	let txHash = job.txHash;
-	let state = await readSession(sessionId);
-	if (state.nonce > job.nonce) {
-		txHash = await findSettlement(sessionId, job.nonce, job.receiptsHash);
-		if (!txHash || state.spent < job.cumulative)
-			throw new AppError(
-				"settlement_conflict",
-				"链上结算与本地账单不一致，请运营者核对。",
-				409,
+				job.nonce,
+				job.receiptsHash,
+				job.cumulative,
 			);
-	} else {
-		if (state.closed || state.nonce !== job.nonce)
-			throw new AppError(
-				"settlement_closed",
-				"链上会话已关闭或结算序号不符。",
-				409,
-			);
+			if (!txHash || state.spent < job.cumulative)
+				throw new AppError(
+					"settlement_conflict",
+					"链上结算与本地账单不一致，请运营者核对。",
+					409,
+				);
+			await confirmJob(job, txHash);
+			lastHash = txHash;
+			if (state.closed) continue;
+			return { txHash };
+		}
+		if (state.closed) {
+			// Do not turn a provisional latest block (or an RPC failure) into a loss.
+			const closure = await findSessionClose(sessionId);
+			await db.$transaction(async (tx) => {
+				await lock(tx, sessionId);
+				const current = await tx.lease.findUniqueOrThrow({
+					where: { id: sessionId },
+				});
+				if (closure.state.spent !== current.settled)
+					throw new AppError(
+						"settlement_conflict",
+						"关闭前的链上结算尚未全部恢复。",
+						409,
+					);
+				if (job) {
+					if (closure.state.nonce > job.nonce)
+						throw new AppError(
+							"settlement_retry",
+							"关闭前的结算需要先恢复。",
+							503,
+						);
+					const transition = await tx.settlement.updateMany({
+						where: { id: job.id, status: "READY" },
+						data: { status: "UNCOLLECTIBLE" },
+					});
+					if (transition.count === 1) {
+						await tx.lease.update({
+							where: { id: sessionId },
+							data: { writtenOff: { increment: job.amount } },
+						});
+						await tx.ledgerEntry.create({
+							data: { sessionId, kind: "OPERATING_LOSS", amount: job.amount },
+						});
+					}
+				}
+				await tx.lease.update({
+					where: { id: sessionId },
+					data: { status: "CLOSED", closeTx: closure.txHash },
+				});
+				await tx.accessKey.updateMany({
+					where: { sessionId },
+					data: { revoked: true },
+				});
+				if (current.status !== "CLOSED")
+					await tx.ledgerEntry.create({
+						data: {
+							sessionId,
+							kind: "REFUND_AVAILABLE",
+							amount: closure.state.budget - closure.state.spent,
+						},
+					});
+			});
+			if (job) continue;
+			return { txHash: lastHash };
+		}
+		if (!job) return { txHash: lastHash };
+		if (state.nonce !== job.nonce)
+			throw new AppError("settlement_conflict", "链上结算序号不符。", 409);
+		// The outbox is durable before sending; every recovery waits for the same
+		// canonical receipt confirmations and exact UsageSettled event as a send.
+		let txHash: string | null;
 		try {
 			txHash = await sendSettlement(
 				sessionId,
@@ -100,7 +171,12 @@ export async function settleSession(
 				job.receiptsHash,
 			);
 		} catch {
-			txHash = await findSettlement(sessionId, job.nonce, job.receiptsHash);
+			txHash = await findSettlement(
+				sessionId,
+				job.nonce,
+				job.receiptsHash,
+				job.cumulative,
+			);
 			if (!txHash)
 				throw new AppError(
 					"settlement_retry",
@@ -111,50 +187,71 @@ export async function settleSession(
 		state = await readSession(sessionId);
 		if (state.spent < job.cumulative || state.nonce <= job.nonce)
 			throw new AppError("settlement_retry", "链上结算尚未确认。", 503);
+		await confirmJob(job, txHash);
+		lastHash = txHash;
+		if (state.closed) continue;
+		return { txHash };
 	}
+}
+async function confirmJob(
+	job: {
+		id: string;
+		sessionId: string;
+		cumulative: number;
+		amount: number;
+	},
+	txHash: string,
+) {
 	await db.$transaction(async (tx) => {
-		await lock(tx, sessionId);
-		const current = await tx.settlement.findUniqueOrThrow({
-			where: { id: job.id },
-		});
-		if (current.status === "CONFIRMED") return;
-		await tx.settlement.update({
-			where: { id: job.id },
+		await lock(tx, job.sessionId);
+		const transition = await tx.settlement.updateMany({
+			where: { id: job.id, status: "READY" },
 			data: { status: "CONFIRMED", txHash },
 		});
+		if (transition.count !== 1) return;
 		await tx.lease.update({
-			where: { id: sessionId },
+			where: { id: job.sessionId },
 			data: { settled: job.cumulative },
 		});
 		await tx.ledgerEntry.create({
-			data: { sessionId, kind: "SETTLE", amount: job.amount },
+			data: { sessionId: job.sessionId, kind: "SETTLE", amount: job.amount },
 		});
 	});
-	return { txHash };
 }
-export async function closeSession(sessionId: string, caller: string) {
+export async function closeSession(sessionId: string, caller?: string) {
 	const lease = await db.lease.findUnique({ where: { id: sessionId } });
-	if (!lease || lease.consumer !== caller)
+	if (
+		!lease ||
+		(caller ? lease.consumer !== caller : lease.status !== "CLOSING")
+	)
 		throw new AppError("not_found", "只能关闭自己的消费会话。", 404);
-	if (lease.status === "CLOSED") return { txHash: lease.closeTx };
+	if (lease.status === "CLOSED") {
+		await settleSession(sessionId, caller);
+		return { txHash: lease.closeTx };
+	}
 	const pending = await db.$transaction(async (tx) => {
 		await lock(tx, sessionId);
-		await tx.lease.update({
-			where: { id: sessionId },
+		await tx.lease.updateMany({
+			where: { id: sessionId, status: { not: "CLOSED" } },
 			data: { status: "CLOSING" },
 		});
 		return tx.meterRequest.count({
 			where: { sessionId, status: { in: ["RUNNING", "REVIEW"] } },
 		});
 	});
+	if ((await readSession(sessionId)).closed) {
+		await settleSession(sessionId, caller);
+		const closed = await db.lease.findUniqueOrThrow({
+			where: { id: sessionId },
+		});
+		return { txHash: closed.closeTx };
+	}
 	if (pending)
 		throw new AppError(
 			"pending_requests",
 			"会话已停止接单；存在执行中或待核对请求，处理后可重试关闭。",
 			409,
 		);
-	// A READY batch can predate another completed request. Drain both before
-	// refunding; finishing just the first batch would leave earned usage unpaid.
 	for (let attempt = 0; attempt < 3; attempt++) {
 		const current = await db.lease.findUniqueOrThrow({
 			where: { id: sessionId },
@@ -166,6 +263,13 @@ export async function closeSession(sessionId: string, caller: string) {
 		where: { id: sessionId },
 	});
 	const chain = await readSession(sessionId);
+	if (chain.closed) {
+		await settleSession(sessionId, caller);
+		const closed = await db.lease.findUniqueOrThrow({
+			where: { id: sessionId },
+		});
+		return { txHash: closed.closeTx };
+	}
 	if (
 		reconciled.reserved !== 0 ||
 		reconciled.spent !== reconciled.settled ||
@@ -176,53 +280,87 @@ export async function closeSession(sessionId: string, caller: string) {
 			"账单尚未全部核销，暂不能释放预算。",
 			409,
 		);
-	const txHash = chain.closed ? null : await sendClose(sessionId);
-	await db.$transaction(async (tx) => {
-		await lock(tx, sessionId);
-		const current = await tx.lease.findUniqueOrThrow({
-			where: { id: sessionId },
-		});
-		if (current.status === "CLOSED") return;
-		await tx.lease.update({
-			where: { id: sessionId },
-			data: { status: "CLOSED", closeTx: txHash },
-		});
-		await tx.accessKey.updateMany({
-			where: { sessionId },
-			data: { revoked: true },
-		});
-		await tx.ledgerEntry.create({
-			data: {
-				sessionId,
-				kind: "REFUND_AVAILABLE",
-				amount: current.budget - current.settled,
-			},
-		});
-	});
+	const txHash = await sendClose(sessionId);
+	// Also handles a consumer close racing the meter's close transaction.
+	await settleSession(sessionId, caller);
 	return { txHash };
 }
+let activeAuditCursor: string | undefined;
+let pendingCursor: string | undefined;
+let interruptedCursor: string | undefined;
+
 export async function processSettlementQueue() {
-	const cutoff = new Date(Date.now() - 90_000);
-	// A worker crash is not evidence of zero upstream usage. Keep the hold.
-	await db.meterRequest.updateMany({
-		where: { status: "RUNNING", createdAt: { lt: cutoff } },
-		data: { status: "REVIEW", errorCode: "worker_interrupted" },
-	});
-	const sessions = await db.lease.findMany({
+	const cutoff = new Date(Date.now() - 90000);
+	const interrupted = await db.meterRequest.findMany({
 		where: {
-			requests: {
-				some: {
-					status: "COMPLETED",
-					OR: [{ settlementId: null }, { settlement: { status: "READY" } }],
+			status: "RUNNING",
+			createdAt: { lt: cutoff },
+			...(interruptedCursor ? { id: { gt: interruptedCursor } } : {}),
+		},
+		select: { id: true, sessionId: true },
+		orderBy: { id: "asc" },
+		take: 100,
+	});
+	interruptedCursor =
+		interrupted.length === 100 ? interrupted.at(-1)?.id : undefined;
+	for (const request of interrupted) {
+		await db.$transaction(async (tx) => {
+			await lock(tx, request.sessionId);
+			await tx.meterRequest.updateMany({
+				where: { id: request.id, status: "RUNNING", createdAt: { lt: cutoff } },
+				data: { status: "REVIEW", errorCode: "worker_interrupted" },
+			});
+		});
+	}
+	const pendingWork: Prisma.LeaseWhereInput = {
+		OR: [
+			{ status: "CLOSING" },
+			{ settlements: { some: { status: "READY" } } },
+			{
+				requests: {
+					some: { status: "COMPLETED", cost: { gt: 0 }, settlementId: null },
 				},
 			},
-		},
-		select: { id: true },
-	});
-	const results: { sessionId: string; ok: boolean }[] = [];
+		],
+	};
+	const [pending, audit] = await Promise.all([
+		db.lease.findMany({
+			where: {
+				AND: [
+					pendingWork,
+					...(pendingCursor ? [{ id: { gt: pendingCursor } }] : []),
+				],
+			},
+			select: { id: true },
+			orderBy: { id: "asc" },
+			take: 100,
+		}),
+		db.lease.findMany({
+			where: {
+				status: "ACTIVE",
+				...(activeAuditCursor ? { id: { gt: activeAuditCursor } } : {}),
+			},
+			select: { id: true },
+			orderBy: { id: "asc" },
+			take: 10,
+		}),
+	]);
+	pendingCursor = pending.length === 100 ? pending.at(-1)?.id : undefined;
+	activeAuditCursor = audit.length === 10 ? audit.at(-1)?.id : undefined;
+	const sessions = [
+		...new Map([...pending, ...audit].map((row) => [row.id, row])).values(),
+	];
+	const results: {
+		sessionId: string;
+		ok: boolean;
+	}[] = [];
 	for (const session of sessions) {
 		try {
 			await settleSession(session.id);
+			const lease = await db.lease.findUniqueOrThrow({
+				where: { id: session.id },
+			});
+			if (lease.status === "CLOSING") await closeSession(session.id);
 			results.push({ sessionId: session.id, ok: true });
 		} catch {
 			results.push({ sessionId: session.id, ok: false });

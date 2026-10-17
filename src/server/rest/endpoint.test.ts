@@ -1,6 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
+import {
+	BODY_READ_TIMEOUT_MS,
+	MAX_RAW_BODY_BYTES,
+} from "~/server/services/mon2api.contract";
+import { publicChatInput } from "~/server/services/mon2api.schema";
 import { createRestMutation, createRestQuery } from "./endpoint";
 
 const mocks = vi.hoisted(() => ({
@@ -18,7 +23,39 @@ vi.mock("~/server/security/rate-limit", () => ({
 	limitRequest: mocks.limitRequest,
 }));
 
+function streamRequest(
+	body: ReadableStream<Uint8Array>,
+	headers?: HeadersInit,
+) {
+	// Node's fetch requires duplex for streaming request bodies.
+	const init: RequestInit & { duplex: "half" } = {
+		method: "POST",
+		body,
+		headers,
+		duplex: "half",
+	};
+	return new Request("https://example.com/api/v1/chat/completions", init);
+}
+
+function chunkedRequest(chunks: Uint8Array[], headers?: HeadersInit) {
+	return streamRequest(
+		new ReadableStream<Uint8Array>({
+			start(controller) {
+				for (const chunk of chunks) controller.enqueue(chunk);
+				controller.close();
+			},
+		}),
+		headers,
+	);
+}
+
+const encoder = new TextEncoder();
+
 describe("REST endpoint execution", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
 	beforeEach(() => {
 		mocks.loggerError.mockReset();
 		mocks.limitRequest.mockReset();
@@ -144,6 +181,255 @@ describe("REST endpoint execution", () => {
 				message: "Invalid JSON body",
 			},
 		});
+		expect(handler).not.toHaveBeenCalled();
+	});
+
+	it("accepts Unicode split across byte chunks without Content-Length", async () => {
+		const handler = vi.fn(async () => ({ body: { ok: true } }));
+		const POST = createRestMutation({
+			route: "POST /api/v1/chat/completions",
+			input: publicChatInput,
+			handler,
+		});
+		const input = {
+			model: "😀".repeat(100),
+			conversation_id: "😀".repeat(120),
+			messages: [{ role: "user", content: "汉😀" }],
+		};
+		const bytes = encoder.encode(JSON.stringify(input));
+		const request = chunkedRequest(
+			Array.from(bytes, (byte) => Uint8Array.of(byte)),
+		);
+		expect(request.headers.has("content-length")).toBe(false);
+		const response = await POST(request);
+		expect(response.status).toBe(200);
+		expect(handler).toHaveBeenCalledWith({
+			input: expect.objectContaining(input),
+			request,
+		});
+	});
+
+	it.each([undefined, "1", String(MAX_RAW_BODY_BYTES * 10)])(
+		"accepts valid input regardless of declared length %s",
+		async (contentLength) => {
+			const handler = vi.fn(async () => ({ body: { ok: true } }));
+			const POST = createRestMutation({
+				route: "POST /api/v1/posts",
+				input: z.object({ name: z.string() }),
+				handler,
+			});
+			const response = await POST(
+				chunkedRequest(
+					[encoder.encode('{"name":"hello"}')],
+					contentLength ? { "content-length": contentLength } : undefined,
+				),
+			);
+			expect(response.status).toBe(200);
+			expect(handler).toHaveBeenCalledOnce();
+		},
+	);
+
+	it.each([undefined, "1"])(
+		"rejects streamed bytes over the raw limit with declared length %s before validation or business work",
+		async (contentLength) => {
+			const validated = vi.fn();
+			const handler = vi.fn(async () => ({ body: { ok: true } }));
+			const POST = createRestMutation({
+				route: "POST /api/v1/posts",
+				input: z.unknown().superRefine(validated),
+				handler,
+			});
+			const request = chunkedRequest(
+				[
+					encoder.encode('{"name":"'),
+					encoder.encode("x".repeat(MAX_RAW_BODY_BYTES)),
+					encoder.encode('"}'),
+				],
+				contentLength ? { "content-length": contentLength } : undefined,
+			);
+			const response = await POST(request);
+			expect(response.status).toBe(413);
+			await expect(response.json()).resolves.toMatchObject({
+				error: {
+					code: "invalid_request",
+					message: "Request body exceeds 160 KiB",
+				},
+			});
+			expect(validated).not.toHaveBeenCalled();
+			expect(handler).not.toHaveBeenCalled();
+		},
+	);
+
+	it("counts raw UTF-8 bytes rather than decoded string length", async () => {
+		const handler = vi.fn(async () => ({ body: { ok: true } }));
+		const POST = createRestMutation({
+			route: "POST /api/v1/posts",
+			input: z.string(),
+			handler,
+		});
+		const raw = JSON.stringify("😀".repeat(42_000));
+		expect(raw.length).toBeLessThan(MAX_RAW_BODY_BYTES);
+		expect(encoder.encode(raw).byteLength).toBeGreaterThan(MAX_RAW_BODY_BYTES);
+		const response = await POST(chunkedRequest([encoder.encode(raw)]));
+		expect(response.status).toBe(413);
+		expect(handler).not.toHaveBeenCalled();
+	});
+
+	it("accepts exactly 160 KiB and rejects one extra raw byte", async () => {
+		const handler = vi.fn(async () => ({ body: { ok: true } }));
+		const POST = createRestMutation({
+			route: "POST /api/v1/posts",
+			input: z.unknown(),
+			handler,
+		});
+		const body = `"${"x".repeat(MAX_RAW_BODY_BYTES - 2)}"`;
+		expect((await POST(chunkedRequest([encoder.encode(body)]))).status).toBe(
+			200,
+		);
+		expect(
+			(await POST(chunkedRequest([encoder.encode(`${body} `)]))).status,
+		).toBe(413);
+		expect(handler).toHaveBeenCalledOnce();
+	});
+
+	it("allows JSON escapes of a valid 24000-byte messages payload", async () => {
+		const handler = vi.fn(async () => ({ body: { ok: true } }));
+		const POST = createRestMutation({
+			route: "POST /api/v1/chat/completions",
+			input: publicChatInput,
+			handler,
+		});
+		const input = {
+			model: "test",
+			messages: [
+				{ role: "user", content: "x".repeat(8000) },
+				{ role: "user", content: "x".repeat(8000) },
+				{ role: "user", content: "x".repeat(7912) },
+			],
+		};
+		expect(Buffer.byteLength(JSON.stringify(input.messages), "utf8")).toBe(
+			24000,
+		);
+		const raw = JSON.stringify(input).replace(/x/g, "\\u0078");
+		expect(Buffer.byteLength(raw, "utf8")).toBeGreaterThan(24000);
+		const response = await POST(chunkedRequest([encoder.encode(raw)]));
+		expect(response.status).toBe(200);
+		expect(handler).toHaveBeenCalledOnce();
+	});
+
+	it("keeps the messages byte limit below the raw body limit", async () => {
+		const handler = vi.fn(async () => ({ body: { ok: true } }));
+		const POST = createRestMutation({
+			route: "POST /api/v1/chat/completions",
+			input: publicChatInput,
+			handler,
+		});
+		const response = await POST(
+			chunkedRequest([
+				encoder.encode(
+					JSON.stringify({
+						model: "test",
+						messages: [{ role: "user", content: "汉".repeat(8000) }],
+					}),
+				),
+			]),
+		);
+		expect(response.status).toBe(400);
+		expect(handler).not.toHaveBeenCalled();
+	});
+
+	it("returns 400 for body stream errors without running validation or business work", async () => {
+		const validated = vi.fn();
+		const handler = vi.fn(async () => ({ body: { ok: true } }));
+		const POST = createRestMutation({
+			route: "POST /api/v1/posts",
+			input: z.unknown().superRefine(validated),
+			handler,
+		});
+		const response = await POST(
+			streamRequest(
+				new ReadableStream<Uint8Array>({
+					pull(controller) {
+						controller.error(new Error("private stream failure"));
+					},
+				}),
+			),
+		);
+		expect(response.status).toBe(400);
+		await expect(response.json()).resolves.toEqual({
+			error: { code: "invalid_request", message: "Invalid JSON body" },
+		});
+		expect(validated).not.toHaveBeenCalled();
+		expect(handler).not.toHaveBeenCalled();
+	});
+
+	it("returns 408 on the total deadline even when chunks keep arriving and cancellation never settles", async () => {
+		vi.useFakeTimers();
+		const validated = vi.fn();
+		const handler = vi.fn(async () => ({ body: { ok: true } }));
+		const cancel = vi.fn(() => new Promise<void>(() => undefined));
+		const POST = createRestMutation({
+			route: "POST /api/v1/posts",
+			input: z.unknown().superRefine(validated),
+			handler,
+		});
+		let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+		const responsePromise = POST(
+			streamRequest(
+				new ReadableStream<Uint8Array>({
+					start(source) {
+						controller = source;
+					},
+					cancel,
+				}),
+			),
+		);
+		for (let elapsed = 0; elapsed < BODY_READ_TIMEOUT_MS; elapsed += 1000) {
+			controller?.enqueue(encoder.encode(" "));
+			await vi.advanceTimersByTimeAsync(1000);
+		}
+		const response = await responsePromise;
+		expect(response.status).toBe(408);
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(validated).not.toHaveBeenCalled();
+		expect(handler).not.toHaveBeenCalled();
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("returns 413 without waiting for a non-settling cancel callback", async () => {
+		const handler = vi.fn(async () => ({ body: { ok: true } }));
+		const cancel = vi.fn(() => new Promise<void>(() => undefined));
+		const POST = createRestMutation({
+			route: "POST /api/v1/posts",
+			input: z.unknown(),
+			handler,
+		});
+		const response = await POST(
+			streamRequest(
+				new ReadableStream<Uint8Array>({
+					start(controller) {
+						controller.enqueue(new Uint8Array(MAX_RAW_BODY_BYTES + 1));
+					},
+					cancel,
+				}),
+			),
+		);
+		expect(response.status).toBe(413);
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(handler).not.toHaveBeenCalled();
+	});
+
+	it("rejects an empty body before business work", async () => {
+		const handler = vi.fn(async () => ({ body: { ok: true } }));
+		const POST = createRestMutation({
+			route: "POST /api/v1/posts",
+			input: z.unknown(),
+			handler,
+		});
+		const response = await POST(
+			new Request("https://example.com/api/v1/posts", { method: "POST" }),
+		);
+		expect(response.status).toBe(400);
 		expect(handler).not.toHaveBeenCalled();
 	});
 

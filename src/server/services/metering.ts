@@ -190,10 +190,9 @@ export async function runChat(
 					)
 				: null;
 		if (result.pendingReview || cost === null || cost > reservation) {
-			await db.meterRequest.update({
-				where: { id: request.id },
-				data: {
-					status: "REVIEW",
+			await db.$transaction(async (tx) => {
+				await lock(tx, lease.id);
+				const evidence = {
 					usageSource: result.usageSource,
 					inputTokens: result.inputTokens,
 					outputTokens: result.outputTokens,
@@ -202,7 +201,26 @@ export async function runChat(
 						cost !== null && cost > reservation
 							? "reservation_exceeded"
 							: "usage_missing",
-				},
+				};
+				const transition = await tx.meterRequest.updateMany({
+					where: { id: request.id, status: "RUNNING" },
+					data: { status: "REVIEW", ...evidence },
+				});
+				if (transition.count === 1) return;
+				const late = await tx.meterRequest.updateMany({
+					where: {
+						id: request.id,
+						status: "REVIEW",
+						errorCode: "worker_interrupted",
+					},
+					data: evidence,
+				});
+				if (late.count !== 1)
+					throw new AppError(
+						"request_finalized",
+						"请求已完成核对，迟到结果未更改账单。",
+						409,
+					);
 			});
 			throw new AppError(
 				"usage_pending_review",
@@ -210,10 +228,10 @@ export async function runChat(
 				409,
 			);
 		}
-		await db.$transaction(async (tx) => {
+		const finalized = await db.$transaction(async (tx) => {
 			await lock(tx, lease.id);
-			await tx.meterRequest.update({
-				where: { id: request.id },
+			const transition = await tx.meterRequest.updateMany({
+				where: { id: request.id, status: "RUNNING" },
 				data: {
 					status: "COMPLETED",
 					cost,
@@ -223,6 +241,28 @@ export async function runChat(
 					upstreamId: result.upstreamRequestId,
 				},
 			});
+			if (transition.count !== 1) {
+				const late = await tx.meterRequest.updateMany({
+					where: {
+						id: request.id,
+						status: "REVIEW",
+						errorCode: "worker_interrupted",
+					},
+					data: {
+						inputTokens: result.inputTokens,
+						outputTokens: result.outputTokens,
+						usageSource: result.usageSource,
+						upstreamId: result.upstreamRequestId,
+						errorCode: "late_usage_reported",
+					},
+				});
+				if (late.count === 1) return false;
+				throw new AppError(
+					"request_finalized",
+					"请求已完成核对，迟到结果未更改账单。",
+					409,
+				);
+			}
 			await tx.lease.update({
 				where: { id: lease.id },
 				data: {
@@ -246,27 +286,34 @@ export async function runChat(
 					},
 				],
 			});
+			return true;
 		});
+		if (!finalized)
+			throw new AppError(
+				"usage_pending_review",
+				"迟到的上游用量已保存，预算继续保留等待核对。",
+				409,
+			);
 		return {
 			id: request.id,
 			text: result.text,
+			finishReason: result.finishReason,
 			inputTokens: result.inputTokens || 0,
 			outputTokens: result.outputTokens || 0,
 			cost,
 			usageSource: result.usageSource,
 		};
 	} catch (error) {
-		if (error instanceof AppError && error.code === "usage_pending_review")
+		if (
+			error instanceof AppError &&
+			["usage_pending_review", "request_finalized"].includes(error.code)
+		)
 			throw error;
 		const uncertain = !(error instanceof EngineFailure) || error.pendingReview;
 		await db.$transaction(async (tx) => {
 			await lock(tx, lease.id);
-			const current = await tx.meterRequest.findUniqueOrThrow({
-				where: { id: request.id },
-			});
-			if (current.status !== "RUNNING") return;
-			await tx.meterRequest.update({
-				where: { id: request.id },
+			const transition = await tx.meterRequest.updateMany({
+				where: { id: request.id, status: "RUNNING" },
 				data: {
 					status: uncertain ? "REVIEW" : "FAILED",
 					errorCode:
@@ -275,6 +322,7 @@ export async function runChat(
 						error instanceof EngineFailure ? error.upstreamRequestId : null,
 				},
 			});
+			if (transition.count !== 1) return;
 			if (!uncertain) {
 				await tx.lease.update({
 					where: { id: lease.id },

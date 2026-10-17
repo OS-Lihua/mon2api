@@ -1,7 +1,6 @@
 import "server-only";
 
 import type { z } from "zod";
-
 import { withCors } from "~/server/security/cors";
 import { limitRequest } from "~/server/security/rate-limit";
 import {
@@ -9,6 +8,10 @@ import {
 	jsonOk,
 	logAndReturnInternalError,
 } from "~/server/security/rest-response";
+import {
+	BODY_READ_TIMEOUT_MS,
+	MAX_RAW_BODY_BYTES,
+} from "~/server/services/mon2api.contract";
 
 type RestHandlerResult<TBody> =
 	| Response
@@ -46,9 +49,14 @@ export function createRestMutation<TSchema extends z.ZodTypeAny, TBody>(
 		return runWithRateLimit(request, options.route, async () => {
 			let json: unknown;
 			try {
-				json = await request.json();
-			} catch {
-				return jsonError(request, "invalid_request", "Invalid JSON body", 400);
+				json = await readJsonBody(request);
+			} catch (error) {
+				return jsonError(
+					request,
+					"invalid_request",
+					error instanceof BodyReadError ? error.message : "Invalid JSON body",
+					error instanceof BodyReadError ? error.status : 400,
+				);
 			}
 
 			const parsed = options.input.safeParse(json);
@@ -65,6 +73,53 @@ export function createRestMutation<TSchema extends z.ZodTypeAny, TBody>(
 			return options.handler({ input: parsed.data, request });
 		});
 	};
+}
+
+class BodyReadError extends Error {
+	constructor(
+		message: string,
+		readonly status: 408 | 413,
+	) {
+		super(message);
+	}
+}
+
+async function readJsonBody(request: Request): Promise<unknown> {
+	if (!request.body) throw new SyntaxError("Missing JSON body");
+	const reader = request.body.getReader();
+	let timeout: ReturnType<typeof setTimeout> | undefined;
+	try {
+		const text = await Promise.race([
+			(async () => {
+				const decoder = new TextDecoder();
+				let bytes = 0;
+				let text = "";
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) return text + decoder.decode();
+					bytes += value.byteLength;
+					if (bytes > MAX_RAW_BODY_BYTES) {
+						throw new BodyReadError("Request body exceeds 160 KiB", 413);
+					}
+					text += decoder.decode(value, { stream: true });
+				}
+			})(),
+			new Promise<never>((_resolve, reject) => {
+				timeout = setTimeout(
+					() => reject(new BodyReadError("Request body read timed out", 408)),
+					BODY_READ_TIMEOUT_MS,
+				);
+			}),
+		]);
+		return JSON.parse(text);
+	} catch (error) {
+		// A source's cancel callback may never settle. Do not delay the error response.
+		void reader.cancel().catch(() => undefined);
+		throw error;
+	} finally {
+		clearTimeout(timeout);
+		reader.releaseLock();
+	}
 }
 
 async function runWithRateLimit<TBody>(

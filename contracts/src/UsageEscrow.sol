@@ -43,6 +43,7 @@ contract UsageEscrow is ReentrancyGuard {
     }
 
     function openSession(bytes32 id, address provider, bytes32 termsHash, uint256 budget, uint64 expiresAt) external nonReentrant {
+        require(address(uint160(uint256(id >> 96))) == msg.sender, "session owner mismatch");
         require(sessions[id].consumer == address(0), "session exists");
         require(provider != address(0) && termsHash != bytes32(0) && budget > 0, "invalid terms");
         require(expiresAt > block.timestamp && expiresAt <= block.timestamp + 7 days, "invalid expiry");

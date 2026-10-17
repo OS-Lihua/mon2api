@@ -70,6 +70,7 @@ describe("gateway engine through the official OpenAI SDK", () => {
 		});
 		expect(result).toEqual({
 			text: "你好 world",
+			finishReason: "stop",
 			inputTokens: 31,
 			outputTokens: 5,
 			usageSource: "upstream_reported",
@@ -91,24 +92,108 @@ describe("gateway engine through the official OpenAI SDK", () => {
 		});
 	});
 
-	it("does not turn missing usage into zero-token billing", async () => {
+	it.each(["stop", "length", "content_filter"])(
+		"preserves the upstream %s finish reason",
+		async (finishReason) => {
+			vi.stubGlobal(
+				"fetch",
+				vi.fn().mockResolvedValue(
+					mockSse(
+						event(completion("answer", finishReason)) +
+							event({
+								choices: [],
+								usage: { prompt_tokens: 3, completion_tokens: 2 },
+							}) +
+							event("[DONE]"),
+					),
+				),
+			);
+			await expect(runEngine(input, () => {})).resolves.toMatchObject({
+				text: "answer",
+				finishReason,
+				inputTokens: 3,
+				outputTokens: 2,
+				pendingReview: false,
+			});
+		},
+	);
+
+	it.each(["tool_calls", "function_call", "unknown", ""])(
+		"rejects unsupported finish reason %j and retains review",
+		async (finishReason) => {
+			vi.stubGlobal(
+				"fetch",
+				vi.fn().mockResolvedValue(
+					mockSse(
+						event(completion("answer", finishReason)) +
+							event({
+								choices: [],
+								usage: { prompt_tokens: 3, completion_tokens: 2 },
+							}) +
+							event("[DONE]"),
+					),
+				),
+			);
+			await expect(runEngine(input, () => {})).rejects.toMatchObject({
+				code: "invalid_response",
+				status: 502,
+				pendingReview: true,
+			});
+		},
+	);
+
+	it.each([
+		{ tool_calls: [{ index: 0, id: "call-1", type: "function" }] },
+		{ function_call: { name: "unsupported", arguments: "{}" } },
+	])("rejects tool call deltas before emitting text", async (toolDelta) => {
 		vi.stubGlobal(
 			"fetch",
-			vi
-				.fn()
-				.mockResolvedValue(
-					mockSse(event(completion("answer", "stop")) + event("[DONE]")),
+			vi.fn().mockResolvedValue(
+				mockSse(
+					event({
+						choices: [
+							{
+								index: 0,
+								delta: { ...toolDelta, content: "unsupported" },
+								finish_reason: null,
+							},
+						],
+					}) + event("[DONE]"),
 				),
+			),
 		);
-		const result = await runEngine(input, () => {});
-		expect(result).toMatchObject({
-			text: "answer",
-			inputTokens: null,
-			outputTokens: null,
-			usageSource: "missing",
+		const onDelta = vi.fn();
+		await expect(runEngine(input, onDelta)).rejects.toMatchObject({
+			code: "invalid_response",
 			pendingReview: true,
 		});
+		expect(onDelta).not.toHaveBeenCalled();
 	});
+
+	it.each(["stop", "length", "content_filter"])(
+		"keeps missing usage for %s in review",
+		async (finishReason) => {
+			vi.stubGlobal(
+				"fetch",
+				vi
+					.fn()
+					.mockResolvedValue(
+						mockSse(
+							event(completion("answer", finishReason)) + event("[DONE]"),
+						),
+					),
+			);
+			const result = await runEngine(input, () => {});
+			expect(result).toMatchObject({
+				text: "answer",
+				finishReason,
+				inputTokens: null,
+				outputTokens: null,
+				usageSource: "missing",
+				pendingReview: true,
+			});
+		},
+	);
 
 	it("holds invalid token counts for review", async () => {
 		vi.stubGlobal(
@@ -237,6 +322,14 @@ describe("gateway engine through the official OpenAI SDK", () => {
 });
 
 describe("deterministic demo engine", () => {
+	it("reports length when the synthetic answer reaches the output limit", async () => {
+		const result = await runEngine(
+			{ ...input, kind: "demo", maxTokens: 128 },
+			() => {},
+		);
+		expect(result).toMatchObject({ finishReason: "length", outputTokens: 128 });
+	});
+
 	it("explicitly labels synthetic output and usage without invoking an upstream", async () => {
 		const fetcher = vi.fn();
 		vi.stubGlobal("fetch", fetcher);
@@ -253,6 +346,7 @@ describe("deterministic demo engine", () => {
 		expect(first.text).toContain("No AI model was called");
 		expect(first).toMatchObject({
 			usageSource: "demo",
+			finishReason: "stop",
 			pendingReview: false,
 			upstreamRequestId: null,
 		});

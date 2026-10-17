@@ -2,7 +2,7 @@
 
 AI 资源租赁市场。提供者挂牌号池连接器，开发者锁定预算并通过统一 API 调用；链下计量，链上结算与分账。
 
-当前可运行本地全栈 MVP：资源市场、提供者控制台、调用实验室、API Key、账单、自动结算、退款和提现。演示模型明确输出模拟标记；本地资金操作是真实 EVM 交易，使用无实际价值的 dUSD 测试代币。真实网关和 Monad 测试网需要单独配置及验证。
+当前可运行本地全栈 MVP：资源市场、提供者控制台、调用实验室、API Key、账单、自动结算、退款和提现。演示模型明确输出模拟标记；本地资金操作是真实 EVM 交易，使用无实际价值的 dUSD 测试代币。新版合约已在 Monad 测试网独立完成链上资金验证，尚未接入测试网 Web/数据库、真实浏览器钱包或真实网关；证据见[演示文档](docs/PRODUCT_DEMO.md#monad-测试网合约证据)。
 
 ## 本地启动
 
@@ -16,7 +16,7 @@ pnpm dev
 
 打开 [本地控制台](http://localhost:3000)。`setup` 创建带随机会话密码的本地 `.env`，启动 PostgreSQL，执行迁移并添加演示资源。`dev` 启动持久化本地 EVM、每10秒运行的结算 worker 和 Web 服务。首次为四个公开测试账户各分配500 dUSD；重启复用部署和账本。
 
-进入使用者演示，创建预算会话并调用模型；切换提供者演示可管理自己的资源和提现。演示签名仅允许回环 chain 31337。真实钱包使用 RainbowKit 钱包选择与签名登录；登录签名不授权代币转账，代币授权和预算锁定需分别确认交易。
+控制台概览以“资源 → 预算 → 用量 → 结算”展示使用路径，市场卡片并列显示提供者挂牌的输入和输出单价（dUSD / 百万 Token），模型 ID 由提供者声明。模拟资源无官方同款；连接器模型身份未核验，均无可比官方参考价。本地 dUSD 无兑付价值，不与美元价格比较。进入使用者演示，创建预算会话并调用模型；切换提供者演示可管理自己的资源和提现。概览和账单中的统计基于当前已加载的最近 200 条相关请求和最近 100 个相关会话，并非完整历史总账。桌面账单默认展示最近 5 个会话、8 条请求和 8 笔结算；API 密钥页默认展示最近 8 个密钥，点击“查看全部”可分别展开当前已加载的记录。待核对用量与无法收回的结算会分别标记，未知 Token 用量不会显示为零。演示签名仅允许回环 chain 31337。真实钱包使用 RainbowKit 钱包选择与签名登录；登录签名不授权代币转账，代币授权和预算锁定需分别确认交易。
 
 ## 钱包连接
 
@@ -40,7 +40,7 @@ pnpm dev
 | 链状态 | `.runtime/ganache/` |
 | API 规范 | `/api/v1/openapi.json` |
 
-数据库和链必须成对保留，不能只删除其中一个后继续使用原账本。每套部署使用独立 `DATABASE_URL` 和 `MON2API_DATA_DIR`；后端验证数据库与部署的绑定。
+数据库和链必须成对保留，不能只删除其中一个后继续使用原账本。每套部署使用独立 `DATABASE_URL` 和 `MON2API_DATA_DIR`；后端验证数据库与部署的绑定。旧托管合约没有会话 ID 所有权保护，服务端会拒绝在旧部署新开会话；已有会话仍可结算、关闭、提现。本次展示使用干净的独立数据库 `mon2api_presentation_20261017` 与 `.runtime/presentation-20261017`；已验证的 `mon2api_showcase_20261017`、原账本及各自链数据均保留。
 
 ## API 调用
 
@@ -54,15 +54,39 @@ curl http://localhost:3000/v1/chat/completions \
   -d '{"model":"mon2api-demo","messages":[{"role":"user","content":"Explain settlement"}],"max_tokens":512,"stream":true,"stream_options":{"include_usage":true}}'
 ```
 
-官方 OpenAI SDK 的 `baseURL` 设为 `http://localhost:3000/v1`，关闭客户端自动重试。`/api/v1` 是兼容前缀。只支持文本 Chat Completions，未知参数明确拒绝；重复幂等键返回409，不重复调用或扣款。流式响应开始后发生的错误由 SSE error 返回。
+官方 OpenAI SDK 可直接调用兼容接口。下面的示例为每次新调用生成一个请求键；重试同一次调用时须复用原键。服务端会拒绝重复键（409），不会再次调用或扣款。因此，响应丢失后不要用新键重试：用原键确认请求是否已受理，再按时间和模型核对账单状态，确认结果后才能发起新调用。
+
+```ts
+import { randomUUID } from "node:crypto";
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.MON2API_KEY,
+  baseURL: "http://localhost:3000/v1",
+  maxRetries: 0,
+});
+
+const requestKey = randomUUID();
+const completion = await client.chat.completions.create(
+  {
+    model: "mon2api-demo",
+    messages: [{ role: "user", content: "Explain settlement" }],
+    max_tokens: 512,
+  },
+  { headers: { "Idempotency-Key": requestKey } },
+);
+console.log(completion.choices[0]?.message.content);
+```
+
+`/api/v1` 是兼容前缀。接口只支持文本 Chat Completions，未知参数会明确拒绝。缺少 8 至 128 字符的 `Idempotency-Key` 返回 400。流式响应在 HTTP 200 后仍可能通过 SSE error 报错；收到 `[DONE]` 前不能视为成功，且费用状态以账单为准。
 
 ## 资金规则
 
-一个会话固定资源、提供者、价格快照和预算，期限一小时。1 dUSD等于1,000,000最小单位；报价单位为micro dUSD / 百万Token。费用采用整数向上取整，平台费为累计消费的5%。
+一个会话固定资源、提供者、价格快照和预算，期限一小时。会话 ID 的前 20 字节为消费者钱包地址，后 12 字节由服务端随机生成；合约只接受该钱包开通，防止其他钱包抢先占用 ID。1 dUSD等于1,000,000最小单位；报价单位为micro dUSD / 百万Token。预算和报价可输入至多六位小数，金额不做四舍五入；小额费用保留实际精度。费用采用整数向上取整，平台费为累计消费的5%。链上余额读取失败时显示“暂不可用”，不会显示为零。
 
-请求先原子预留，再依据上游 usage 核销。真实网关按32,768输入Token和输出上限保守预留；上游报告超出预留时进入核对，不能自动超扣。调用总执行期限45秒，到期前180秒停止接单。缺失用量、截断和未知结果进入 REVIEW，保留预算；运营者依据证据通过 `pnpm review:resolve` 核对。上游报告与平台计量仍受信任，上链摘要不是执行证明。
+请求先原子预留，再依据上游 usage 核销。真实网关按32,768输入Token和输出上限保守预留；上游报告超出预留时进入核对，不能自动超扣。调用总执行期限45秒，到期前180秒停止接单。REST 流式客户端断开后，服务端仍继续等待上游用量；缺失用量、截断和未知结果进入 REVIEW，保留预算，控制台把未知用量标为待核对；worker 标记中断后迟到的上游用量也会写入待核对记录，不自动扣费；运营者依据证据通过 `pnpm review:resolve` 核对。上游报告与平台计量仍受信任，上链摘要不是执行证明。
 
-worker每10秒处理结算。outbox先落库再发交易，按nonce、累计金额、摘要和链上事件恢复。PostgreSQL锁串行化Web与worker对同一签名者的发送。
+worker每10秒优先处理待结算与待关闭会话，并分页巡检活跃会话；outbox先落库再发交易，按nonce、累计金额、摘要和链上事件恢复。PostgreSQL锁串行化Web与worker对同一签名者的发送。会话开通确认以托管合约发出的事件、确认数及链上条款为准，兼容合约钱包的转发交易。
 
 正常关闭先停止接单、处理在途请求并结算退款。消费者也可直接调用合约 `requestClose`，120秒窗口后调用 `closeSession`，再 `withdraw`。平台不能无限延迟链上退出；长期网络或运营故障造成的未收回费用由运营者承担。
 
@@ -78,6 +102,8 @@ verify顺序运行格式/lint、TypeScript、Vitest和生产构建。端到端sm
 
 ## 文档
 
+- [五分钟本地演示与产品主张](docs/PRODUCT_DEMO.md)
+- [模型广场、工具导入、Monad 与支付路线](docs/PRODUCT_STRATEGY.md)
 - [MVP模块职责](docs/MVP.md)
 - [开发任务和验收状态](docs/TASKS.md)
 - [号池连接器与用量核对](docs/POOL.md)

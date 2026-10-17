@@ -1,0 +1,349 @@
+import type { Listing, Prisma } from "@prisma/client";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Viewer } from "~/shared/mon2api";
+import { confirmSession, openSession, snapshot } from "./market";
+
+const mocks = vi.hoisted(() => ({
+	db: {
+		listing: { findMany: vi.fn(), findUnique: vi.fn() },
+		lease: {
+			findMany: vi.fn(),
+			findUnique: vi.fn(),
+			updateMany: vi.fn(),
+			create: vi.fn(),
+		},
+		meterRequest: { findMany: vi.fn(), groupBy: vi.fn() },
+		accessKey: { findMany: vi.fn() },
+		settlement: { findMany: vi.fn() },
+	},
+	chainBalances: vi.fn(),
+	findSessionOpen: vi.fn(),
+	readSession: vi.fn(),
+	getChainId: vi.fn(),
+	inspectEscrowOwnerGuard: vi.fn(),
+}));
+
+vi.mock("~/server/db", () => ({ db: mocks.db }));
+vi.mock("./escrow-version", () => ({
+	inspectEscrowOwnerGuard: mocks.inspectEscrowOwnerGuard,
+}));
+vi.mock("./auth", () => ({
+	AppError: class extends Error {
+		constructor(
+			public code: string,
+			message: string,
+			public status = 400,
+		) {
+			super(message);
+		}
+	},
+}));
+vi.mock("./chain", () => ({
+	chainBalances: mocks.chainBalances,
+	findSessionOpen: mocks.findSessionOpen,
+	readSession: mocks.readSession,
+	clients: () => ({
+		config: { escrow: "0x1111111111111111111111111111111111111111" },
+		publicClient: { getChainId: mocks.getChainId },
+	}),
+}));
+vi.mock("./runtime", () => ({
+	ensureChainBinding: vi.fn(),
+	chainConfig: () => ({
+		mode: "local",
+		chainId: 31337,
+		escrow: "0xescrow",
+		token: "0xtoken",
+	}),
+}));
+
+const createdAt = new Date("2026-10-17T00:00:00.000Z");
+const viewer: Viewer = { address: "consumer", name: "Consumer", demo: true };
+const listing: Listing = {
+	id: "listing",
+	owner: "provider",
+	name: "Test resource",
+	description: "Snapshot regression fixture",
+	model: "test-model",
+	kind: "demo",
+	inputRate: 1_000_000,
+	outputRate: 2_000_000,
+	concurrency: 2,
+	enabled: true,
+	status: "READY",
+	baseUrl: null,
+	secret: null,
+	createdAt,
+};
+type LeaseRow = Prisma.LeaseGetPayload<{ include: { listing: true } }>;
+function lease(overrides: Partial<LeaseRow> = {}): LeaseRow {
+	return {
+		id: "session",
+		listingId: listing.id,
+		listing,
+		consumer: viewer.address,
+		provider: listing.owner,
+		model: listing.model,
+		inputRate: listing.inputRate,
+		outputRate: listing.outputRate,
+		termsHash: "terms",
+		budget: 100,
+		spent: 50,
+		reserved: 7,
+		settled: 20,
+		writtenOff: 30,
+		status: "CLOSED",
+		expiresAt: createdAt,
+		openTx: "open-tx",
+		closeTx: "close-tx",
+		createdAt,
+		...overrides,
+	};
+}
+
+beforeEach(() => {
+	vi.resetAllMocks();
+	mocks.db.listing.findMany.mockResolvedValue([listing]);
+	mocks.db.lease.findMany.mockResolvedValue([]);
+	mocks.db.meterRequest.findMany.mockResolvedValue([]);
+	mocks.db.meterRequest.groupBy.mockResolvedValue([]);
+	mocks.db.accessKey.findMany.mockResolvedValue([]);
+	mocks.db.settlement.findMany.mockResolvedValue([]);
+	mocks.getChainId.mockResolvedValue(31337);
+	mocks.inspectEscrowOwnerGuard.mockResolvedValue("guarded");
+	mocks.chainBalances.mockResolvedValue({
+		claimable: "11",
+		walletBalance: "99",
+	});
+});
+
+describe("market snapshot accounting", () => {
+	it("excludes written-off usage from pending and preserves recorded amounts", async () => {
+		mocks.db.lease.findMany.mockResolvedValueOnce([lease()]);
+		mocks.db.meterRequest.findMany.mockResolvedValue([
+			{
+				id: "request",
+				sessionId: "session",
+				session: { model: listing.model, listing },
+				status: "COMPLETED",
+				inputTokens: 10,
+				outputTokens: 20,
+				cost: 50,
+				usageSource: "upstream_reported",
+				upstreamId: "upstream-request",
+				createdAt,
+				settlement: { status: "UNCOLLECTIBLE" },
+			},
+		]);
+		mocks.db.settlement.findMany.mockResolvedValue([
+			{
+				id: "written-off-job",
+				sessionId: "session",
+				amount: 30,
+				status: "UNCOLLECTIBLE",
+				txHash: null,
+				createdAt,
+			},
+		]);
+
+		const result = await snapshot(viewer);
+
+		expect(result.metrics).toEqual({
+			requests: 1,
+			inputTokens: 10,
+			outputTokens: 20,
+			spent: 50,
+			settled: 20,
+			writtenOff: 30,
+			pending: 0,
+			claimable: "11",
+			walletBalance: "99",
+		});
+		expect(result.sessions[0]).toMatchObject({
+			id: "session",
+			budget: 100,
+			spent: 50,
+			reserved: 7,
+			settled: 20,
+			writtenOff: 30,
+			status: "CLOSED",
+			openTx: "open-tx",
+			closeTx: "close-tx",
+		});
+		expect(result.requests[0]).toMatchObject({
+			inputTokens: 10,
+			outputTokens: 20,
+			cost: 50,
+			status: "COMPLETED",
+			settled: false,
+		});
+		expect(result.settlements[0]).toMatchObject({
+			amount: 30,
+			status: "UNCOLLECTIBLE",
+		});
+	});
+
+	it("totals outstanding usage across sessions without reducing spent", async () => {
+		mocks.db.lease.findMany.mockResolvedValueOnce([
+			lease(),
+			lease({
+				id: "active-session",
+				spent: 80,
+				settled: 20,
+				writtenOff: 0,
+				status: "ACTIVE",
+			}),
+		]);
+
+		const result = await snapshot(viewer);
+
+		expect(result.metrics).toMatchObject({
+			spent: 130,
+			settled: 40,
+			writtenOff: 30,
+			pending: 60,
+		});
+		expect(result.sessions.map((s) => s.writtenOff)).toEqual([30, 0]);
+	});
+
+	it("retains unknown request usage while excluding it from known token totals", async () => {
+		mocks.db.meterRequest.findMany.mockResolvedValue([
+			{
+				id: "review-request",
+				sessionId: "session",
+				session: { model: listing.model, listing },
+				status: "REVIEW",
+				inputTokens: null,
+				outputTokens: null,
+				cost: 0,
+				usageSource: "missing",
+				upstreamId: "upstream-unknown",
+				createdAt,
+				settlement: null,
+			},
+		]);
+		const result = await snapshot(viewer);
+		expect(result.requests[0]).toMatchObject({
+			status: "REVIEW",
+			inputTokens: null,
+			outputTokens: null,
+		});
+		expect(result.metrics).toMatchObject({ inputTokens: 0, outputTokens: 0 });
+	});
+
+	it("leaves chain balances unavailable when the RPC cannot be read", async () => {
+		mocks.chainBalances.mockRejectedValueOnce(new Error("RPC disconnected"));
+		const result = await snapshot(viewer);
+		expect(result.metrics).toMatchObject({
+			claimable: null,
+			walletBalance: null,
+		});
+	});
+
+	it("returns zero accounting totals when no sessions are visible", async () => {
+		const result = await snapshot(null);
+
+		expect(result.metrics).toMatchObject({
+			spent: 0,
+			settled: 0,
+			writtenOff: 0,
+			pending: 0,
+			claimable: null,
+			walletBalance: null,
+		});
+		expect(result.sessions).toEqual([]);
+		expect(mocks.chainBalances).not.toHaveBeenCalled();
+	});
+});
+
+describe("lease creation guard", () => {
+	const consumer: Viewer = {
+		address: "0x2222222222222222222222222222222222222222",
+		name: "Consumer",
+		demo: false,
+	};
+	const input = { listingId: "clw123456789012345678901234", budget: 1_000_000 };
+	it("keeps older escrow sessions available but rejects new leases", async () => {
+		mocks.inspectEscrowOwnerGuard.mockResolvedValue("legacy");
+		await expect(openSession(consumer, input)).rejects.toMatchObject({
+			code: "unsupported_escrow",
+			status: 409,
+		});
+		expect(mocks.db.lease.create).not.toHaveBeenCalled();
+	});
+
+	it("does not create a draft when the RPC cannot verify the guard", async () => {
+		mocks.inspectEscrowOwnerGuard.mockRejectedValue(
+			new Error("RPC unavailable"),
+		);
+		await expect(openSession(consumer, input)).rejects.toMatchObject({
+			code: "unsupported_escrow",
+			status: 503,
+		});
+		expect(mocks.db.lease.create).not.toHaveBeenCalled();
+	});
+
+	it("creates a wallet-bound random ID for the guarded escrow", async () => {
+		mocks.db.listing.findUnique.mockResolvedValue({
+			...listing,
+			enabled: true,
+		});
+		mocks.db.lease.create.mockResolvedValue({});
+		const result = await openSession(consumer, input);
+		expect(result.mode).toBe("wallet");
+		expect(result.id).toMatch(
+			/^0x2222222222222222222222222222222222222222[\da-f]{24}$/,
+		);
+		expect(mocks.db.lease.create).toHaveBeenCalledOnce();
+	});
+});
+
+describe("contract wallet lease activation", () => {
+	it("accepts the escrow event from an intermediary transaction when terms and state match", async () => {
+		const wallet = "0x1234567890123456789012345678901234567890";
+		const provider = "0x9876543210987654321098765432109876543210";
+		const id = `0x${"ab".repeat(32)}`;
+		const txHash = `0x${"cd".repeat(32)}`;
+		const termsHash = `0x${"ef".repeat(32)}`;
+		const expiresAt = new Date("2026-10-17T01:00:00.000Z");
+		mocks.db.lease.findUnique.mockResolvedValue({
+			consumer: wallet,
+			provider,
+			termsHash,
+			budget: 1_000_000,
+			expiresAt,
+		});
+		mocks.findSessionOpen.mockResolvedValue({
+			receipt: { from: provider, to: wallet, transactionHash: txHash },
+			event: {
+				args: {
+					consumer: wallet,
+					provider,
+					termsHash,
+					budget: 1_000_000n,
+					expiresAt: BigInt(expiresAt.getTime() / 1000),
+				},
+			},
+		});
+		mocks.readSession.mockResolvedValue({
+			closed: false,
+			closeAfter: 0,
+			consumer: wallet,
+			provider,
+			termsHash,
+			budget: 1_000_000,
+			expiresAt: expiresAt.getTime() / 1000,
+		});
+		mocks.db.lease.updateMany.mockResolvedValue({ count: 1 });
+		const result = await confirmSession(
+			{ address: wallet, name: "Contract wallet", demo: false },
+			id,
+			txHash,
+		);
+		expect(result).toEqual({ id, status: "ACTIVE" });
+		expect(mocks.db.lease.updateMany).toHaveBeenCalledWith({
+			where: { id, status: "DRAFT" },
+			data: { status: "ACTIVE", openTx: txHash },
+		});
+	});
+});

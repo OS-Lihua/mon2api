@@ -53,6 +53,8 @@ model Lease {
   spent       Int            @default(0)
   reserved    Int            @default(0)
   settled     Int            @default(0)
+  // Earned usage that cannot be collected after a confirmed chain close.
+  writtenOff  Int            @default(0)
   status      String         @default("DRAFT")
   expiresAt   DateTime
   openTx      String?
@@ -63,6 +65,7 @@ model Lease {
   settlements Settlement[]
 
   @@index([consumer, status])
+  @@index([status, id])
 }
 
 model MeterRequest {

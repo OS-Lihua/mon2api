@@ -5,12 +5,10 @@ import { PostHog } from "posthog-node";
 import { env } from "~/env";
 import { logger } from "./logger";
 
-const posthog =
-	env.NEXT_PUBLIC_POSTHOG_KEY === undefined
-		? null
-		: new PostHog(env.NEXT_PUBLIC_POSTHOG_KEY, {
-				host: env.NEXT_PUBLIC_POSTHOG_HOST,
-			});
+const posthogKey = env.NEXT_PUBLIC_POSTHOG_KEY;
+const posthog = posthogKey?.trim()
+	? new PostHog(posthogKey, { host: env.NEXT_PUBLIC_POSTHOG_HOST })
+	: null;
 
 export function captureServerEvent(
 	distinctId: string,

@@ -36,12 +36,15 @@ export const chatPost = createRestMutation({
 					"模型不属于此 API Key 绑定的租赁会话。",
 					400,
 				);
-			const idempotencyKey =
-				request.headers.get("idempotency-key") || randomUUID();
-			if (idempotencyKey.length < 8 || idempotencyKey.length > 128)
+			const idempotencyKey = request.headers.get("idempotency-key");
+			if (
+				!idempotencyKey ||
+				idempotencyKey.length < 8 ||
+				idempotencyKey.length > 128
+			)
 				throw new AppError(
 					"invalid_request",
-					"Idempotency-Key 长度必须为 8 到 128。",
+					"必须提供长度为 8 到 128 的 Idempotency-Key。",
 				);
 			const args = {
 				sessionId: key.sessionId,
@@ -70,7 +73,7 @@ export const chatPost = createRestMutation({
 							{
 								index: 0,
 								message: { role: "assistant", content: result.text },
-								finish_reason: "stop",
+								finish_reason: result.finishReason,
 							},
 						],
 						usage: {
@@ -89,12 +92,11 @@ export const chatPost = createRestMutation({
 				);
 			}
 			const encoder = new TextEncoder();
-			const abort = new AbortController();
-			const signal = AbortSignal.any([request.signal, abort.signal]);
+			let cancelled = false;
 			const body = new ReadableStream<Uint8Array>({
 				async start(controller) {
 					const emit = (value: unknown) => {
-						if (!abort.signal.aborted)
+						if (!cancelled && !request.signal.aborted)
 							controller.enqueue(
 								encoder.encode(`data: ${JSON.stringify(value)}\n\n`),
 							);
@@ -121,10 +123,14 @@ export const chatPost = createRestMutation({
 										},
 									]),
 								),
-							signal,
+							undefined,
 							key.id,
 						);
-						emit(chunk([{ index: 0, delta: {}, finish_reason: "stop" }]));
+						emit(
+							chunk([
+								{ index: 0, delta: {}, finish_reason: result.finishReason },
+							]),
+						);
 						if (input.stream_options?.include_usage)
 							emit(
 								chunk([], {
@@ -142,14 +148,14 @@ export const chatPost = createRestMutation({
 							},
 						});
 					} finally {
-						if (!abort.signal.aborted) {
+						if (!cancelled && !request.signal.aborted) {
 							controller.enqueue(encoder.encode("data: [DONE]\n\n"));
 							controller.close();
 						}
 					}
 				},
 				cancel() {
-					abort.abort();
+					cancelled = true;
 				},
 			});
 			return new Response(body, {

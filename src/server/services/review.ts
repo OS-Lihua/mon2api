@@ -37,8 +37,8 @@ export async function resolveReview(
 				"核对费用超出授权预留额，不能自动转嫁给用户。",
 				409,
 			);
-		await tx.meterRequest.update({
-			where: { id },
+		const transition = await tx.meterRequest.updateMany({
+			where: { id, status: "REVIEW" },
 			data: {
 				status: "COMPLETED",
 				inputTokens,
@@ -48,6 +48,8 @@ export async function resolveReview(
 				errorCode: `evidence:${evidence}`,
 			},
 		});
+		if (transition.count !== 1)
+			throw new AppError("not_review", "请求当前不处于待核对状态。", 409);
 		await tx.lease.update({
 			where: { id: request.sessionId },
 			data: {

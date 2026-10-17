@@ -36,6 +36,7 @@ export type SessionView = {
 	spent: number;
 	reserved: number;
 	settled: number;
+	writtenOff: number;
 	status: string;
 	expiresAt: string;
 	openTx: string | null;
@@ -47,8 +48,8 @@ export type RequestView = {
 	listingName: string;
 	model: string;
 	status: string;
-	inputTokens: number;
-	outputTokens: number;
+	inputTokens: number | null;
+	outputTokens: number | null;
 	cost: number;
 	usageSource: string;
 	upstreamRequestId: string | null;
@@ -81,8 +82,9 @@ export type Snapshot = {
 		spent: number;
 		pending: number;
 		settled: number;
-		claimable: number;
-		walletBalance: number;
+		writtenOff: number;
+		claimable: string | null;
+		walletBalance: string | null;
 	};
 	listings: ListingView[];
 	sessions: SessionView[];
@@ -105,6 +107,7 @@ export type OpenSessionResult = {
 export type ChatResult = {
 	id: string;
 	text: string;
+	finishReason: "stop" | "length" | "content_filter";
 	inputTokens: number;
 	outputTokens: number;
 	cost: number;

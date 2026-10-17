@@ -10,6 +10,7 @@ import {
 	viewer,
 	walletChallenge,
 	walletLogin,
+	walletSignatureSchema,
 } from "~/server/services/auth";
 import {
 	confirmSession,
@@ -59,7 +60,7 @@ async function call<T>(action: () => Promise<T>): Promise<T> {
 	}
 }
 const mutation = publicProcedure.use(async ({ ctx, next }) => {
-	assertSameOrigin(ctx.headers);
+	await call(async () => assertSameOrigin(ctx.headers));
 	return next();
 });
 export const mon2apiRouter = createTRPCRouter({
@@ -78,7 +79,7 @@ export const mon2apiRouter = createTRPCRouter({
 			z.object({
 				address: addressSchema,
 				message: z.string().max(1000),
-				signature: z.string().max(1000),
+				signature: walletSignatureSchema,
 			}),
 		)
 		.mutation(({ input }) =>

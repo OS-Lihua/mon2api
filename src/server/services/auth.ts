@@ -2,12 +2,43 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
-import { getAddress, type Hex, verifyMessage } from "viem";
+import {
+	BaseError,
+	ExecutionRevertedError,
+	getAddress,
+	type Hex,
+	publicActions,
+} from "viem";
+import {
+	createSiweMessage,
+	parseSiweMessage,
+	validateSiweMessage,
+} from "viem/siwe";
 import { z } from "zod";
 import { db } from "~/server/db";
 import type { Viewer } from "~/shared/mon2api";
-import { demoAccount } from "./chain";
-import { demoEnabled, sessionPassword } from "./runtime";
+import { demoAccount, clients as publicChain } from "./chain";
+import { chainConfig, demoEnabled, sessionPassword } from "./runtime";
+
+const challengeLifetimeMs = 300_000;
+const signInStatement =
+	"Sign in to mon2api. This signature does not authorize token transfers.";
+// ERC-1271 signatures can contain several signatures and wallet-specific data.
+export const walletSignatureSchema = z
+	.string()
+	.max(2 + 8192 * 2)
+	.regex(/^0x(?:[\da-fA-F]{2})+$/);
+
+function walletAddress(address: string) {
+	try {
+		return getAddress(address);
+	} catch {
+		throw new AppError("invalid_address", "钱包地址无效。", 400);
+	}
+}
+function signInOrigin() {
+	return new URL(process.env.APP_ORIGIN || "http://localhost:3000").origin;
+}
 
 export class AppError extends Error {
 	constructor(
@@ -66,15 +97,23 @@ export async function logout() {
 	(await authSession()).destroy();
 }
 export async function walletChallenge(address: string) {
-	const normalized = getAddress(address).toLowerCase();
-	const origin = process.env.APP_ORIGIN || "http://localhost:3000";
-	const message = `${new URL(origin).host} requests a mon2api sign-in.\nWallet: ${normalized}\nURI: ${origin}\nNonce: ${randomBytes(24).toString("hex")}\nIssued: ${new Date().toISOString()}\nThis signature does not authorize token transfers.`;
+	const signer = walletAddress(address);
+	const origin = signInOrigin();
+	const issuedAt = new Date();
+	const expiresAt = new Date(issuedAt.getTime() + challengeLifetimeMs);
+	const message = createSiweMessage({
+		address: signer,
+		domain: new URL(origin).host,
+		uri: origin,
+		chainId: chainConfig().chainId,
+		version: "1",
+		nonce: randomBytes(24).toString("hex"),
+		issuedAt,
+		expirationTime: expiresAt,
+		statement: signInStatement,
+	});
 	await db.walletNonce.create({
-		data: {
-			address: normalized,
-			message,
-			expiresAt: new Date(Date.now() + 300_000),
-		},
+		data: { address: signer.toLowerCase(), message, expiresAt },
 	});
 	return { message };
 }
@@ -83,22 +122,96 @@ export async function walletLogin(
 	message: string,
 	signature: string,
 ) {
-	const normalized = getAddress(address).toLowerCase();
+	const signer = walletAddress(address);
+	const normalized = signer.toLowerCase();
+	if (!walletSignatureSchema.safeParse(signature).success)
+		throw new AppError("invalid_signature", "钱包签名格式无效。", 400);
 	const challenge = await db.walletNonce.findUnique({ where: { message } });
+	const now = new Date();
 	if (
 		!challenge ||
+		challenge.message !== message ||
 		challenge.address !== normalized ||
 		challenge.consumed ||
-		challenge.expiresAt.getTime() <= Date.now() ||
-		!/^0x[\da-fA-F]+$/.test(signature)
+		challenge.expiresAt.getTime() <= now.getTime()
 	)
 		throw new AppError("invalid_challenge", "登录挑战已失效。", 401);
-	const valid = await verifyMessage({
-		address: getAddress(address),
+	const origin = signInOrigin();
+	const domain = new URL(origin).host;
+	const parsed = parseSiweMessage(message);
+	const { config, publicClient } = publicChain();
+	if (
+		!validateSiweMessage({
+			address: signer,
+			domain,
+			message: parsed,
+			time: now,
+		}) ||
+		parsed.uri !== origin ||
+		parsed.chainId !== config.chainId ||
+		parsed.version !== "1" ||
+		!parsed.nonce ||
+		!/^[\da-f]{48}$/.test(parsed.nonce) ||
+		!parsed.issuedAt ||
+		!Number.isFinite(parsed.issuedAt.getTime()) ||
+		parsed.issuedAt.getTime() > now.getTime() ||
+		!parsed.expirationTime ||
+		parsed.expirationTime.getTime() !== challenge.expiresAt.getTime() ||
+		parsed.expirationTime.getTime() - parsed.issuedAt.getTime() !==
+			challengeLifetimeMs ||
+		createSiweMessage({
+			address: signer,
+			domain,
+			uri: origin,
+			chainId: config.chainId,
+			version: "1",
+			nonce: parsed.nonce,
+			issuedAt: parsed.issuedAt,
+			expirationTime: parsed.expirationTime,
+			statement: signInStatement,
+		}) !== message
+	)
+		throw new AppError("invalid_challenge", "登录挑战已失效。", 401);
+
+	// viem treats CallExecutionError as a rejected contract signature, including
+	// transport failures. Record non-revert failures before that conversion.
+	let rpcFailure: unknown;
+	const verificationClient = publicClient
+		.extend(() => ({
+			call: async (...args: Parameters<typeof publicClient.call>) => {
+				try {
+					return await publicClient.call(...args);
+				} catch (error) {
+					const reverted =
+						error instanceof BaseError &&
+						(error.walk(
+							(cause) => cause instanceof ExecutionRevertedError,
+						) instanceof ExecutionRevertedError ||
+							// Ganache reports reverts with -32000, not the usual code 3.
+							/^VM Exception while processing transaction: revert\b/.test(
+								error.details || "",
+							));
+					if (!reverted) rpcFailure = error;
+					throw error;
+				}
+			},
+		}))
+		// Rebind the action so its nested calls use the guarded client.
+		.extend((client) => ({
+			verifySiweMessage: publicActions(client).verifySiweMessage,
+		}));
+	const valid = await verificationClient.verifySiweMessage({
+		address: signer,
+		domain,
+		nonce: parsed.nonce,
+		time: now,
 		message,
 		signature: signature as Hex,
 	});
-	if (!valid) throw new AppError("invalid_signature", "钱包签名无效。", 401);
+	if (!valid) {
+		if (rpcFailure) throw rpcFailure;
+		throw new AppError("invalid_signature", "钱包签名无效。", 401);
+	}
 	const consumed = await db.walletNonce.updateMany({
 		where: { id: challenge.id, consumed: false, expiresAt: { gt: new Date() } },
 		data: { consumed: true },

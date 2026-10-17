@@ -13,6 +13,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { monadTestnet } from "viem/chains";
 import { escrowAbi, tokenAbi } from "../src/lib/abi";
+import { inspectEscrowOwnerGuard } from "../src/server/services/escrow-version";
 import type { ChainConfig } from "../src/server/services/runtime";
 
 // This script has no mainnet code path. Every transaction is signed for 10143.
@@ -110,6 +111,13 @@ async function main() {
 				"Existing escrow does not match the requested testnet deployment terms.",
 			);
 		}
+		if (
+			(await inspectEscrowOwnerGuard(client, escrow, deployer.address)) ===
+			"legacy"
+		)
+			console.warn(
+				"Saved escrow lacks the session owner guard. New sessions are blocked; existing sessions can still settle, close and withdraw. Use a separate MON2API_DATA_DIR and DATABASE_URL for a guarded deployment.",
+			);
 		console.log(
 			`Reusing Monad testnet escrow ${escrow}; no transactions sent.`,
 		);
