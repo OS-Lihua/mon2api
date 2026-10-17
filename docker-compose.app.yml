@@ -16,6 +16,7 @@ services:
       target: runner
       args:
         SKIP_ENV_VALIDATION: "1"
+        NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID:-}
     depends_on:
       migrate:
         condition: service_completed_successfully

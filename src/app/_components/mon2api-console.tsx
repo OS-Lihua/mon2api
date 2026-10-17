@@ -1,5 +1,6 @@
 "use client";
 
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 import {
 	Activity,
 	ArrowDownLeft,
@@ -42,16 +43,9 @@ import {
 	useRef,
 	useState,
 } from "react";
-import {
-	createPublicClient,
-	createWalletClient,
-	custom,
-	defineChain,
-	type EIP1193Provider,
-	getAddress,
-	http,
-	isHex,
-} from "viem";
+import { getAddress, isHex } from "viem";
+import { useMon2ApiWallet } from "~/app/_components/wallet-provider";
+import { env } from "~/env";
 import { escrowAbi, tokenAbi } from "~/lib/abi";
 import type {
 	ListingView,
@@ -60,12 +54,6 @@ import type {
 	Snapshot,
 } from "~/shared/mon2api";
 import { api } from "~/trpc/react";
-
-declare global {
-	interface Window {
-		ethereum?: EIP1193Provider;
-	}
-}
 
 type Section = "overview" | "market" | "pool" | "lab" | "billing" | "keys";
 const navigation = [
@@ -287,42 +275,6 @@ function Transaction({
 		</span>
 	);
 }
-function getChain(network: NetworkInfo) {
-	return defineChain({
-		id: network.chainId,
-		name: network.name,
-		nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
-		rpcUrls: { default: { http: [network.rpcUrl] } },
-	});
-}
-async function getWallet(network: NetworkInfo) {
-	if (!window.ethereum)
-		throw new Error("请先安装支持 EVM 的浏览器钱包，或使用演示身份体验。");
-	const chain = getChain(network);
-	const wallet = createWalletClient({
-		chain,
-		transport: custom(window.ethereum),
-	});
-	const [account] = await wallet.requestAddresses();
-	if (!account) throw new Error("钱包未返回可用地址。");
-	if ((await wallet.getChainId()) !== network.chainId) {
-		try {
-			await wallet.switchChain({ id: network.chainId });
-		} catch {
-			await wallet.addChain({ chain });
-			await wallet.switchChain({ id: network.chainId });
-		}
-	}
-	return {
-		wallet,
-		account,
-		publicClient: createPublicClient({
-			chain,
-			transport: http(network.rpcUrl),
-		}),
-	};
-}
-
 type ChatMessage = {
 	id: string;
 	role: "user" | "assistant";
@@ -331,6 +283,11 @@ type ChatMessage = {
 };
 
 export function Mon2ApiConsole() {
+	const {
+		getWallet,
+		address: connectedAddress,
+		isConnected,
+	} = useMon2ApiWallet();
 	const [section, setSection] = useState<Section>("overview");
 	const [mobileOpen, setMobileOpen] = useState(false);
 	const [busy, setBusy] = useState<string | null>(null);
@@ -354,8 +311,6 @@ export function Mon2ApiConsole() {
 	});
 	const demoLogin = api.mon2api.demoLogin.useMutation();
 	const logout = api.mon2api.logout.useMutation();
-	const challenge = api.mon2api.walletChallenge.useMutation();
-	const walletLogin = api.mon2api.walletLogin.useMutation();
 	const createListing = api.mon2api.createListing.useMutation();
 	const toggleListing = api.mon2api.toggleListing.useMutation();
 	const openSession = api.mon2api.openSession.useMutation();
@@ -368,6 +323,36 @@ export function Mon2ApiConsole() {
 	const withdraw = api.mon2api.withdraw.useMutation();
 	const data = snapshot.data;
 	const viewer = data?.viewer;
+	const connectionIdentity = viewer?.demo
+		? "demo"
+		: `${connectedAddress?.toLowerCase() ?? "none"}:${isConnected ? "connected" : "disconnected"}`;
+	const identity = `${viewer?.demo ? "demo" : "wallet"}:${viewer?.address ?? "guest"}:${connectionIdentity}`;
+	const identityRef = useRef(identity);
+	const identityGeneration = useRef(0);
+	if (identityRef.current !== identity) {
+		identityRef.current = identity;
+		identityGeneration.current += 1;
+	}
+	useEffect(() => {
+		// A new authenticated identity never inherits another wallet's private UI state.
+		void identity;
+		setNewKey(null);
+		setMessages([]);
+		setSelectedSession("");
+		setConversationId("");
+		setRentListing(null);
+		setKeyModal(false);
+		setListingModal(false);
+		setError(null);
+		setNotice(null);
+		setBusy(null);
+	}, [identity]);
+	const walletMismatch =
+		!!viewer &&
+		!viewer.demo &&
+		(!isConnected ||
+			connectedAddress?.toLowerCase() !== viewer.address.toLowerCase());
+
 	const sessions =
 		data?.sessions.filter(
 			(session) =>
@@ -384,20 +369,30 @@ export function Mon2ApiConsole() {
 		setMobileOpen(false);
 		setSearch("");
 	};
-	const run = async (name: string, action: () => Promise<void>) => {
+	const run = async (
+		name: string,
+		action: (isCurrent: () => boolean) => Promise<void>,
+	) => {
 		if (busy) return;
+		if (walletMismatch && name !== "login" && name !== "logout") {
+			setError("钱包与登录身份不一致，请在钱包菜单中重新连接并签名登录。");
+			return;
+		}
+		const generation = identityGeneration.current;
+		const isCurrent = () => identityGeneration.current === generation;
 		setBusy(name);
 		setError(null);
 		setNotice(null);
 		try {
-			await action();
+			await action(isCurrent);
 		} catch (cause) {
+			if (!isCurrent()) return;
 			setError(
 				cause instanceof Error ? cause.message : "操作失败，请稍后重试。",
 			);
 		} finally {
 			await snapshot.refetch();
-			setBusy(null);
+			if (isCurrent()) setBusy(null);
 		}
 	};
 	const loginDemo = (role: "consumer" | "provider") =>
@@ -413,32 +408,26 @@ export function Mon2ApiConsole() {
 					: "已切换为资源提供者，可管理种子资源并提取已结算收益。",
 			);
 		});
-	const connectWallet = () =>
-		run("wallet", async () => {
-			if (!data) return;
-			const { wallet, account } = await getWallet(data.network);
-			const { message } = await challenge.mutateAsync({ address: account });
-			const signature = await wallet.signMessage({ account, message });
-			await walletLogin.mutateAsync({ address: account, message, signature });
-			setMessages([]);
-			setSelectedSession("");
-			setConversationId("");
-			setNewKey(null);
-			setNotice("钱包身份已验证。签名仅用于登录。");
-		});
 	const rent = (event: FormEvent) => {
 		event.preventDefault();
-		void run("rent", async () => {
+		void run("rent", async (isCurrent) => {
 			if (!rentListing || !data || !viewer) return;
 			const amount = Number(budget);
 			if (!Number.isFinite(amount) || amount < 1 || amount > 100)
 				throw new Error("预算应在 1 至 100 dUSD 之间。");
+			if (!viewer.demo) await getWallet(data.network, viewer.address);
+			if (!isCurrent()) return;
 			const result = await openSession.mutateAsync({
 				listingId: rentListing.id,
 				budget: Math.round(amount * 1_000_000),
 			});
+			if (!isCurrent()) return;
 			if (result.mode === "wallet") {
-				const { wallet, account, publicClient } = await getWallet(data.network);
+				const { wallet, account, publicClient } = await getWallet(
+					data.network,
+					viewer.address,
+				);
+				if (!isCurrent()) return;
 				if (account.toLowerCase() !== viewer.address.toLowerCase())
 					throw new Error("当前钱包与登录地址不同，请重新连接钱包。");
 				const approval = await wallet.writeContract({
@@ -451,12 +440,19 @@ export function Mon2ApiConsole() {
 						BigInt(result.transaction.budget),
 					],
 				});
-				await publicClient.waitForTransactionReceipt({ hash: approval });
+				const approvalReceipt = await publicClient.waitForTransactionReceipt({
+					hash: approval,
+				});
+				if (approvalReceipt.status !== "success")
+					throw new Error("代币授权交易失败，预算尚未锁定。");
+				if (!isCurrent()) return;
+				const verifiedWallet = await getWallet(data.network, viewer.address);
+				if (!isCurrent()) return;
 				const { id, termsHash } = result.transaction;
 				if (!isHex(id) || !isHex(termsHash))
 					throw new Error("会话交易参数无效。");
-				const hash = await wallet.writeContract({
-					account,
+				const hash = await verifiedWallet.wallet.writeContract({
+					account: verifiedWallet.account,
 					address: getAddress(data.network.escrow),
 					abi: escrowAbi,
 					functionName: "openSession",
@@ -468,10 +464,13 @@ export function Mon2ApiConsole() {
 						BigInt(result.transaction.expiresAt),
 					],
 				});
-				const receipt = await publicClient.waitForTransactionReceipt({ hash });
+				const receipt =
+					await verifiedWallet.publicClient.waitForTransactionReceipt({ hash });
 				if (receipt.status !== "success") throw new Error("预算锁定交易失败。");
+				if (!isCurrent()) return;
 				await confirmSession.mutateAsync({ id: result.id, txHash: hash });
 			}
+			if (!isCurrent()) return;
 			setSelectedSession(result.id);
 			setRentListing(null);
 			navigate("lab");
@@ -483,7 +482,7 @@ export function Mon2ApiConsole() {
 	const submitChat = (event: FormEvent) => {
 		event.preventDefault();
 		if (!prompt.trim() || !sessionId) return;
-		void run("chat", async () => {
+		void run("chat", async (isCurrent) => {
 			const content = prompt.trim();
 			const nextMessages: ChatMessage[] = [
 				...messages,
@@ -500,6 +499,7 @@ export function Mon2ApiConsole() {
 				conversationId: currentConversation,
 				idempotencyKey: crypto.randomUUID(),
 			});
+			if (!isCurrent()) return;
 			if (!conversationId) setConversationId(currentConversation);
 			setMessages([
 				...nextMessages,
@@ -515,8 +515,9 @@ export function Mon2ApiConsole() {
 	};
 	const submitKey = (event: FormEvent) => {
 		event.preventDefault();
-		void run("key", async () => {
+		void run("key", async (isCurrent) => {
 			const result = await createKey.mutateAsync({ sessionId, name: keyName });
+			if (!isCurrent()) return;
 			setNewKey(result.key);
 			setKeyModal(false);
 		});
@@ -524,7 +525,7 @@ export function Mon2ApiConsole() {
 	const submitListing = (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 		const form = new FormData(event.currentTarget);
-		void run("listing", async () => {
+		void run("listing", async (isCurrent) => {
 			const kind = form.get("kind") === "gateway" ? "gateway" : "demo";
 			await createListing.mutateAsync({
 				name: String(form.get("name")),
@@ -541,16 +542,22 @@ export function Mon2ApiConsole() {
 						}
 					: {}),
 			});
+			if (!isCurrent()) return;
 			setListingModal(false);
 			setNotice("资源已接入。凭证仅保存在服务端，不会展示给调用方。");
 		});
 	};
 	const doWithdraw = () =>
-		run("withdraw", async () => {
+		run("withdraw", async (isCurrent) => {
 			if (!data || !viewer) return;
 			const result = await withdraw.mutateAsync();
+			if (!isCurrent()) return;
 			if (result.mode === "wallet") {
-				const { wallet, account, publicClient } = await getWallet(data.network);
+				const { wallet, account, publicClient } = await getWallet(
+					data.network,
+					viewer.address,
+				);
+				if (!isCurrent()) return;
 				if (account.toLowerCase() !== viewer.address.toLowerCase())
 					throw new Error("钱包地址与登录身份不一致。");
 				const hash = await wallet.writeContract({
@@ -562,12 +569,17 @@ export function Mon2ApiConsole() {
 				const receipt = await publicClient.waitForTransactionReceipt({ hash });
 				if (receipt.status !== "success") throw new Error("提现交易失败。");
 			}
+			if (!isCurrent()) return;
 			setNotice("提现交易已确认，余额已转入收款钱包。");
 		});
 	const selfClose = (session: SessionView) =>
-		run("self-close", async () => {
+		run("self-close", async (isCurrent) => {
 			if (!data || !viewer) return;
-			const { wallet, account, publicClient } = await getWallet(data.network);
+			const { account, publicClient } = await getWallet(
+				data.network,
+				viewer.address,
+			);
+			if (!isCurrent()) return;
 			if (account.toLowerCase() !== viewer.address.toLowerCase())
 				throw new Error("钱包地址与登录身份不一致。");
 			if (!isHex(session.id)) throw new Error("会话标识无效。");
@@ -578,6 +590,7 @@ export function Mon2ApiConsole() {
 				functionName: "sessions",
 				args: [session.id],
 			});
+			if (!isCurrent()) return;
 			if (chainSession[8]) {
 				setNotice(
 					"链上会话已关闭。未使用预算已转入可提现余额，可点击提取余额取回。",
@@ -586,8 +599,10 @@ export function Mon2ApiConsole() {
 			}
 			const closeAfter = chainSession[7];
 			if (closeAfter === 0n) {
-				const hash = await wallet.writeContract({
-					account,
+				const verifiedWallet = await getWallet(data.network, viewer.address);
+				if (!isCurrent()) return;
+				const hash = await verifiedWallet.wallet.writeContract({
+					account: verifiedWallet.account,
 					address,
 					abi: escrowAbi,
 					functionName: "requestClose",
@@ -595,20 +610,24 @@ export function Mon2ApiConsole() {
 				});
 				const receipt = await publicClient.waitForTransactionReceipt({ hash });
 				if (receipt.status !== "success") throw new Error("自助关闭申请失败。");
+				if (!isCurrent()) return;
 				setNotice(
 					"已直接向合约申请关闭。请等待 120 秒结算窗口，再次点击钱包自助退出，关闭后可提取剩余预算。",
 				);
 				return;
 			}
 			const block = await publicClient.getBlock();
+			if (!isCurrent()) return;
 			if (block.timestamp < closeAfter) {
 				setNotice(
 					`结算窗口尚未结束。约 ${Number(closeAfter - block.timestamp)} 秒后，再次点击钱包自助退出。`,
 				);
 				return;
 			}
-			const hash = await wallet.writeContract({
-				account,
+			const verifiedWallet = await getWallet(data.network, viewer.address);
+			if (!isCurrent()) return;
+			const hash = await verifiedWallet.wallet.writeContract({
+				account: verifiedWallet.account,
 				address,
 				abi: escrowAbi,
 				functionName: "closeSession",
@@ -616,6 +635,7 @@ export function Mon2ApiConsole() {
 			});
 			const receipt = await publicClient.waitForTransactionReceipt({ hash });
 			if (receipt.status !== "success") throw new Error("链上会话关闭失败。");
+			if (!isCurrent()) return;
 			setNotice("链上会话已关闭。剩余预算已转入可提现余额，请点击提取余额。");
 		});
 
@@ -659,7 +679,7 @@ export function Mon2ApiConsole() {
 					</span>
 					<div>
 						<div className="brand-name">
-							mon2api<span style={{ color: "#b7e765" }}>.</span>
+							mon2api<span className="brand-dot">.</span>
 						</div>
 						<div className="brand-sub">AI RESOURCE NETWORK</div>
 					</div>
@@ -755,37 +775,34 @@ export function Mon2ApiConsole() {
 								? "含外部连接器"
 								: "模拟模型"}
 						</span>
-						{viewer ? (
-							<>
-								<button
-									className="wallet-button mono"
-									disabled={!!busy}
-									onClick={() =>
-										void run("logout", async () => {
-											await logout.mutateAsync();
-											setNewKey(null);
-											setMessages([]);
-										})
-									}
-									title="退出当前身份"
-									type="button"
-								>
-									<Wallet size={13} />
-									{short(viewer.address)}
-									<LogOut size={11} />
-								</button>
-								<div className="avatar">{viewer.demo ? "DE" : "0x"}</div>
-							</>
-						) : (
+						{viewer?.demo ? (
 							<button
-								className="wallet-button"
-								disabled={!!busy || !data}
-								onClick={() => void connectWallet()}
+								className="wallet-button demo-exit"
+								disabled={!!busy}
+								onClick={() =>
+									void run("logout", async () => {
+										await logout.mutateAsync();
+										setNewKey(null);
+										setMessages([]);
+									})
+								}
+								title="退出当前演示身份"
 								type="button"
 							>
-								<Wallet size={13} />
-								{busy === "wallet" ? "等待签名…" : "连接钱包"}
+								<span className="demo-pill">演示</span>
+								<span className="mono">{short(viewer.address)}</span>
+								<LogOut size={13} />
+								<span className="demo-exit-label">退出演示</span>
 							</button>
+						) : (
+							<div className="wallet-connect">
+								<ConnectButton
+									accountStatus="address"
+									chainStatus="icon"
+									label="连接钱包"
+									showBalance={false}
+								/>
+							</div>
 						)}
 					</div>
 				</header>
@@ -857,7 +874,12 @@ export function Mon2ApiConsole() {
 							</button>
 						</div>
 					)}
-					{!data ? (
+					{walletMismatch ? (
+						<div className="loading-screen">
+							<ShieldCheck size={28} />
+							<span>请用当前钱包完成签名登录后继续。</span>
+						</div>
+					) : !data ? (
 						<div className="loading-screen">
 							{snapshot.isError ? (
 								<>
@@ -976,6 +998,22 @@ export function Mon2ApiConsole() {
 													</>
 												)}
 											</div>
+											{!viewer && (
+												<p className="wallet-onboarding">
+													未安装钱包？
+													<a
+														href="https://rabby.io/"
+														rel="noreferrer"
+														target="_blank"
+													>
+														安装浏览器钱包 <ExternalLink size={10} />
+													</a>
+													。
+													{!env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID && (
+														<span>当前支持浏览器钱包，扫码连接尚未配置。</span>
+													)}
+												</p>
+											)}
 										</div>
 										<div className="hero-terminal mono">
 											<div className="terminal-header">
@@ -985,7 +1023,7 @@ export function Mon2ApiConsole() {
 												<span>mon2api / quickstart</span>
 											</div>
 											<div className="terminal-line">
-												<span style={{ color: "#5e9067" }}>$ </span>
+												<span className="terminal-prompt">$ </span>
 												client.chat.completions.create({"{"}
 											</div>
 											<div className="terminal-line">
@@ -1146,14 +1184,14 @@ export function Mon2ApiConsole() {
 															<span>提供者</span>
 															<span
 																className="mono"
-																style={{ color: "#667c55", fontSize: 10 }}
+																style={{ color: "#545b77", fontSize: 10 }}
 															>
 																{short(item.owner)}
 															</span>
 														</div>
 													</div>
 													<div className="resource-card-bottom">
-														<span style={{ color: "#8d9e7d", fontSize: 9 }}>
+														<span style={{ color: "#72778b", fontSize: 9 }}>
 															预算从 $1 开始
 														</span>
 														<button
@@ -1443,7 +1481,7 @@ export function Mon2ApiConsole() {
 											<div
 												className="panel-body"
 												style={{
-													color: "#8a9d78",
+													color: "#68708a",
 													fontSize: 11,
 													lineHeight: 2,
 												}}
@@ -1517,7 +1555,7 @@ export function Mon2ApiConsole() {
 																	<small
 																		style={{
 																			display: "block",
-																			color: "#a1ac95",
+																			color: "#7a7f92",
 																			fontSize: 9,
 																			marginTop: 5,
 																		}}
@@ -1708,7 +1746,7 @@ export function Mon2ApiConsole() {
 											<pre className="code-block mono">{`curl http://localhost:3000/api/v1/chat/completions \\\n  -H "Authorization: Bearer $MON2API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{\n    "model": "${selected?.model ?? "mon2api-demo"}",\n    "messages": [{"role":"user","content":"Hello"}],\n    "stream": true\n  }'`}</pre>
 											<p
 												style={{
-													color: "#98a98a",
+													color: "#70788c",
 													fontSize: 10,
 													marginBottom: 0,
 													lineHeight: 1.8,
@@ -1738,7 +1776,7 @@ export function Mon2ApiConsole() {
 					</footer>
 				</main>
 			</div>
-			{rentListing && (
+			{rentListing && !walletMismatch && (
 				<Modal
 					error={error}
 					onClose={() => !busy && setRentListing(null)}
@@ -1795,7 +1833,7 @@ export function Mon2ApiConsole() {
 					</form>
 				</Modal>
 			)}
-			{listingModal && (
+			{listingModal && !walletMismatch && (
 				<ListingModal
 					busy={!!busy}
 					error={error}
@@ -1803,7 +1841,7 @@ export function Mon2ApiConsole() {
 					onSubmit={submitListing}
 				/>
 			)}
-			{keyModal && (
+			{keyModal && !walletMismatch && (
 				<Modal
 					error={error}
 					onClose={() => !busy && setKeyModal(false)}
@@ -2049,7 +2087,7 @@ function ResourceTable({
 							</td>
 							<td className="mono">
 								{item.activeRequests}
-								<span style={{ color: "#b0b9a5" }}> / {item.concurrency}</span>
+								<span style={{ color: "#9298aa" }}> / {item.concurrency}</span>
 							</td>
 							<td>
 								<Badge tone={item.enabled ? "green" : "neutral"}>
@@ -2132,7 +2170,7 @@ function SessionTable({
 										display: "block",
 										marginTop: 5,
 										fontSize: 8,
-										color: "#9caa90",
+										color: "#7b8297",
 									}}
 								>
 									{short(item.id)}

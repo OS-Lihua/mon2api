@@ -16,7 +16,20 @@ pnpm dev
 
 打开 [本地控制台](http://localhost:3000)。`setup` 创建带随机会话密码的本地 `.env`，启动 PostgreSQL，执行迁移并添加演示资源。`dev` 启动持久化本地 EVM、每10秒运行的结算 worker 和 Web 服务。首次为四个公开测试账户各分配500 dUSD；重启复用部署和账本。
 
-进入使用者演示，创建预算会话并调用模型；切换提供者演示可管理自己的资源和提现。演示签名仅允许回环 chain 31337。真实钱包登录需浏览器钱包；登录签名不授权代币转账，代币授权和预算锁定需分别确认交易。
+进入使用者演示，创建预算会话并调用模型；切换提供者演示可管理自己的资源和提现。演示签名仅允许回环 chain 31337。真实钱包使用 RainbowKit 钱包选择与签名登录；登录签名不授权代币转账，代币授权和预算锁定需分别确认交易。
+
+## 钱包连接
+
+复用 MIT 开源的 [RainbowKit](https://github.com/rainbow-me/rainbowkit) 和 [wagmi](https://github.com/wevm/wagmi)，由所选钱包连接器签名和发送交易。钱包选择、账户菜单、断开连接、中文签名引导和网络切换使用套件现有能力。后端保留一次性挑战签名和 iron-session 登录会话，连接成功后仍需签名验证身份。
+
+依赖版本遵循 RainbowKit 的 wagmi 2.x 兼容范围。仓库显式补齐钱包 SDK 打包所需的 x402 可选 peer；这不新增 x402 收费接口，现有预算结算协议保持不变。
+
+- 不配置服务账号即可连接已安装的 MetaMask、Rabby 等 EIP-6963 浏览器钱包；另有 Rabby 安装入口和通用注入连接器。
+- 在 `.env` 配置 `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` 后重新构建，可增加 MetaMask、Rainbow 与通用 WalletConnect 扫码入口。ID 从 [WalletConnect Dashboard](https://dashboard.walletconnect.com) 获取；仓库不包含任何人的项目 ID。
+- 当前仅配置本地 EVM（31337）或部署所在的 Monad 测试网（10143）。手机无法访问电脑的回环 RPC，扫码端到端验证须使用可访问的测试网部署。
+- 切换账户或断开钱包会使旧的钱包登录失效，并清理界面中的私密状态；演示身份保持独立。授权、锁定预算等多步操作在每一步前重新核实当前账户与网络。
+
+浏览器选择弹窗和模拟连接器的账号/网络边界已验证。真实扩展钱包签名、手机扫码和测试网资金操作需对应钱包、Project ID 与测试网部署再验收。
 
 | 服务 | 地址或位置 |
 | --- | --- |
@@ -73,4 +86,4 @@ verify顺序运行格式/lint、TypeScript、Vitest和生产构建。端到端sm
 
 ## 开源基础
 
-基于MIT许可的 [T3 Web API Template](https://github.com/PraxisGrove/t3-web-api-template)，保留原许可。复用Next.js、tRPC、Prisma/PostgreSQL、Zod、官方OpenAI SDK、iron-session、viem和OpenZeppelin。Ganache仅用于本地链和合约测试。资源归属、计费账本和分账规则在本仓库实现。
+基于MIT许可的 [T3 Web API Template](https://github.com/PraxisGrove/t3-web-api-template)，保留原许可。复用Next.js、tRPC、Prisma/PostgreSQL、Zod、官方OpenAI SDK、iron-session、RainbowKit、wagmi、viem和OpenZeppelin。Ganache仅用于本地链和合约测试。资源归属、计费账本和分账规则在本仓库实现。

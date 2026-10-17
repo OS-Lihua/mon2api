@@ -52,6 +52,10 @@ export const env = createEnv({
 	 * `NEXT_PUBLIC_`.
 	 */
 	client: {
+		NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: z
+			.string()
+			.regex(/^[a-fA-F0-9]{32}$/)
+			.optional(),
 		NEXT_PUBLIC_APP_ENV: z.string().optional(),
 		NEXT_PUBLIC_SENTRY_DSN: z.string().url().optional(),
 		NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: z.coerce
@@ -71,6 +75,8 @@ export const env = createEnv({
 	 * middlewares) or client-side so we need to destruct manually.
 	 */
 	runtimeEnv: {
+		NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID:
+			process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID,
 		DATABASE_URL: process.env.DATABASE_URL,
 		MON2API_MODE: process.env.MON2API_MODE,
 		ALLOW_DEMO: process.env.ALLOW_DEMO,

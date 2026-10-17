@@ -4,7 +4,7 @@
 
 提供者挂牌 AI 资源，消费者锁定预算，通过统一 API 调用，平台计量后在 Monad 分账。**一个使用会话固定一个资源、提供者和价格快照**，先跑通闭环，再考虑跨提供者调度。
 
-全栈使用 [T3 Web API Template](https://github.com/PraxisGrove/t3-web-api-template)：Next.js、tRPC、Prisma、PostgreSQL、Zod。REST 与 tRPC 共用领域服务。账号池交给独立上游网关；SSE 使用官方 OpenAI SDK；合约基于 OpenZeppelin，钱包交互用 viem，登录用 iron-session。本地链采用 Ganache。
+全栈使用 [T3 Web API Template](https://github.com/PraxisGrove/t3-web-api-template)：Next.js、tRPC、Prisma、PostgreSQL、Zod。REST 与 tRPC 共用领域服务。账号池交给独立上游网关；SSE 使用官方 OpenAI SDK；合约基于 OpenZeppelin，钱包选择和交互用 RainbowKit、wagmi、viem，登录用 iron-session。本地链采用 Ganache。
 
 ## 模块职责
 

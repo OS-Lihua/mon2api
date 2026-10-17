@@ -5,6 +5,8 @@ allowBuilds:
   bufferutil: false
   core-js: true
   esbuild: true
+  # Use the package's JavaScript fallback; no native build is needed.
+  keccak: false
   lefthook: true
   prisma: true
   sharp: true
@@ -22,3 +24,7 @@ overrides:
   dompurify: ^3.4.16
   source-map-js: ^1.2.2
   sharp: ^0.35.5
+  'ws@>=8.0.0': ^8.21.0
+  'uuid@>=8.0.0 <11.1.1': ^11.1.1
+  decode-uri-component: ^0.5.0
+  use-sync-external-store: ^1.6.0

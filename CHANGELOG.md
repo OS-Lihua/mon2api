@@ -9,6 +9,8 @@ Tag format:
 
 ## Unreleased
 
+- Replace the single injected wallet button with RainbowKit/wagmi wallet selection, Chinese sign-in guidance, account/network menus and optional WalletConnect support; clear stale wallet sessions on account changes.
+- Refresh the console with a graphite sidebar, purple actions and more readable content.
 - Add mon2api resource marketplace, consumer/provider console and standard gateway connector.
 - Add PostgreSQL metering ledger, atomic reservations, session API keys and idempotent settlement outbox.
 - Add OpenZeppelin budget escrow, test dUSD, local EVM and Monad testnet deployment scripts.

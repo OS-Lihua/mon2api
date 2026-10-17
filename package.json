@@ -41,7 +41,9 @@
 		"test:recovery": "tsx scripts/recovery-smoke.ts"
 	},
 	"dependencies": {
+		"@openzeppelin/contracts": "^5.4.0",
 		"@prisma/client": "^6.19.3",
+		"@rainbow-me/rainbowkit": "^2.2.11",
 		"@sentry/nextjs": "^10.73.0",
 		"@t3-oss/env-nextjs": "^0.12.0",
 		"@tanstack/react-query": "^5.102.8",
@@ -50,7 +52,14 @@
 		"@trpc/server": "^11.18.0",
 		"@upstash/ratelimit": "^2.0.8",
 		"@upstash/redis": "^1.38.4",
+		"@x402/core": "^2.28.0",
+		"@x402/evm": "^2.28.0",
+		"@x402/extensions": "^2.28.0",
+		"@x402/svm": "^2.28.0",
+		"iron-session": "^8.0.4",
+		"lucide-react": "^0.577.0",
 		"next": "16.4.2",
+		"openai": "^6.0.0",
 		"pino": "^10.3.1",
 		"posthog-js": "^1.428.7",
 		"posthog-node": "^5.51.7",
@@ -58,12 +67,9 @@
 		"react-dom": "^19.2.8",
 		"server-only": "^0.0.1",
 		"superjson": "^2.2.6",
-		"zod": "^3.25.76",
-		"@openzeppelin/contracts": "^5.4.0",
-		"lucide-react": "^0.577.0",
 		"viem": "^2.38.0",
-		"openai": "^6.0.0",
-		"iron-session": "^8.0.4"
+		"wagmi": "^2.19.5",
+		"zod": "^3.25.76"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.12",
@@ -72,16 +78,16 @@
 		"@types/react": "^19.2.18",
 		"@types/react-dom": "^19.2.7",
 		"dotenv": "^17.4.2",
+		"ganache": "^7.9.2",
 		"lefthook": "^2.1.12",
 		"postcss": "^8.5.28",
 		"prisma": "^6.19.3",
 		"react-doctor": "^0.9.13",
+		"solc": "^0.8.30",
 		"tailwindcss": "^4.3.3",
 		"tsx": "^4.23.13",
 		"typescript": "^5.9.3",
-		"vitest": "^4.1.11",
-		"ganache": "^7.9.2",
-		"solc": "^0.8.30"
+		"vitest": "^4.1.11"
 	},
 	"ct3aMetadata": {
 		"initVersion": "7.40.0"
