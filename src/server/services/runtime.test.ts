@@ -62,3 +62,24 @@ describe("demo identity chain boundary", () => {
 		expect(demoEnabled()).toBe(false);
 	});
 });
+
+it("requires explicit native MON metadata without reinterpreting old configs", () => {
+	vi.stubEnv("MON2API_MODE", "monad-testnet");
+	const original = JSON.parse(config("monad-testnet"));
+	vi.stubEnv("CHAIN_CONFIG_JSON", JSON.stringify(original));
+	expect(chainConfig().asset).toBe("dUSD");
+	vi.stubEnv(
+		"CHAIN_CONFIG_JSON",
+		JSON.stringify({ ...original, asset: "MON" }),
+	);
+	expect(() => chainConfig()).toThrow("zero token address");
+	vi.stubEnv(
+		"CHAIN_CONFIG_JSON",
+		JSON.stringify({
+			...original,
+			asset: "MON",
+			token: "0x0000000000000000000000000000000000000000",
+		}),
+	);
+	expect(chainConfig().asset).toBe("MON");
+});

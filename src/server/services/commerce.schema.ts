@@ -64,10 +64,16 @@ export const viewerResponse = z
 	.strict();
 export const okResponse = z.object({ ok: z.literal(true) }).strict();
 export const idResponse = z.object({ id: z.string().cuid() }).strict();
-export const keyCreatedResponse = z.object({ key: z.string() }).strict();
+export const buyerConnectionResponse = z
+	.object({ base_url: z.string().url(), key: z.string(), model: z.string() })
+	.strict();
+export const keyCreatedResponse = buyerConnectionResponse;
 export const challengeResponse = z.object({ message: z.string() }).strict();
 export const networkResponse = z
 	.object({
+		asset: z.enum(["MON", "dUSD"]),
+		ledgerUnit: z.enum(["micro_MON", "micro_dUSD"]),
+		balanceUnit: z.enum(["wei", "micro_dUSD"]),
 		mode: z.enum(["local", "monad-testnet"]),
 		chainId: z.number().int(),
 		token: addressSchema,
@@ -82,7 +88,7 @@ export const balancesResponse = z
 	.object({
 		walletBalance: z.string().regex(/^\d+$/),
 		claimable: z.string().regex(/^\d+$/),
-		unit: z.literal("micro_dUSD"),
+		unit: z.enum(["wei", "micro_dUSD"]),
 	})
 	.strict();
 export const resourceResponse = z
@@ -94,6 +100,8 @@ export const resourceResponse = z
 		model: z.string(),
 		kind: z.enum(["demo", "gateway"]),
 		connectionMode: connectionModeSchema,
+		transport: z.enum(["direct", "local"]),
+		online: z.boolean(),
 		inputRate: amount,
 		outputRate: amount,
 		concurrency: z.number().int().positive(),
@@ -177,6 +185,7 @@ export const openSessionResponse = z
 		id: sessionIdSchema,
 		mode: z.enum(["demo", "wallet"]),
 		txHash: sessionIdSchema.optional(),
+		connection: buyerConnectionResponse.optional(),
 		transaction: z
 			.object({
 				id: sessionIdSchema,
@@ -189,8 +198,25 @@ export const openSessionResponse = z
 	})
 	.strict();
 export const confirmedResponse = z
-	.object({ id: sessionIdSchema, status: z.literal("ACTIVE") })
+	.object({
+		id: sessionIdSchema,
+		status: z.literal("ACTIVE"),
+		connection: buyerConnectionResponse.optional(),
+	})
 	.strict();
 export const transactionResponse = z
 	.object({ txHash: sessionIdSchema.nullable() })
+	.strict();
+
+export const refundResponse = z
+	.object({
+		sessionId: sessionIdSchema,
+		status: z.enum(["PROCESSING", "PENDING_REVIEW", "AVAILABLE"]),
+		amount,
+		reserved: amount,
+		unit: z.enum(["micro_MON", "micro_dUSD"]),
+		requestedAt: timestamp,
+		txHash: sessionIdSchema.nullable(),
+		withdrawRequired: z.boolean(),
+	})
 	.strict();

@@ -1,6 +1,10 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { buildConnector } from "./build-connector.mjs";
+
+// Public downloads must exist before Next collects the deployment's static files.
+await buildConnector();
 
 // Next can explicitly copy loaded .env files into standalone output. Runtime
 // secrets belong to the deployment environment, never the packaged artifact.

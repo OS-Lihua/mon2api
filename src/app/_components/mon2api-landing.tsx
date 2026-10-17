@@ -212,7 +212,7 @@ const faqs = [
 	{
 		question: "当前可以在哪个网络使用？",
 		answer:
-			"默认使用 Monad 测试网，使用无实际价值的 dUSD 测试代币。连接钱包后按提示切换网络，再完成授权和预算锁定。合约资金流程已验证；浏览器钱包与真实网关的完整流程仍待验收。",
+			"默认使用 Monad 测试网，使用测试网原生 MON。连接钱包后按提示切换网络，再锁定 MON 预算，随后直接获取 Base URL、API Key 和模型名。合约资金流程已验证；浏览器钱包与真实网关的完整流程仍待验收。",
 	},
 ];
 const languages: (keyof typeof snippets)[] = ["TypeScript", "Python"];

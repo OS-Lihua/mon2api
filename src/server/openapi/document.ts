@@ -13,8 +13,8 @@ import {
 	usageResponseSchema,
 } from "~/server/services/mon2api.contract";
 import { publicChatInput } from "~/server/services/mon2api.schema";
-
 import { registerCommerce } from "./commerce";
+import { registerLocalConnector } from "./local-connector";
 
 const registry = new OpenAPIRegistry();
 registry.registerComponent("securitySchemes", "bearerAuth", {
@@ -98,6 +98,7 @@ registry.registerPath({
 });
 
 registerCommerce(registry, apiError);
+registerLocalConnector(registry, apiError);
 
 export const openApiDocument = new OpenApiGeneratorV31(
 	registry.definitions,
@@ -107,7 +108,7 @@ export const openApiDocument = new OpenApiGeneratorV31(
 		title: "mon2api API",
 		version: "0.2.0",
 		description:
-			"Merchant and consumer management over wallet sessions; text inference over scoped API keys. Management endpoints use /api/v1 only. /v1 is an inference alias. Off-chain metering and prepaid on-chain settlement. Test dUSD uses 6 decimals.",
+			"Merchant and consumer management over wallet sessions; text inference over scoped API keys. Management endpoints use /api/v1 only. /v1 is an inference alias. Off-chain metering and prepaid on-chain settlement. New deployments settle native MON on chain 10143 (or local chain 31337). Billing uses integer microMON, native deposits/transfers use wei. Legacy dUSD deployments remain isolated and serve existing sessions only.",
 	},
 	servers: [{ url: "/api/v1" }, { url: "/v1" }],
 	security: [{ bearerAuth: [] }],

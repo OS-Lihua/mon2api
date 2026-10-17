@@ -9,9 +9,27 @@ Tag format:
 
 ## Unreleased
 
+- Add official Monad and MON artwork to the landing page, align its primary color and responsive hero layout, and document brand asset sources.
+
+- Combine connector setup into one copy action using a five-minute, single-use launch code. The CLI exchanges it for a resource credential and only prompts locally for the upstream key; no long-lived key is included in command arguments.
+
+- 买方可申请退回未使用的 MON：申请留痕、停止接单、保留不确定预留、展示处理状态，并通过钱包提取已释放退款。
+
+- Package the local connector as a standalone Node.js CLI with a platform-hosted npm archive, copyable npx commands and isolated installation/streaming tests. Merchants can run from any directory without the project source, pnpm or database setup; retain an npm publishing path.
+
+- 新部署改用原生 MON：测试网/本地链托管、按量分账、退款与提现，链上 wei 与整数 microMON 账本精确转换；钱包无需 ERC20 授权。
+- 预算首次确认后原子创建会话密钥，返回 Base URL、Key 和模型名；重复确认不重复发 Key，前端支持逐项或整组复制。
+- 旧 dUSD 配置与账本保持原单位，仅服务已有会话；原生 MON 部署须使用隔离数据库及数据目录。
+
+- Run production Web servers from independent build copies so later builds and verification cannot remove live CSS, JavaScript or server files.
+
+- Discover models from OpenAI-compatible gateways, including Magpie. Create unpublished local connection drafts before choosing a discovered model and prices; keep existing resource and lease models immutable. Add model discovery to direct gateway onboarding without exposing local upstream keys.
+
 - Improve landing-page code readability and copy feedback, scroll-aware navigation, FAQ focus, and mobile menu dismissal with focus restoration.
 
 - Add an explicit development-only console preview so frontend review does not require database or chain services; keep backend actions blocked.
+
+- Add a merchant local connector with a persistent outbound CLI, resource-scoped hashed credentials, a Postgres job queue, streaming delivery and prepaid metering. Keep upstream keys on the merchant machine; stop admission after heartbeat expiry and retain reservations for uncertain claimed work.
 
 - Default contracts, wallet network metadata and Web/worker startup to Monad testnet (10143); isolate its runtime directory, disable demo identities by default, and retain the configured network during RPC failures. Require explicit local mode for isolated EVM tests.
 

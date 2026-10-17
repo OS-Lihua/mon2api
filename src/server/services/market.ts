@@ -6,8 +6,14 @@ import { sealData } from "iron-session";
 import { getAddress, keccak256, stringToHex } from "viem";
 import type { z } from "zod";
 import { db } from "~/server/db";
-import type { OpenSessionResult, Snapshot, Viewer } from "~/shared/mon2api";
+import type {
+	BuyerConnection,
+	OpenSessionResult,
+	Snapshot,
+	Viewer,
+} from "~/shared/mon2api";
 import { MONAD_TESTNET } from "~/shared/network";
+import { assetOf, billingUnit, toChainAmount } from "~/shared/settlement-asset";
 import { AppError } from "./auth";
 import {
 	chainBalances,
@@ -17,7 +23,9 @@ import {
 	findSessionOpen,
 	readSession,
 } from "./chain";
+import { connectorOnline, resourceAvailable } from "./connector-availability";
 import { inspectEscrowOwnerGuard } from "./escrow-version";
+import { discoverModels } from "./model-discovery";
 import type {
 	listingInput,
 	listingUpdateInput,
@@ -36,6 +44,29 @@ export async function lock(tx: Tx, id: string) {
 }
 export const keyHash = (value: string) =>
 	createHash("sha256").update(value).digest("hex");
+export async function discoverDirectModels(input: {
+	baseUrl: string;
+	apiKey: string;
+}) {
+	let baseUrl: string;
+	try {
+		baseUrl = validateConnectorUrl(input.baseUrl);
+	} catch {
+		throw new AppError(
+			"connector_not_allowed",
+			"请运营者先将上游 origin 加入 UPSTREAM_ALLOWED_ORIGINS。",
+		);
+	}
+	try {
+		return { models: await discoverModels(baseUrl, input.apiKey) };
+	} catch {
+		throw new AppError(
+			"discovery_failed",
+			"读取模型失败，请检查网关地址、调用 Key 和 /v1/models 接口。",
+			400,
+		);
+	}
+}
 export async function createListing(
 	user: Viewer,
 	input: z.infer<typeof listingInput>,
@@ -79,7 +110,7 @@ export async function toggleListing(
 	enabled: boolean,
 ) {
 	const updated = await db.listing.updateMany({
-		where: { id, owner: user.address },
+		where: { id, owner: user.address, status: { not: "DISCOVERING" } },
 		data: { enabled, status: enabled ? "READY" : "PAUSED" },
 	});
 	if (updated.count !== 1)
@@ -91,6 +122,19 @@ export async function updateListing(
 	id: string,
 	input: z.infer<typeof listingUpdateInput>,
 ) {
+	if (input.concurrency !== undefined && input.concurrency > 1) {
+		const resource = await db.listing.findUnique({
+			where: { id },
+			select: { owner: true, transport: true },
+		});
+		if (resource?.owner === user.address && resource.transport === "local")
+			throw new AppError(
+				"invalid_concurrency",
+				"本机连接器当前只支持单并发。",
+				400,
+			);
+	}
+
 	const updated = await db.listing.updateMany({
 		where: { id, owner: user.address },
 		data: input,
@@ -105,6 +149,12 @@ export async function openSession(
 ): Promise<OpenSessionResult> {
 	await ensureChainBinding();
 	const { config, publicClient } = clients();
+	if (assetOf(config) !== "MON")
+		throw new AppError(
+			"legacy_asset",
+			"旧 dUSD 部署仅服务已有会话。请在隔离数据库中部署 MON 合约后开通新预算。",
+			409,
+		);
 	let ownerGuard: "guarded" | "legacy";
 	try {
 		ownerGuard = await inspectEscrowOwnerGuard(
@@ -128,7 +178,7 @@ export async function openSession(
 	const listing = await db.listing.findUnique({
 		where: { id: input.listingId },
 	});
-	if (!listing?.enabled)
+	if (!listing || !resourceAvailable(listing))
 		throw new AppError("unavailable", "资源当前未上架。", 409);
 	const id = `0x${user.address.slice(2).toLowerCase()}${randomBytes(12).toString("hex")}`;
 	const expiresAt = Math.floor(Date.now() / 1000) + 3600;
@@ -142,7 +192,11 @@ export async function openSession(
 				outputRate: listing.outputRate,
 				feeBps: 500,
 				maxOutput: 2048,
-				version: 1,
+				version: 2,
+				asset: "MON",
+				unit: "micro_MON",
+				chainId: config.chainId,
+				escrow: config.escrow.toLowerCase(),
 			}),
 		),
 	);
@@ -169,12 +223,24 @@ export async function openSession(
 	};
 	if (user.demo) {
 		const hash = await demoOpen(user.address, transaction);
-		await confirmSession(user, id, hash);
-		return { id, mode: "demo", txHash: hash, transaction };
+		const confirmed = await confirmSession(user, id, hash, true);
+		return {
+			id,
+			mode: "demo",
+			txHash: hash,
+			transaction,
+			...(confirmed.connection ? { connection: confirmed.connection } : {}),
+		};
 	}
 	return { id, mode: "wallet", transaction };
 }
-export async function confirmSession(user: Viewer, id: string, hash?: string) {
+export async function confirmSession(
+	user: Viewer,
+	id: string,
+	hash?: string,
+	issueConnection = false,
+) {
+	await ensureChainBinding();
 	const lease = await db.lease.findUnique({ where: { id } });
 	if (!lease || lease.consumer !== user.address)
 		throw new AppError("not_found", "会话不存在。", 404);
@@ -185,7 +251,7 @@ export async function confirmSession(user: Viewer, id: string, hash?: string) {
 		event.args.consumer.toLowerCase() !== user.address.toLowerCase() ||
 		event.args.provider.toLowerCase() !== lease.provider.toLowerCase() ||
 		event.args.termsHash.toLowerCase() !== lease.termsHash.toLowerCase() ||
-		event.args.budget !== BigInt(lease.budget) ||
+		event.args.budget !== toChainAmount(lease.budget, assetOf(chainConfig())) ||
 		event.args.expiresAt !==
 			BigInt(Math.floor(lease.expiresAt.getTime() / 1000))
 	)
@@ -205,12 +271,61 @@ export async function confirmSession(user: Viewer, id: string, hash?: string) {
 			"链上会话尚未确认，或条款与报价不符。",
 			409,
 		);
-	await db.lease.updateMany({
-		where: { id, status: "DRAFT" },
-		data: { status: "ACTIVE", openTx: receipt.transactionHash },
+	if (!issueConnection) {
+		await db.lease.updateMany({
+			where: { id, status: "DRAFT" },
+			data: { status: "ACTIVE", openTx: receipt.transactionHash },
+		});
+		return { id, status: "ACTIVE" as const };
+	}
+	// Activation and initial key are atomic. A confirmation replay never mints another key.
+	const key = newApiKey();
+	const connection = buyerConnection(key, lease.model);
+	const issued = await db.$transaction(async (tx) => {
+		await lock(tx, id);
+		const changed = await tx.lease.updateMany({
+			where: { id, status: "DRAFT" },
+			data: { status: "ACTIVE", openTx: receipt.transactionHash },
+		});
+		if (changed.count !== 1) return false;
+		await tx.accessKey.create({ data: keyData(user, id, "初始调用密钥", key) });
+		return true;
 	});
-	return { id, status: "ACTIVE" };
+	return {
+		id,
+		status: "ACTIVE" as const,
+		connection: issued ? connection : undefined,
+	};
 }
+function newApiKey() {
+	return `m2a_${randomBytes(32).toString("base64url")}`;
+}
+function buyerConnection(key: string, model: string): BuyerConnection {
+	const origin = new URL(process.env.APP_ORIGIN || "http://localhost:3000");
+	if (
+		origin.username ||
+		origin.password ||
+		!["http:", "https:"].includes(origin.protocol) ||
+		(origin.protocol !== "https:" &&
+			!["localhost", "127.0.0.1"].includes(origin.hostname))
+	)
+		throw new AppError(
+			"invalid_origin",
+			"APP_ORIGIN 必须是平台 HTTPS 地址或本地回环地址。",
+			503,
+		);
+	return { base_url: `${origin.origin}/v1`, key, model };
+}
+function keyData(user: Viewer, sessionId: string, name: string, key: string) {
+	return {
+		owner: user.address,
+		sessionId,
+		name,
+		hash: keyHash(key),
+		prefix: `${key.slice(0, 10)}…${key.slice(-4)}`,
+	};
+}
+
 export async function createKey(user: Viewer, sessionId: string, name: string) {
 	const lease = await db.lease.findUnique({ where: { id: sessionId } });
 	if (!lease || lease.consumer !== user.address || lease.status !== "ACTIVE")
@@ -219,7 +334,7 @@ export async function createKey(user: Viewer, sessionId: string, name: string) {
 			"只能为自己的活跃会话创建密钥。",
 			409,
 		);
-	const key = `m2a_${randomBytes(32).toString("base64url")}`;
+	const key = newApiKey();
 	await db.accessKey.create({
 		data: {
 			owner: user.address,
@@ -229,7 +344,7 @@ export async function createKey(user: Viewer, sessionId: string, name: string) {
 			prefix: `${key.slice(0, 10)}…${key.slice(-4)}`,
 		},
 	});
-	return { key };
+	return buyerConnection(key, lease.model);
 }
 export async function revokeKey(user: Viewer, id: string) {
 	const result = await db.accessKey.updateMany({
@@ -264,7 +379,13 @@ export async function snapshot(
 ): Promise<Snapshot> {
 	if (gatewayOnly && user?.demo) user = null;
 	const listingRows = await db.listing.findMany({
-		...(gatewayOnly ? { where: { kind: "gateway" } } : {}),
+		where: {
+			...(gatewayOnly ? { kind: "gateway" } : {}),
+			OR: [
+				{ status: { not: "DISCOVERING" } },
+				...(user ? [{ owner: user.address }] : []),
+			],
+		},
 		orderBy: { createdAt: "asc" },
 	});
 	const leaseWhere = user
@@ -306,6 +427,9 @@ export async function snapshot(
 	]);
 	let network: Snapshot["network"] = {
 		...MONAD_TESTNET,
+		asset: "MON",
+		ledgerUnit: "micro_MON",
+		balanceUnit: "wei",
 		escrow: "",
 		token: "",
 		feeBps: 500,
@@ -319,6 +443,9 @@ export async function snapshot(
 		const config = chainConfig();
 		network = {
 			...network,
+			asset: assetOf(config),
+			ledgerUnit: billingUnit(assetOf(config)),
+			balanceUnit: assetOf(config) === "MON" ? "wei" : "micro_dUSD",
 			mode: config.mode,
 			name: config.mode === "local" ? "Local EVM" : "Monad Testnet",
 			chainId: config.chainId,
@@ -364,6 +491,8 @@ export async function snapshot(
 			model: l.model,
 			owner: l.owner,
 			kind: l.kind === "demo" ? "demo" : "gateway",
+			transport: l.transport === "local" ? "local" : "direct",
+			online: connectorOnline(l),
 			connectionMode: l.connectionMode === "oauth_pool" ? "oauth_pool" : "api",
 			enabled: l.enabled,
 			inputRate: l.inputRate,
@@ -372,7 +501,12 @@ export async function snapshot(
 			activeRequests: allRunning
 				.filter((s) => s.listingId === l.id)
 				.reduce((n, s) => n + (counts.get(s.id) || 0), 0),
-			status: l.status,
+			status:
+				l.status !== "DISCOVERING" &&
+				l.transport === "local" &&
+				!connectorOnline(l)
+					? "OFFLINE"
+					: l.status,
 			createdAt: l.createdAt.toISOString(),
 		})),
 		sessions: leases.map((s) => ({

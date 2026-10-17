@@ -1,3 +1,5 @@
+import { chainConfig } from "~/server/services/runtime";
+import { assetOf, billingUnit } from "~/shared/settlement-asset";
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { db } from "~/server/db";
@@ -84,7 +86,7 @@ export const chatPost = createRestMutation({
 						mon2api: {
 							request_id: result.id,
 							cost: result.cost,
-							unit: "micro_dUSD",
+							unit: billingUnit(assetOf(chainConfig())),
 							usage_source: result.usageSource,
 						},
 					},

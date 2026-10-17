@@ -76,7 +76,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## mon2api domain rules
 
-- Money is integer micro dUSD; prices are micro dUSD per million tokens.
+- Money is integer microMON on new native MON deployments; prices are microMON per million tokens. Chain transfers use wei (1 microMON = 10^12 wei). Legacy dUSD deployments retain integer micro dUSD and a separate database. Never reinterpret or convert legacy balances.
 - A lease fixes one provider, resource and price snapshot. Never charge above its budget.
 - Keep uncertain usage in REVIEW with a retained reservation. Do not infer zero usage.
 - Persist settlement jobs before sending transactions; recover by nonce and receipt hash.

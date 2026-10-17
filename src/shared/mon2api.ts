@@ -1,5 +1,10 @@
+import type { SettlementAsset } from "./settlement-asset";
+
 export type Viewer = { address: string; name: string; demo: boolean };
 export type NetworkInfo = {
+	asset: SettlementAsset;
+	ledgerUnit: "micro_MON" | "micro_dUSD";
+	balanceUnit: "wei" | "micro_dUSD";
 	mode: "local" | "monad-testnet";
 	name: string;
 	chainId: number;
@@ -18,6 +23,8 @@ export type ListingView = {
 	owner: string;
 	kind: "demo" | "gateway";
 	connectionMode: "api" | "oauth_pool";
+	transport: "direct" | "local";
+	online: boolean;
 	enabled: boolean;
 	inputRate: number;
 	outputRate: number;
@@ -93,7 +100,9 @@ export type Snapshot = {
 	keys: KeyView[];
 	settlements: SettlementView[];
 };
+export type BuyerConnection = { base_url: string; key: string; model: string };
 export type OpenSessionResult = {
+	connection?: BuyerConnection;
 	id: string;
 	mode: "demo" | "wallet";
 	txHash?: string;
@@ -113,4 +122,15 @@ export type ChatResult = {
 	outputTokens: number;
 	cost: number;
 	usageSource: string;
+};
+
+export type RefundView = {
+	sessionId: string;
+	status: "PROCESSING" | "PENDING_REVIEW" | "AVAILABLE";
+	amount: number;
+	reserved: number;
+	unit: "micro_MON" | "micro_dUSD";
+	requestedAt: string;
+	txHash: string | null;
+	withdrawRequired: boolean;
 };

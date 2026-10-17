@@ -24,3 +24,27 @@ export function formatDUSD(amount: number | string, precise = false): string {
 	const digits = precise ? fraction.padEnd(6, "0") : fraction.padEnd(2, "0");
 	return `$${grouped}.${digits}`;
 }
+
+/** Native MON billing uses exact integer microMON; raw chain balances use wei. */
+export const parseMicroMON = parseMicroDUSD;
+export function formatMON(amount: number | string, precise = false): string {
+	return formatDUSD(amount, precise).slice(1);
+}
+export function formatAsset(
+	amount: number | string,
+	asset: "MON" | "dUSD",
+	precise = false,
+): string {
+	return asset === "MON"
+		? formatMON(amount, precise)
+		: formatDUSD(amount, precise);
+}
+export function formatChainBalance(
+	amount: string,
+	asset: "MON" | "dUSD",
+): string {
+	if (!/^\d+$/.test(amount)) throw new Error("余额必须是非负整数。");
+	return asset === "MON"
+		? formatUnits(BigInt(amount), 18)
+		: formatDUSD(amount, true);
+}

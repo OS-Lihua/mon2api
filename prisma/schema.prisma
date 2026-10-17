@@ -27,6 +27,13 @@ model Listing {
   model          String
   kind           String
   connectionMode String   @default("api")
+  transport      String   @default("direct")
+  connectorHash  String?  @unique
+  connectorLaunchHash String? @unique
+  connectorLaunchExpiresAt DateTime?
+  connectorSeenAt DateTime?
+  connectorCatalog Json?
+  connectorCatalogAt DateTime?
   inputRate      Int
   outputRate     Int
   concurrency    Int      @default(2)
@@ -36,6 +43,7 @@ model Listing {
   secret         String?
   createdAt      DateTime @default(now())
   sessions       Lease[]
+  connectorJobs  ConnectorJob[]
 
   @@index([owner])
 }
@@ -86,6 +94,7 @@ model MeterRequest {
   settlement     Settlement? @relation(fields: [settlementId], references: [id])
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
+  connectorJob   ConnectorJob?
 
   @@unique([sessionId, idempotencyKey])
   @@index([status, createdAt])
@@ -140,9 +149,30 @@ model WalletNonce {
   expiresAt DateTime
 }
 
+// One deployment and one settlement asset per database. Existing rows stay dUSD.
 model ChainBinding {
+  asset   String @default("dUSD")
   id      String @id
   chainId Int
   escrow  String
   token   String
+}
+
+model ConnectorJob {
+  id          String       @id @default(cuid())
+  requestId   String       @unique
+  request     MeterRequest @relation(fields: [requestId], references: [id])
+  listingId   String
+  listing     Listing      @relation(fields: [listingId], references: [id])
+  payload     Json
+  status      String       @default("QUEUED")
+  claimedBy   String?
+  text        String       @default("")
+  revision    Int          @default(0)
+  result      Json?
+  expiresAt   DateTime
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([listingId, status, createdAt])
 }

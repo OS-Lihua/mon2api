@@ -13,9 +13,25 @@ import {
 	walletSignatureSchema,
 } from "~/server/services/auth";
 import {
+	connectorSetup,
+	createConnectorLaunch,
+	createLocalDraft,
+	createLocalListing,
+	publishLocalDraft,
+	rotateConnector,
+} from "~/server/services/local-connector";
+import {
+	connectorListingId,
+	directDiscoveryInput,
+	localDraftInput,
+	localListingInput,
+	publishLocalInput,
+} from "~/server/services/local-connector.schema";
+import {
 	confirmSession,
 	createKey,
 	createListing,
+	discoverDirectModels,
 	openSession,
 	revokeKey,
 	snapshot,
@@ -32,6 +48,7 @@ import {
 	openSessionInput,
 	sessionIdSchema,
 } from "~/server/services/mon2api.schema";
+import { refundStatus, requestRefund } from "~/server/services/refund";
 import { closeSession, settleSession } from "~/server/services/settlement";
 
 async function call<T>(action: () => Promise<T>): Promise<T> {
@@ -66,6 +83,11 @@ const mutation = publicProcedure.use(async ({ ctx, next }) => {
 	return next();
 });
 export const mon2apiRouter = createTRPCRouter({
+	createConnectorLaunch: mutation
+		.input(connectorListingId)
+		.mutation(({ input }) =>
+			call(async () => createConnectorLaunch(await requireViewer(), input.id)),
+		),
 	snapshot: publicProcedure
 		.input(z.object({ gatewayOnly: z.boolean() }).strict().optional())
 		.query(({ input }) =>
@@ -89,6 +111,38 @@ export const mon2apiRouter = createTRPCRouter({
 		.mutation(({ input }) =>
 			call(() => walletLogin(input.address, input.message, input.signature)),
 		),
+	createLocalListing: mutation
+		.input(localListingInput)
+		.mutation(({ input }) =>
+			call(async () => createLocalListing(await requireViewer(), input)),
+		),
+	createLocalDraft: mutation
+		.input(localDraftInput)
+		.mutation(({ input }) =>
+			call(async () => createLocalDraft(await requireViewer(), input)),
+		),
+	connectorSetup: publicProcedure
+		.input(connectorListingId)
+		.query(({ input }) =>
+			call(async () => connectorSetup(await requireViewer(), input.id)),
+		),
+	publishLocalDraft: mutation
+		.input(publishLocalInput)
+		.mutation(({ input }) =>
+			call(async () => publishLocalDraft(await requireViewer(), input)),
+		),
+	discoverModels: mutation.input(directDiscoveryInput).mutation(({ input }) =>
+		call(async () => {
+			await requireViewer();
+			return discoverDirectModels(input);
+		}),
+	),
+	rotateConnector: mutation
+		.input(connectorListingId)
+		.mutation(({ input }) =>
+			call(async () => rotateConnector(await requireViewer(), input.id)),
+		),
+
 	createListing: mutation
 		.input(listingInput)
 		.mutation(({ input }) =>
@@ -127,7 +181,7 @@ export const mon2apiRouter = createTRPCRouter({
 		)
 		.mutation(({ input }) =>
 			call(async () =>
-				confirmSession(await requireViewer(), input.id, input.txHash),
+				confirmSession(await requireViewer(), input.id, input.txHash, true),
 			),
 		),
 	createKey: mutation
@@ -165,6 +219,16 @@ export const mon2apiRouter = createTRPCRouter({
 			call(async () =>
 				closeSession(input.sessionId, (await requireViewer()).address),
 			),
+		),
+	requestRefund: mutation
+		.input(z.object({ sessionId: sessionIdSchema }).strict())
+		.mutation(({ input }) =>
+			call(async () => requestRefund(await requireViewer(), input.sessionId)),
+		),
+	refundStatus: publicProcedure
+		.input(z.object({ sessionId: sessionIdSchema }).strict())
+		.query(({ input }) =>
+			call(async () => refundStatus(await requireViewer(), input.sessionId)),
 		),
 	withdraw: mutation.mutation(() =>
 		call(async () => withdraw(await requireViewer())),

@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => ({
 	},
 	lock: vi.fn(),
 	runEngine: vi.fn(),
+	runLocalConnector: vi.fn(),
 	readSession: vi.fn(),
 	findSettlement: vi.fn(),
 	findSessionClose: vi.fn(),
@@ -65,6 +66,9 @@ vi.mock("./chain", () => ({
 	findSessionClose: mocks.findSessionClose,
 	sendSettlement: mocks.sendSettlement,
 	sendClose: mocks.sendClose,
+}));
+vi.mock("./local-connector", () => ({
+	runLocalConnector: mocks.runLocalConnector,
 }));
 vi.mock("./pool-engine", async (original) => ({
 	...(await original<typeof import("./pool-engine")>()),
@@ -384,6 +388,54 @@ async function interruptAndResolve() {
 	await resolveReview(row.id, 5, 10, "invoice-verified");
 }
 describe("metering lifecycle guards", () => {
+	it.each(["success", "missing", "disconnected", "unclaimed"])(
+		"preserves prepaid accounting for local supply: %s",
+		async (outcome) => {
+			const local = {
+				...listing,
+				kind: "gateway",
+				transport: "local",
+				connectorSeenAt: new Date(),
+			};
+			lease.budget = 1000000;
+			mocks.db.lease.findUnique.mockResolvedValue({ ...lease, listing: local });
+			mocks.db.listing.findUniqueOrThrow.mockResolvedValue(local);
+			if (outcome === "success" || outcome === "missing")
+				mocks.runLocalConnector.mockResolvedValue({
+					...result,
+					usageSource: "upstream_reported",
+					...(outcome === "missing"
+						? { inputTokens: null, pendingReview: true }
+						: {}),
+				});
+			else
+				mocks.runLocalConnector.mockRejectedValue(
+					new EngineFailure(
+						"aborted",
+						"Disconnected",
+						504,
+						outcome === "disconnected",
+					),
+				);
+			if (outcome === "success") {
+				await expect(runChat("consumer", args)).resolves.toMatchObject({
+					cost: 20,
+				});
+				expect(lease).toMatchObject({ spent: 20, reserved: 0 });
+			} else {
+				await expect(runChat("consumer", args)).rejects.toBeDefined();
+				expect(lease.spent).toBe(0);
+				expect(lease.reserved).toBe(
+					outcome === "unclaimed" ? 0 : requests[0]?.reservation,
+				);
+				expect(requests[0]?.status).toBe(
+					outcome === "unclaimed" ? "FAILED" : "REVIEW",
+				);
+			}
+			expect(mocks.runEngine).not.toHaveBeenCalled();
+		},
+	);
+
 	it("captures and releases one reservation after a normal completion", async () => {
 		mocks.runEngine.mockResolvedValue(result);
 		await expect(runChat("consumer", args)).resolves.toMatchObject({

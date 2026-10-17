@@ -14,7 +14,12 @@ import {
 import { updateListing } from "./market";
 
 const mocks = vi.hoisted(() => ({
-	listing: { findMany: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
+	listing: {
+		findMany: vi.fn(),
+		findFirst: vi.fn(),
+		findUnique: vi.fn(),
+		updateMany: vi.fn(),
+	},
 	lease: { findMany: vi.fn(), findFirst: vi.fn() },
 	meterRequest: { findMany: vi.fn(), findFirst: vi.fn() },
 	accessKey: { findMany: vi.fn() },
@@ -223,6 +228,17 @@ describe("commerce read isolation and pagination", () => {
 	});
 });
 describe("resource edits preserve financial snapshots", () => {
+	it("keeps local resources single-concurrency", async () => {
+		mocks.listing.findUnique.mockResolvedValue({
+			...resource,
+			transport: "local",
+		});
+		await expect(
+			updateListing(user, resource.id, { concurrency: 2 }),
+		).rejects.toMatchObject({ code: "invalid_concurrency", status: 400 });
+		expect(mocks.listing.updateMany).not.toHaveBeenCalled();
+	});
+
 	it("updates only the owned listing, not lease price snapshots", async () => {
 		mocks.listing.updateMany.mockResolvedValue({ count: 1 });
 		await expect(

@@ -2,7 +2,7 @@
 	--page-bg: #faf9f6;
 	--page-ink: #24202f;
 	--page-muted: #77717e;
-	--page-accent: #7950e8;
+	--page-accent: #6e54ff;
 	background: var(--page-bg);
 	color: var(--page-ink);
 	overflow: clip;
@@ -134,8 +134,9 @@
 .heroGrid {
 	position: relative;
 	display: grid;
-	grid-template-columns: 1.03fr 1fr;
+	grid-template-columns: minmax(0, 1.03fr) minmax(0, 1fr);
 	align-items: center;
+	gap: 24px;
 
 	min-height: 580px;
 
@@ -145,6 +146,31 @@
 	position: relative;
 	z-index: 2;
 	animation: appear 700ms ease both;
+}
+.monadBadge {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	margin-bottom: 22px;
+	padding: 8px 12px;
+	border: 1px solid #6e54ff21;
+	border-radius: 999px;
+	background: #ffffffa6;
+	color: #62567b;
+	font-size: 12px;
+	line-height: 20px;
+	transition:
+		background 180ms,
+		border-color 180ms;
+}
+.monadBadge strong {
+	color: #0e091c;
+	font-size: 13px;
+	font-weight: 600;
+}
+.monadBadge:hover {
+	border-color: #6e54ff55;
+	background: #eeeaff;
 }
 
 .hero h1 {
@@ -189,7 +215,7 @@
 	gap: 32px;
 	min-height: 52px;
 	padding: 14px 23px;
-	border: 1px solid #7950e8;
+	border: 1px solid var(--page-accent);
 	border-radius: 6px;
 	background: var(--page-accent);
 	color: #fff;
@@ -216,9 +242,9 @@
 .sculpture {
 	position: relative;
 
-	width: calc(100% + 32px);
+	width: 100%;
 
-	margin-left: -12px;
+	margin: 0;
 	aspect-ratio: 600 / 540;
 	animation: appear 1s ease both;
 }
@@ -241,6 +267,40 @@
 }
 .orbitDot {
 	animation: pulse 4s ease-in-out infinite;
+}
+.monadOrbit {
+	position: absolute;
+	top: 8%;
+	right: 1%;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 16px 10px 10px;
+	border: 1px solid #6e54ff1c;
+	border-radius: 18px;
+	background: #faf9f6eb;
+	box-shadow: 0 12px 32px #32166b0a;
+	transform: rotate(6deg);
+}
+.monadOrbit img {
+	width: clamp(44px, 4.5vw, 64px);
+	height: auto;
+}
+.monadOrbitCopy {
+	color: #0e091c;
+	font-family: var(--font-mono);
+	font-size: 17px;
+	font-weight: 600;
+	letter-spacing: 1px;
+}
+.monadOrbitCaption {
+	display: block;
+	margin-top: 2px;
+	color: #77717e;
+	font-family: var(--font-sans);
+	font-size: 10px;
+	font-weight: 400;
+	letter-spacing: 1px;
 }
 
 .statusDot {
@@ -780,10 +840,6 @@
 		font-size: 11px;
 		gap: 7px;
 	}
-	.sculpture {
-		margin-left: -25px;
-	}
-
 	.featureGrid {
 		grid-template-columns: 1.2fr 1fr 1fr;
 		gap: 12px;
@@ -866,6 +922,7 @@
 	}
 	.heroGrid {
 		grid-template-columns: 1fr;
+		gap: 14px;
 		min-height: 0;
 		padding-block: 32px 0;
 	}
@@ -875,7 +932,10 @@
 		letter-spacing: -2px;
 	}
 	.heroCopy {
-		padding-inline: 4px;
+		padding-inline: 0;
+	}
+	.monadBadge {
+		margin-bottom: 20px;
 	}
 
 	.heroDescription {
@@ -899,6 +959,16 @@
 	.sculpture {
 		width: min(100%, 520px);
 		margin: -3px auto -8px;
+	}
+	.monadOrbit {
+		top: 6%;
+		right: 0;
+		gap: 8px;
+		padding: 8px 12px 8px 8px;
+		border-radius: 14px;
+	}
+	.monadOrbit img {
+		width: 44px;
 	}
 
 	.hero::before {

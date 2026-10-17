@@ -13,9 +13,10 @@ import {
 } from "viem";
 import { mnemonicToAccount } from "viem/accounts";
 import { foundry } from "viem/chains";
-import { escrowAbi, tokenAbi } from "../src/lib/abi";
+import { escrowAbi } from "../src/lib/abi";
 import { inspectEscrowOwnerGuard } from "../src/server/services/escrow-version";
 import type { ChainConfig } from "../src/server/services/runtime";
+import { assetOf, NATIVE_TOKEN } from "../src/shared/settlement-asset";
 
 // Public development mnemonic, identical to the application's demo wallets.
 const mnemonic = "test test test test test test test test test test test junk";
@@ -85,7 +86,9 @@ async function main() {
 		const token = getAddress(existing.token);
 		const escrow = getAddress(existing.escrow);
 		const [tokenCode, escrowCode] = await Promise.all([
-			client.getCode({ address: token }),
+			assetOf(existing) === "MON"
+				? Promise.resolve("native")
+				: client.getCode({ address: token }),
 			client.getCode({ address: escrow }),
 		]);
 		if (
@@ -150,34 +153,18 @@ async function main() {
 		JSON.parse(
 			fs.readFileSync(`contracts/artifacts/${name}.json`, "utf8"),
 		) as Artifact;
-	const tokenReceipt = await client.waitForTransactionReceipt({
-		hash: await wallet.deployContract(artifact("DemoUSD")),
-	});
-	if (tokenReceipt.status !== "success" || !tokenReceipt.contractAddress)
-		throw new Error("DemoUSD deployment failed.");
-	const token = tokenReceipt.contractAddress;
 	const escrowReceipt = await client.waitForTransactionReceipt({
 		hash: await wallet.deployContract({
-			...artifact("UsageEscrow"),
-			args: [token, meter, treasury, 500],
+			...artifact("NativeUsageEscrow"),
+			args: [meter, treasury, 500],
 		}),
 	});
 	if (escrowReceipt.status !== "success" || !escrowReceipt.contractAddress)
-		throw new Error("Escrow deployment failed.");
-	for (let index = 0; index <= 3; index++) {
-		const receipt = await client.waitForTransactionReceipt({
-			hash: await wallet.writeContract({
-				address: token,
-				abi: tokenAbi,
-				functionName: "mint",
-				args: [account(index).address, 500_000_000n],
-			}),
-		});
-		if (receipt.status !== "success")
-			throw new Error("Demo token funding failed.");
-	}
+		throw new Error("Native MON escrow deployment failed.");
+	const token = NATIVE_TOKEN;
 	const config: ChainConfig = {
 		mode: "local",
+		asset: "MON",
 		chainId: foundry.id,
 		rpcUrl,
 		token,
@@ -188,7 +175,7 @@ async function main() {
 	};
 	fs.writeFileSync(`${configFile}.tmp`, `${JSON.stringify(config, null, 2)}\n`);
 	fs.renameSync(`${configFile}.tmp`, configFile);
-	console.log(`Local demo token ${token}; escrow ${config.escrow}`);
+	console.log(`Local native MON; escrow ${config.escrow}`);
 	console.log("MON2API_CHAIN_READY");
 }
 

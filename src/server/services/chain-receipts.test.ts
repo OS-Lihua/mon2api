@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
 	},
 	wallet: { writeContract: vi.fn() },
 	config: {
+		asset: "dUSD" as "MON" | "dUSD",
 		mode: "monad-testnet",
 		chainId: 10143,
 		rpcUrl: "http://127.0.0.1:1",
@@ -115,6 +116,7 @@ function receipt(logs = [log()], status: "success" | "reverted" = "success") {
 }
 beforeEach(() => {
 	vi.clearAllMocks();
+	mocks.config.asset = "dUSD";
 	mocks.config.mode = "monad-testnet";
 	mocks.config.meter = "0x0000000000000000000000000000000000000000";
 	mocks.client.waitForTransactionReceipt.mockResolvedValue(receipt());
@@ -361,5 +363,44 @@ describe("confirmed chain closure evidence", () => {
 			]);
 			await expect(findSessionClose(id)).rejects.toThrow();
 		},
+	);
+});
+
+it("sends and recovers native MON settlements using exact wei receipts", async () => {
+	mocks.config.asset = "MON";
+	mocks.config.mode = "local";
+	mocks.config.meter = demoAccount(4).address;
+	mocks.client.readContract.mockResolvedValue([
+		mocks.config.escrow,
+		mocks.config.escrow,
+		digest,
+		100_000_000_000_000n,
+		0n,
+		0n,
+		1n,
+		0n,
+		false,
+	]);
+	mocks.client.waitForTransactionReceipt.mockResolvedValue(
+		receipt([log({ cumulative: 20_000_000_000_000n })]),
+	);
+	mocks.wallet.writeContract.mockResolvedValue(hash);
+	await expect(sendSettlement(id, 20, 0, digest)).resolves.toBe(hash);
+	expect(mocks.wallet.writeContract).toHaveBeenCalledWith(
+		expect.objectContaining({ args: [id, 20_000_000_000_000n, 0n, digest] }),
+	);
+	mocks.client.getContractEvents.mockResolvedValue([
+		{
+			transactionHash: hash,
+			removed: false,
+			args: { receiptsHash: digest, cumulativeSpent: 20_000_000_000_000n },
+		},
+	]);
+	await expect(findSettlement(id, 0, digest, 20)).resolves.toBe(hash);
+	mocks.client.waitForTransactionReceipt.mockResolvedValue(
+		receipt([log({ cumulative: 20n })]),
+	);
+	await expect(confirmSettlement(hash, id, 0, digest, 20)).rejects.toThrow(
+		"committed bill",
 	);
 });

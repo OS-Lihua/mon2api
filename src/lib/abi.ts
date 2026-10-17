@@ -24,3 +24,7 @@ export const escrowAbi = parseAbi([
 	"event SessionClosed(bytes32 indexed id, uint256 refund)",
 	"event Withdrawn(address indexed recipient, uint256 amount)",
 ]);
+
+export const nativeEscrowAbi = parseAbi([
+	"function openSession(bytes32 id, address provider, bytes32 termsHash, uint256 budget, uint64 expiresAt) payable",
+]);

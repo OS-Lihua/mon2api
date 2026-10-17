@@ -115,5 +115,7 @@ if (
 	process.argv[1] &&
 	import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
+	const { buildConnector } = await import("./build-connector.mjs");
+	await buildConnector();
 	startDev();
 }

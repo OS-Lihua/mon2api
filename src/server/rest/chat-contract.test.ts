@@ -41,6 +41,9 @@ vi.mock("~/server/services/market", () => ({
 	authenticateKey: mocks.authenticateKey,
 }));
 vi.mock("~/server/services/metering", () => ({ runChat: mocks.runChat }));
+vi.mock("~/server/services/runtime", () => ({
+	chainConfig: () => ({ asset: "dUSD" }),
+}));
 vi.mock("~/env", () => ({ env: { ALLOWED_ORIGINS: "" } }));
 vi.mock("~/server/security/rate-limit", () => ({
 	limitRequest: mocks.limitRequest,

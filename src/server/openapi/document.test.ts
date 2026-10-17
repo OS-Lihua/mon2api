@@ -105,6 +105,8 @@ describe("mon2api OpenAPI", () => {
 			model: "test-model",
 			kind: "gateway",
 			connectionMode: "api",
+			transport: "direct",
+			online: true,
 			inputRate: 1,
 			outputRate: 2,
 			concurrency: 2,

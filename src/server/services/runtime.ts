@@ -4,9 +4,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import { db } from "~/server/db";
+import { assetOf, NATIVE_TOKEN } from "~/shared/settlement-asset";
 
 export const chainConfigSchema = z.object({
 	mode: z.enum(["local", "monad-testnet"]),
+	asset: z.enum(["MON", "dUSD"]).default("dUSD"),
 	chainId: z.number().int(),
 	rpcUrl: z.string().url(),
 	token: z.string().regex(/^0x[\da-fA-F]{40}$/),
@@ -41,6 +43,10 @@ export function chainConfig(): ChainConfig {
 	if ((process.env.MON2API_MODE || "monad-testnet") !== value.mode)
 		throw new Error(
 			"MON2API_MODE does not match the active chain configuration.",
+		);
+	if ((value.asset === "MON") !== (value.token.toLowerCase() === NATIVE_TOKEN))
+		throw new Error(
+			"Native MON requires the zero token address; legacy dUSD requires an ERC20 address.",
 		);
 	return value;
 }
@@ -96,12 +102,14 @@ export async function ensureChainBinding() {
 			chainId: config.chainId,
 			escrow: config.escrow.toLowerCase(),
 			token: config.token.toLowerCase(),
+			asset: assetOf(config),
 		},
 	});
 	if (
 		binding.chainId !== config.chainId ||
 		binding.escrow !== config.escrow.toLowerCase() ||
-		binding.token !== config.token.toLowerCase()
+		binding.token !== config.token.toLowerCase() ||
+		(binding.asset ?? "dUSD") !== assetOf(config)
 	)
 		throw new Error(
 			"Deployment mismatch: use a separate DATABASE_URL and MON2API_DATA_DIR for each deployment.",

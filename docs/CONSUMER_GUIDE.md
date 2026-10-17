@@ -1,3 +1,5 @@
+> 新部署使用 Monad 测试网原生 MON。账本和报价使用整数 microMON（1 MON = 1,000,000 microMON），原生转账使用 wei（1 microMON = 10^12 wei）。读取 `/network` 的 `asset`、`ledgerUnit`、`balanceUnit`；余额字符串保持完整 18 位精度。旧 dUSD 部署只维护已有会话，须使用独立数据库。
+
 # 下游使用指南
 
 下游使用者先选择资源、锁定预算，再用独立 Key 调用模型。一个预算会话固定一位商家、一份资源和一份价格快照，不自动切换商家或模型。
@@ -10,7 +12,7 @@ curl "$BASE_URL/api/v1/network"
 curl "$BASE_URL/api/v1/resources?kind=gateway&limit=20"
 ```
 
-资源价格以 micro dUSD / 百万 Token 表示。核对 `kind`、模型 ID、输入与输出报价。`demo` 为模拟资源，不产生真实模型响应；`gateway` 的模型身份仍由商家声明。
+资源价格以 microMON / 百万 Token 表示。核对 `kind`、模型 ID、输入与输出报价。`demo` 为模拟资源，不产生真实模型响应；`gateway` 的模型身份仍由商家声明。
 
 连接钱包并签名登录，或使用 [API 钱包认证](./API.md#钱包登录)。下列管理示例中的 `COOKIE_JAR` 是该消费者自己的登录 Cookie，不是商家 Cookie。
 
@@ -24,13 +26,13 @@ curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/sessions" \
   -d '{"listingId":"YOUR_RESOURCE_ID","budget":5000000}'
 ```
 
-`5000000` 表示 5 dUSD；当前预算范围 1–100 dUSD。
+`5000000` 表示 5 MON；当前预算范围 1–100 MON。
 
 钱包模式返回 `mode: "wallet"`、会话 `id` 和 `transaction` 条款，此时是 **DRAFT，不是已付款或已激活**。不要自动重复创建会话。
 
-1. 读取 `/network`，核对链 ID、token、escrow 及 `ready`。
-2. 钱包在正确链上调用 token 的 `approve(escrow, budget)`。
-3. 钱包调用 escrow 的 `openSession(id, provider, termsHash, budget, expiresAt)`，参数逐项使用返回条款。
+1. 读取 `/network`，核对 chainId=10143、asset=MON、escrow 及 `ready`。原生 MON 的 token 为零地址。
+2. 将返回的整数 microMON 预算乘以 `10^12`，得到 `budgetWei`。不需要 ERC20 approve。
+3. 钱包调用 nativeEscrowAbi 的 `openSession(id, provider, termsHash, budgetWei, expiresAt)`，同时附带 `value: budgetWei`；其他参数逐项使用返回条款。
 4. 等待回执，再确认开通：
 
 ```bash
@@ -39,7 +41,7 @@ curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/sessions/$SESSION_ID/confirm" \
   -d '{"txHash":"YOUR_OPEN_TRANSACTION_HASH"}'
 ```
 
-也可发送 `{}`，由服务端查找开通事件。确认会核对消费者、提供者、预算、条款和确认数；返回 `ACTIVE` 后再创建 Key。ABI 源文件为 [`src/lib/abi.ts`](../src/lib/abi.ts)，使用自己钱包对应的 viem 等客户端发送交易。
+也可发送 `{}`，由服务端查找开通事件。确认会核对消费者、提供者、预算、条款和确认数；首次返回 `ACTIVE` 时同时返回 `connection: {base_url, key, model}`，可直接复制到调用方。Key 与激活在同一事务中写入，平台仅保存哈希。重复确认不再发新 Key；若首次响应丢失，在密钥页撤销未知 Key，再按下节创建替代 Key。ABI 源文件为 [`src/lib/abi.ts`](../src/lib/abi.ts)，使用自己钱包对应的 viem 等客户端发送交易。
 
 本地 `demo` 登录模式只供测试脚本，会自动提交回环链交易。真实钱包登录会话的 `demo` 为 false；这不改变所选资源的 `kind`。默认目标网络为 Monad 测试网 chain 10143；本地测试须显式设置 `MON2API_MODE=local`，使用回环链 31337。以 `/network` 的部署地址和 `ready` 为准，浏览器界面不代表链上部署已经完成。
 
@@ -51,7 +53,7 @@ curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/keys" \
   -d '{"sessionId":"YOUR_SESSION_ID","name":"My application"}'
 ```
 
-成功为 HTTP 201，返回 `{ "key": "m2a_…" }`。完整 Key 仅此一次返回，保存在应用服务端。它只能使用该会话的模型和预算。用 `GET /consumer/keys` 查询元数据，用 `POST /consumer/keys/{id}/revoke` 和 `{}` 撤销。
+成功为 HTTP 201，返回 `{ "base_url": "https://your-platform.example/v1", "key": "m2a_…", "model": "YOUR_SESSION_MODEL" }`。完整 Key 仅此一次返回，保存在应用服务端。它只能使用该会话的模型和预算。用 `GET /consumer/keys` 查询元数据，用 `POST /consumer/keys/{id}/revoke` 和 `{}` 撤销。
 
 ## 4. 调用模型
 
@@ -135,3 +137,10 @@ worker 会自动处理结算；手工触发仍复用持久化结算任务。会�
 关闭遇到 `409 pending_requests` 时，服务端已停止新接单；须等待执行中请求或人工核对完成后重试。关闭后未用预算进入链上 **可提现余额**，不会由此 REST 自动转入钱包。网页提取余额或由自己的钱包调用 escrow 的 `withdraw()`。
 
 长期平台故障时，消费者可直接在合约 `requestClose(id)`，等待 120 秒退出窗口后 `closeSession(id)`，再 `withdraw()`。请按部署 ABI 与当前链上状态操作。链上正常退出不能代替对未核对用量的运营处理。
+
+
+## 申请退回未使用额度
+
+网页“账单结算 → 预算会话 → 申请退款”会显示当前可退额度，确认后停止新调用。对应钱包 Cookie 管理接口为 `POST /api/v1/consumer/sessions/{id}/refund`，JSON body 为 `{}`；使用 `GET` 同一路径读取状态。申请在账本留痕，重复申请不会重复记账或退款。
+
+`PROCESSING` 表示结算中，`PENDING_REVIEW` 表示有待核对用量；两种状态下 amount 是当前未占用额度，reserved 继续保留，不能当作已到账退款。后台在核对完成后继续关闭会话。`AVAILABLE` 表示合约已确认关闭，amount 是该会话释放的退款（整数 microMON），进入消费者的可提现余额。点击“提取可提现 MON 到钱包”，由原钱包签名调用 withdraw；该次操作会提取该钱包的全部可提现余额，可能包含其他退款或收益。已消费用量与网络 Gas 不在未用额度退款范围内。

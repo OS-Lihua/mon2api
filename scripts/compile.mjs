@@ -5,7 +5,7 @@ import solc from "solc";
 
 export function compile() {
 	const sources = Object.fromEntries(
-		["DemoUSD", "UsageEscrow"].map((name) => [
+		["DemoUSD", "UsageEscrow", "NativeUsageEscrow"].map((name) => [
 			`${name}.sol`,
 			{ content: fs.readFileSync(`contracts/src/${name}.sol`, "utf8") },
 		]),
@@ -42,7 +42,7 @@ export function compile() {
 		throw new Error(errors.map((e) => e.formattedMessage).join("\n"));
 	fs.mkdirSync("contracts/artifacts", { recursive: true });
 	const artifacts = {};
-	for (const name of ["DemoUSD", "UsageEscrow"]) {
+	for (const name of ["DemoUSD", "UsageEscrow", "NativeUsageEscrow"]) {
 		const c = output.contracts[`${name}.sol`][name];
 		artifacts[name] = { abi: c.abi, bytecode: `0x${c.evm.bytecode.object}` };
 		fs.writeFileSync(
@@ -54,5 +54,5 @@ export function compile() {
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
 	compile();
-	console.log("Compiled DemoUSD and UsageEscrow (Shanghai EVM).");
+	console.log("Compiled legacy ERC20 and native MON escrows (Shanghai EVM).");
 }

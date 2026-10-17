@@ -1,0 +1,21 @@
+{
+	"name": "@mon2api/connector",
+	"version": "0.1.1",
+	"description": "mon2api local gateway connector; upstream keys stay on your machine",
+	"license": "MIT",
+	"type": "module",
+	"bin": {
+		"mon2api-connector": "dist/connector.mjs"
+	},
+	"files": [
+		"dist/connector.mjs",
+		"LICENSE",
+		"THIRD_PARTY_LICENSES.txt"
+	],
+	"engines": {
+		"node": ">=24.0.0"
+	},
+	"publishConfig": {
+		"access": "public"
+	}
+}

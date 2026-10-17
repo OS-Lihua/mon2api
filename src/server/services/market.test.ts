@@ -2,7 +2,13 @@ import type { Listing, Prisma } from "@prisma/client";
 import { unsealData } from "iron-session";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Viewer } from "~/shared/mon2api";
-import { confirmSession, createListing, openSession, snapshot } from "./market";
+import {
+	confirmSession,
+	createListing,
+	discoverDirectModels,
+	openSession,
+	snapshot,
+} from "./market";
 import { listingInput } from "./mon2api.schema";
 
 const mocks = vi.hoisted(() => ({
@@ -15,16 +21,21 @@ const mocks = vi.hoisted(() => ({
 			create: vi.fn(),
 		},
 		meterRequest: { findMany: vi.fn(), groupBy: vi.fn() },
-		accessKey: { findMany: vi.fn() },
+		accessKey: { findMany: vi.fn(), create: vi.fn() },
+		$transaction: vi.fn(),
+		$queryRaw: vi.fn(),
 		settlement: { findMany: vi.fn() },
 	},
+	clientAsset: "MON" as "MON" | "dUSD",
 	chainBalances: vi.fn(),
 	findSessionOpen: vi.fn(),
 	readSession: vi.fn(),
 	getChainId: vi.fn(),
 	inspectEscrowOwnerGuard: vi.fn(),
 	chainConfig: vi.fn(),
+	discoverModels: vi.fn(),
 }));
+vi.mock("./model-discovery", () => ({ discoverModels: mocks.discoverModels }));
 
 vi.mock("~/server/db", () => ({ db: mocks.db }));
 vi.mock("./escrow-version", () => ({
@@ -46,7 +57,11 @@ vi.mock("./chain", () => ({
 	findSessionOpen: mocks.findSessionOpen,
 	readSession: mocks.readSession,
 	clients: () => ({
-		config: { escrow: "0x1111111111111111111111111111111111111111" },
+		config: {
+			asset: mocks.clientAsset,
+			chainId: 31337,
+			escrow: "0x1111111111111111111111111111111111111111",
+		},
 		publicClient: { getChainId: mocks.getChainId },
 	}),
 }));
@@ -71,6 +86,13 @@ const listing: Listing = {
 	model: "test-model",
 	kind: "demo",
 	connectionMode: "api",
+	transport: "direct",
+	connectorHash: null,
+	connectorLaunchHash: null,
+	connectorLaunchExpiresAt: null,
+	connectorSeenAt: null,
+	connectorCatalog: null,
+	connectorCatalogAt: null,
 	inputRate: 1_000_000,
 	outputRate: 2_000_000,
 	concurrency: 2,
@@ -108,6 +130,8 @@ function lease(overrides: Partial<LeaseRow> = {}): LeaseRow {
 
 beforeEach(() => {
 	vi.resetAllMocks();
+	mocks.clientAsset = "MON";
+	mocks.db.$transaction.mockImplementation(async (action) => action(mocks.db));
 	mocks.chainConfig.mockReturnValue({
 		mode: "local",
 		chainId: 31337,
@@ -128,6 +152,33 @@ beforeEach(() => {
 	});
 });
 
+describe("direct gateway discovery boundaries", () => {
+	it("validates the operator allowlist before forwarding an upstream key", async () => {
+		await expect(
+			discoverDirectModels({
+				baseUrl: "https://untrusted.example/v1",
+				apiKey: "secret",
+			}),
+		).rejects.toMatchObject({ code: "connector_not_allowed" });
+		expect(mocks.discoverModels).not.toHaveBeenCalled();
+		mocks.discoverModels.mockResolvedValue(["provider/model"]);
+		await expect(
+			discoverDirectModels({
+				baseUrl: "https://pool.example/v1",
+				apiKey: "secret",
+			}),
+		).resolves.toEqual({ models: ["provider/model"] });
+	});
+	it("does not expose provider errors or credentials", async () => {
+		mocks.discoverModels.mockRejectedValue(new Error("private upstream key"));
+		await expect(
+			discoverDirectModels({
+				baseUrl: "https://pool.example/v1",
+				apiKey: "secret",
+			}),
+		).rejects.toMatchObject({ code: "discovery_failed" });
+	});
+});
 describe("market snapshot accounting", () => {
 	it("shows Monad testnet as unavailable when no deployment is configured", async () => {
 		mocks.chainConfig.mockImplementationOnce(() => {
@@ -184,7 +235,12 @@ describe("market snapshot accounting", () => {
 			listing: { kind: "gateway" },
 		};
 		expect(mocks.db.listing.findMany).toHaveBeenCalledWith(
-			expect.objectContaining({ where: { kind: "gateway" } }),
+			expect.objectContaining({
+				where: expect.objectContaining({
+					kind: "gateway",
+					OR: [{ status: { not: "DISCOVERING" } }, { owner: viewer.address }],
+				}),
+			}),
 		);
 		expect(mocks.db.lease.findMany).toHaveBeenNthCalledWith(
 			1,
@@ -437,6 +493,14 @@ describe("lease creation guard", () => {
 		expect(mocks.db.lease.create).not.toHaveBeenCalled();
 	});
 
+	it("rejects new budgets on a legacy dUSD deployment even with an owner guard", async () => {
+		mocks.clientAsset = "dUSD";
+		await expect(openSession(consumer, input)).rejects.toMatchObject({
+			code: "legacy_asset",
+		});
+		expect(mocks.db.lease.create).not.toHaveBeenCalled();
+	});
+
 	it("does not create a draft when the RPC cannot verify the guard", async () => {
 		mocks.inspectEscrowOwnerGuard.mockRejectedValue(
 			new Error("RPC unavailable"),
@@ -510,5 +574,84 @@ describe("contract wallet lease activation", () => {
 			where: { id, status: "DRAFT" },
 			data: { status: "ACTIVE", openTx: txHash },
 		});
+	});
+});
+
+describe("native MON activation credentials", () => {
+	const buyer = {
+		address: "0x1111111111111111111111111111111111111111",
+		name: "Buyer",
+		demo: false,
+	};
+	const provider = "0x2222222222222222222222222222222222222222";
+	const id = `0x${"aa".repeat(32)}`;
+	const hash = `0x${"bb".repeat(32)}`;
+	const termsHash = `0x${"cc".repeat(32)}`;
+	beforeEach(() => {
+		mocks.chainConfig.mockReturnValue({ asset: "MON" });
+		const expiresAt = new Date(Date.now() + 3600_000);
+		mocks.db.lease.findUnique.mockResolvedValue({
+			consumer: buyer.address,
+			provider,
+			termsHash,
+			budget: 1_000_000,
+			model: "seller/model",
+			expiresAt,
+		});
+		mocks.findSessionOpen.mockResolvedValue({
+			receipt: { transactionHash: hash },
+			event: {
+				args: {
+					consumer: buyer.address,
+					provider,
+					termsHash,
+					budget: 1_000_000_000_000_000_000n,
+					expiresAt: BigInt(Math.floor(expiresAt.getTime() / 1000)),
+				},
+			},
+		});
+		mocks.readSession.mockResolvedValue({
+			consumer: buyer.address,
+			provider,
+			termsHash,
+			budget: 1_000_000,
+			closed: false,
+			closeAfter: 0,
+			expiresAt: Math.floor(expiresAt.getTime() / 1000),
+		});
+	});
+	it("issues a hashed, scoped key once after a confirmed native deposit", async () => {
+		mocks.db.lease.updateMany
+			.mockResolvedValueOnce({ count: 1 })
+			.mockResolvedValueOnce({ count: 0 });
+		const first = await confirmSession(buyer, id, hash, true);
+		expect(first.connection).toMatchObject({
+			base_url: "http://localhost:3000/v1",
+			model: "seller/model",
+			key: expect.stringMatching(/^m2a_[\w-]{43}$/),
+		});
+		const stored = mocks.db.accessKey.create.mock.calls[0]?.[0]?.data;
+		expect(stored).toMatchObject({
+			owner: buyer.address,
+			sessionId: id,
+			hash: expect.stringMatching(/^[\da-f]{64}$/),
+		});
+		expect(stored).not.toHaveProperty("key");
+		expect(JSON.stringify(stored)).not.toContain(first.connection?.key);
+		const replay = await confirmSession(buyer, id, hash, true);
+		expect(replay.connection).toBeUndefined();
+		expect(mocks.db.accessKey.create).toHaveBeenCalledOnce();
+	});
+	it("never issues a key for another consumer or a mismatched wei deposit", async () => {
+		await expect(
+			confirmSession({ ...buyer, address: provider }, id, hash, true),
+		).rejects.toMatchObject({ code: "not_found" });
+		const event = await mocks.findSessionOpen();
+		event.event.args.budget = 1_000_000n;
+		mocks.findSessionOpen.mockResolvedValue(event);
+		await expect(confirmSession(buyer, id, hash, true)).rejects.toMatchObject({
+			code: "invalid_transaction",
+		});
+		expect(mocks.db.accessKey.create).not.toHaveBeenCalled();
 	});
 });

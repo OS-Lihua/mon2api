@@ -2,21 +2,11 @@ import "dotenv/config";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { prepareWebRuntime } from "./web-runtime.mjs";
 
 const root = process.cwd();
-const standalone = path.join(root, ".next", "standalone");
-if (!fs.existsSync(path.join(standalone, "server.js")))
-	throw new Error("Run pnpm build first.");
-fs.cpSync(
-	path.join(root, ".next", "static"),
-	path.join(standalone, ".next", "static"),
-	{ recursive: true },
-);
-if (fs.existsSync(path.join(root, "public")))
-	fs.cpSync(path.join(root, "public"), path.join(standalone, "public"), {
-		recursive: true,
-	});
-const server = spawn(process.execPath, [path.join(standalone, "server.js")], {
+const runtime = prepareWebRuntime(root);
+const server = spawn(process.execPath, [path.join(runtime, "server.js")], {
 	stdio: "inherit",
 	env: {
 		...process.env,
@@ -34,6 +24,12 @@ for (const signal of ["SIGINT", "SIGTERM"])
 	process.on(signal, () => {
 		server.kill(signal);
 	});
-server.on("exit", (code) => {
-	process.exitCode = code || 0;
+server.on("error", (error) => {
+	console.error(error.message);
+	fs.rmSync(runtime, { recursive: true, force: true });
+	process.exitCode = 1;
+});
+server.on("exit", (code, signal) => {
+	fs.rmSync(runtime, { recursive: true, force: true });
+	process.exitCode = code ?? (signal ? 1 : 0);
 });

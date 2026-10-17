@@ -1,3 +1,5 @@
+> 新部署使用 `NativeUsageEscrow` 和原生测试网 MON。必须使用新的数据库/schema 和 `MON2API_DATA_DIR`，迁移后绑定 `asset: "MON"`、零地址 `token` 及新 escrow；旧 dUSD 部署保留原配置。`APP_ORIGIN` 须设为公网 HTTPS origin，买方接入配置据此生成。MON 预算锁定不需要 ERC20 approve。账本单位 microMON，原生余额/转账单位 wei。
+
 # mon2api 部署
 
 默认合约网络为 Monad 测试网（chain 10143）。先运行 `pnpm setup` 准备数据库，再配置或复用测试网部署，最后运行 `pnpm dev` 启动 Web 与结算 worker。共享部署采用PostgreSQL、持久RPC和独立常驻结算worker。测试账户与公开mint的代币不能用于真实资金。
@@ -26,6 +28,8 @@ pnpm worker
 ```
 
 生产迁移与构建分开。worker每10秒结算，需进程管理、重启和监控。调用45秒、退出窗口120秒；长期网络故障仍可能造成费用无法追回。
+
+`pnpm start` 将完整 standalone 构建、`.next/static` 与 `public` 复制到独立的 `.runtime/web/release-*` 目录后启动。后续 `pnpm build` 或 `pnpm verify` 不会覆盖运行中的文件；发布新构建后需重启 Web 服务才能生效。启动时应等待构建完成。服务退出时自动删除对应副本；异常强制终止遗留的目录可在确认进程已停止后删除。不要直接从会被后续构建覆盖的 `.next/standalone/server.js` 启动共享站点。
 
 浏览器钱包默认通过 EIP-6963 发现，不需要外部服务账号。手机扫码需要在 **构建前** 设置 `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`，并在 WalletConnect Dashboard 配置实际站点 origin；修改后重新构建。仅这个公开应用 ID 使用 `NEXT_PUBLIC_`，绝不传入钱包私钥。本地回环 RPC 不能供手机访问。站点仅在配置 ID 后为 WalletConnect relay/verify 和 MetaMask SDK 增加对应 CSP 连接来源。扫码尚需真实 ID 和移动钱包验收。
 

@@ -85,7 +85,7 @@ export const completionResponseSchema = z.object({
 	mon2api: z.object({
 		request_id: z.string(),
 		cost: z.number().int().nonnegative(),
-		unit: z.literal("micro_dUSD"),
+		unit: z.enum(["micro_MON", "micro_dUSD"]),
 		usage_source: z.enum(["demo", "upstream_reported"]),
 	}),
 });

@@ -19,7 +19,6 @@ export const env = createEnv({
 		TREASURY_ADDRESS: z.string().optional(),
 		MON2API_DATA_DIR: z.string().optional(),
 		CHAIN_CONFIG_JSON: z.string().optional(),
-		TESTNET_TOKEN_ADDRESS: z.string().optional(),
 		APP_ENV: z.string().optional(),
 		ALLOWED_ORIGINS: z.string().default(""),
 		LOG_LEVEL: z
@@ -90,7 +89,6 @@ export const env = createEnv({
 		TREASURY_ADDRESS: process.env.TREASURY_ADDRESS,
 		MON2API_DATA_DIR: process.env.MON2API_DATA_DIR,
 		CHAIN_CONFIG_JSON: process.env.CHAIN_CONFIG_JSON,
-		TESTNET_TOKEN_ADDRESS: process.env.TESTNET_TOKEN_ADDRESS,
 		APP_ENV: process.env.APP_ENV,
 		ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS,
 		LOG_LEVEL: process.env.LOG_LEVEL,

@@ -26,6 +26,7 @@ import {
 	openSessionInput,
 	sessionIdSchema,
 } from "~/server/services/mon2api.schema";
+import { refundStatus, requestRefund } from "~/server/services/refund";
 import { closeSession, settleSession } from "~/server/services/settlement";
 import type { Viewer } from "~/shared/mon2api";
 import { createRestMutation, createRestQuery } from "./endpoint";
@@ -255,7 +256,12 @@ export const confirmPost = (request: Request, id: string) =>
 		input: contract.confirmInput,
 		output: contract.confirmedResponse,
 		action: (input, user) =>
-			confirmSession(signedIn(user), parse(sessionIdSchema, id), input.txHash),
+			confirmSession(
+				signedIn(user),
+				parse(sessionIdSchema, id),
+				input.txHash,
+				true,
+			),
 	})(request);
 export const settlePost = (request: Request, id: string) =>
 	mutation({
@@ -350,3 +356,16 @@ export const requestLookupGet = publicQuery(
 		);
 	},
 );
+
+export const refundPost = (request: Request, id: string) =>
+	mutation({
+		route: "commerce:request-refund",
+		input: contract.emptyInput,
+		output: contract.refundResponse,
+		action: (_input, user) =>
+			requestRefund(signedIn(user), parse(sessionIdSchema, id)),
+	})(request);
+export const refundGet = (request: Request, id: string) =>
+	managedQuery("commerce:refund-status", contract.refundResponse, (user) =>
+		refundStatus(user, parse(sessionIdSchema, id)),
+	)(request);

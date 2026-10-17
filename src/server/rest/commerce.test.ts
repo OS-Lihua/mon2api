@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
 	login: vi.fn(),
 	getSession: vi.fn(),
 	settle: vi.fn(),
+	confirm: vi.fn(),
+	createKey: vi.fn(),
 }));
 vi.mock("~/server/services/auth", () => ({
 	AppError: class extends Error {
@@ -49,8 +51,8 @@ vi.mock("~/server/services/market", () => ({
 	authenticateKey: mocks.authenticateKey,
 	createListing: mocks.createListing,
 	updateListing: mocks.updateListing,
-	confirmSession: vi.fn(),
-	createKey: vi.fn(),
+	confirmSession: mocks.confirm,
+	createKey: mocks.createKey,
 	openSession: vi.fn(),
 	revokeKey: vi.fn(),
 	toggleListing: vi.fn(),
@@ -284,5 +286,47 @@ describe("merchant and consumer REST security", () => {
 				)
 			).status,
 		).toBe(400);
+	});
+});
+
+describe("buyer connection REST responses", () => {
+	const sessionId = `0x${"ab".repeat(32)}`;
+	const connection = {
+		base_url: "https://market.example/v1",
+		key: `m2a_${"x".repeat(43)}`,
+		model: "seller/model",
+	};
+	it("returns a no-store connection bundle after funded-session confirmation", async () => {
+		mocks.confirm.mockResolvedValue({
+			id: sessionId,
+			status: "ACTIVE",
+			connection,
+		});
+		const response = await api.confirmPost(
+			req(`/consumer/sessions/${sessionId}/confirm`, {}),
+			sessionId,
+		);
+		expect(response.status).toBe(200);
+		expect(response.headers.get("cache-control")).toBe("no-store");
+		expect(await response.json()).toEqual({
+			id: sessionId,
+			status: "ACTIVE",
+			connection,
+		});
+		expect(mocks.confirm).toHaveBeenCalledWith(
+			user,
+			sessionId,
+			undefined,
+			true,
+		);
+	});
+	it("returns the same connection shape for manually created replacement keys", async () => {
+		mocks.createKey.mockResolvedValue(connection);
+		const response = await api.keysPost(
+			req("/consumer/keys", { sessionId, name: "replacement" }),
+		);
+		expect(response.status).toBe(201);
+		expect(await response.json()).toEqual(connection);
+		expect(response.headers.get("cache-control")).toBe("no-store");
 	});
 });

@@ -7,6 +7,8 @@ import { db } from "~/server/db";
 import type { ChatResult } from "~/shared/mon2api";
 import { AppError } from "./auth";
 import { readSession } from "./chain";
+import { resourceAvailable } from "./connector-availability";
+import { runLocalConnector } from "./local-connector";
 import { lock } from "./market";
 import type { chatInput } from "./mon2api.schema";
 import { EngineFailure, runEngine } from "./pool-engine";
@@ -77,7 +79,11 @@ export async function runChat(
 		typeof secretValue === "string" && secretValue.length > 0
 			? secretValue
 			: undefined;
-	if (kind === "gateway" && (!baseUrl || !apiKey))
+	if (
+		kind === "gateway" &&
+		lease.listing.transport !== "local" &&
+		(!baseUrl || !apiKey)
+	)
 		throw new AppError("connector_unconfigured", "上游连接器未配置。", 503);
 	// Conservative admission ceiling for the text-only 24 KB input contract.
 	// Usage above this reservation requires review and is never silently overcharged.
@@ -113,7 +119,7 @@ export async function runChat(
 		const listing = await tx.listing.findUniqueOrThrow({
 			where: { id: lease.listingId },
 		});
-		if (current.status !== "ACTIVE" || !listing.enabled)
+		if (current.status !== "ACTIVE" || !resourceAvailable(listing))
 			throw new AppError("inactive_session", "会话或资源已暂停。", 409);
 		const duplicate = await tx.meterRequest.findUnique({
 			where: {
@@ -165,21 +171,29 @@ export async function runChat(
 		const conversationId = createHash("sha256")
 			.update(`${owner}:${lease.listingId}:${input.conversationId}`)
 			.digest("hex");
-		const result = await runEngine(
-			{
-				kind,
-				baseUrl,
-				apiKey,
-				model: lease.model,
-				messages: input.messages,
-				maxTokens: input.maxTokens,
-				conversationId,
-			},
-			onDelta,
-			signal
-				? AbortSignal.any([signal, AbortSignal.timeout(45_000)])
-				: AbortSignal.timeout(45_000),
-		);
+		const engineInput = {
+			kind,
+			baseUrl,
+			apiKey,
+			model: lease.model,
+			messages: input.messages,
+			maxTokens: input.maxTokens,
+			conversationId,
+		};
+		const executionSignal = signal
+			? AbortSignal.any([signal, AbortSignal.timeout(45_000)])
+			: AbortSignal.timeout(45_000);
+		const result =
+			lease.listing.transport === "local"
+				? await runLocalConnector(
+						lease.listingId,
+						request.id,
+						engineInput,
+						onDelta,
+						executionSignal,
+					)
+				: await runEngine(engineInput, onDelta, executionSignal);
+
 		const cost =
 			result.inputTokens !== null && result.outputTokens !== null
 				? calculateCost(

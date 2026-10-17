@@ -36,7 +36,7 @@ const listingFields = z
 		model: z
 			.string()
 			.trim()
-			.regex(/^[\w./:-]{1,100}$/),
+			.regex(/^[\w./:@-]{1,100}$/),
 		kind: z.enum(["demo", "gateway"]),
 		inputRate: z.number().int().min(1).max(1_000_000_000),
 		outputRate: z.number().int().min(1).max(1_000_000_000),

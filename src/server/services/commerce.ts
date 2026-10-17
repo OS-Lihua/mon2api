@@ -4,6 +4,7 @@ import type { z } from "zod";
 import { db } from "~/server/db";
 import type { Viewer } from "~/shared/mon2api";
 import { MONAD_TESTNET } from "~/shared/network";
+import { assetOf, billingUnit } from "~/shared/settlement-asset";
 import { AppError } from "./auth";
 import { chainBalances, clients } from "./chain";
 import type {
@@ -12,6 +13,7 @@ import type {
 	requestQuery,
 	resourceQuery,
 } from "./commerce.schema";
+import { connectorOnline } from "./connector-availability";
 import { chainConfig } from "./runtime";
 
 type Page = z.infer<typeof pageQuery>;
@@ -24,6 +26,9 @@ const resourceSelect = {
 	model: true,
 	kind: true,
 	connectionMode: true,
+	transport: true,
+	connectorSeenAt: true,
+	connectorCatalog: true,
 	inputRate: true,
 	outputRate: true,
 	concurrency: true,
@@ -102,7 +107,18 @@ function page<T extends { id: string }>(rows: T[], limit: number) {
 function resourceDto(
 	row: Prisma.ListingGetPayload<{ select: typeof resourceSelect }>,
 ) {
-	return { ...row, createdAt: row.createdAt.toISOString() };
+	const { connectorSeenAt, connectorCatalog, ...resource } = row;
+	return {
+		...resource,
+		online: connectorOnline(row),
+		status:
+			row.status !== "DISCOVERING" &&
+			row.transport === "local" &&
+			!connectorOnline(row)
+				? "OFFLINE"
+				: row.status,
+		createdAt: row.createdAt.toISOString(),
+	};
 }
 function sessionDto(
 	row: Prisma.LeaseGetPayload<{ select: typeof sessionSelect }>,
@@ -252,6 +268,9 @@ export async function networkInfo() {
 		/* unavailable, not ready */
 	}
 	return {
+		asset: assetOf(config),
+		ledgerUnit: billingUnit(assetOf(config)),
+		balanceUnit: assetOf(config) === "MON" ? "wei" : "micro_dUSD",
 		mode: config.mode,
 		chainId: config.chainId,
 		token: config.token,
@@ -267,7 +286,10 @@ export async function accountBalances(user: Viewer) {
 	try {
 		return {
 			...(await chainBalances(user.address)),
-			unit: "micro_dUSD" as const,
+			unit:
+				assetOf(chainConfig()) === "MON"
+					? ("wei" as const)
+					: ("micro_dUSD" as const),
 		};
 	} catch {
 		throw new AppError("chain_unavailable", "暂时无法读取链上余额。", 503);

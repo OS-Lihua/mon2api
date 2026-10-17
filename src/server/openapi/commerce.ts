@@ -128,12 +128,12 @@ export function registerCommerce(
 			method: "get",
 			path: "/account/balances",
 			operationId: "getAccountBalances",
-			summary: "Read wallet and claimable balances as micro dUSD strings",
+			summary: "Read wallet and claimable balances as exact integer strings",
 			tag: "Account",
 			auth: "wallet",
 			output: balances,
 			description:
-				"503 means unavailable; never infer zero. Withdrawal is a separate consumer-signed contract withdraw() transaction.",
+				"Native MON balances use wei (18 decimals); legacy ERC20 balances use micro_dUSD (6 decimals). Check unit. 503 means unavailable; never infer zero. Withdrawal is a separate consumer-signed contract withdraw() transaction.",
 		},
 		{
 			method: "get",
@@ -258,7 +258,7 @@ export function registerCommerce(
 			input: c.confirmInput,
 			output: c.confirmedResponse,
 			description:
-				"txHash is optional; without it the service scans the matching opening event. Requires the configured confirmation count and matching terms.",
+				"txHash is optional; without it the service scans the matching opening event. Requires the configured confirmation count and matching terms. The first activation atomically returns connection {base_url,key,model}; the full key is shown once and only its hash is stored. Repeated confirmation does not issue another key. If the response is lost, create a replacement via /consumer/keys and revoke the lost initial key.",
 		},
 		{
 			method: "post",
@@ -283,6 +283,29 @@ export function registerCommerce(
 			output: c.transactionResponse,
 			description:
 				"409 pending_requests stops admission but retains reservations until running/review requests are resolved. Closing does not withdraw the resulting claimable balance.",
+		},
+		{
+			method: "post",
+			path: "/consumer/sessions/{id}/refund",
+			operationId: "requestUnusedBudgetRefund",
+			summary: "Request release of unused MON budget",
+			tag: "Consumer",
+			auth: "wallet",
+			id: sessionIdSchema,
+			input: c.emptyInput,
+			output: c.refundResponse,
+			description:
+				"Idempotent application recorded in the ledger; stops new calls immediately. PROCESSING/PENDING_REVIEW retains running/unknown usage reservations; the settlement worker resumes closure. amount is currently unreserved budget while pending, and the confirmed refund when AVAILABLE. AVAILABLE means credited to the original consumer's claimable balance, not a wallet transfer. withdrawRequired instructs the consumer to sign escrow.withdraw(); claimable balances can combine multiple refunds and earnings. Already consumed usage and gas are not refunded.",
+		},
+		{
+			method: "get",
+			path: "/consumer/sessions/{id}/refund",
+			operationId: "getUnusedBudgetRefund",
+			summary: "Read an owned refund application's status",
+			tag: "Consumer",
+			auth: "wallet",
+			id: sessionIdSchema,
+			output: c.refundResponse,
 		},
 		{
 			method: "get",
@@ -368,7 +391,7 @@ export function registerCommerce(
 						: [{ bearerAuth: [] }],
 			description: [
 				op.description,
-				"All amounts/prices are integer micro dUSD; rates are per million tokens. List endpoints are newest-first by createdAt then id, use limit (1..100, default 20) and nextCursor; each page is a live view, not an immutable snapshot. All responses are no-store. Unknown or duplicate query parameters are rejected. POST bodies must be JSON, including {} for empty actions.",
+				"Billing amounts/prices are integer microMON on native MON deployments (network.ledgerUnit=micro_MON); rates are per million tokens. 1 microMON = 10^12 wei. Transaction budget arguments and native msg.value must be scaled to wei. Legacy isolated dUSD deployments retain micro_dUSD, with new budgets disabled. Raw balances have their own unit. List endpoints are newest-first by createdAt then id, use limit (1..100, default 20) and nextCursor; each page is a live view, not an immutable snapshot. All responses are no-store. Unknown or duplicate query parameters are rejected. POST bodies must be JSON, including {} for empty actions.",
 			]
 				.filter(Boolean)
 				.join(" "),

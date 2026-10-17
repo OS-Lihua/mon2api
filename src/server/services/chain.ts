@@ -10,8 +10,13 @@ import {
 	parseEventLogs,
 } from "viem";
 import { mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
-import { escrowAbi, tokenAbi } from "~/lib/abi";
+import { escrowAbi, nativeEscrowAbi, tokenAbi } from "~/lib/abi";
 import { db } from "~/server/db";
+import {
+	assetOf,
+	fromChainAmount,
+	toChainAmount,
+} from "~/shared/settlement-asset";
 import { chainConfig, demoEnabled } from "./runtime";
 
 // Standard public test mnemonic. Never fund these addresses on a real network.
@@ -91,8 +96,8 @@ export async function readSession(id: string, blockNumber?: bigint) {
 		consumer,
 		provider,
 		termsHash,
-		budget: Number(budget),
-		spent: Number(spent),
+		budget: fromChainAmount(budget, assetOf(config)),
+		spent: fromChainAmount(spent, assetOf(config)),
 		nonce: Number(nonce),
 		expiresAt: Number(expiresAt),
 		closeAfter: Number(closeAfter),
@@ -155,12 +160,14 @@ export async function chainBalances(address: string) {
 			functionName: "claimable",
 			args: [owner],
 		}),
-		publicClient.readContract({
-			address: getAddress(config.token),
-			abi: tokenAbi,
-			functionName: "balanceOf",
-			args: [owner],
-		}),
+		assetOf(config) === "MON"
+			? publicClient.getBalance({ address: owner })
+			: publicClient.readContract({
+					address: getAddress(config.token),
+					abi: tokenAbi,
+					functionName: "balanceOf",
+					args: [owner],
+				}),
 	]);
 	return {
 		claimable: claimable.toString(),
@@ -190,7 +197,12 @@ export async function sendSettlement(
 			address: getAddress(config.escrow),
 			abi: escrowAbi,
 			functionName: "settle",
-			args: [id as Hex, BigInt(cumulative), BigInt(nonce), receiptsHash as Hex],
+			args: [
+				id as Hex,
+				toChainAmount(cumulative, assetOf(config)),
+				BigInt(nonce),
+				receiptsHash as Hex,
+			],
 		});
 		return confirmSettlement(hash, id, nonce, receiptsHash, cumulative);
 	});
@@ -236,25 +248,37 @@ export async function demoOpen(
 			chain,
 			transport: http(config.rpcUrl),
 		});
-		const approve = await wallet.writeContract({
-			address: getAddress(config.token),
-			abi: tokenAbi,
-			functionName: "approve",
-			args: [getAddress(config.escrow), BigInt(args.budget)],
-		});
-		await publicClient.waitForTransactionReceipt({ hash: approve });
-		const hash = await wallet.writeContract({
-			address: getAddress(config.escrow),
-			abi: escrowAbi,
-			functionName: "openSession",
-			args: [
-				args.id as Hex,
-				getAddress(args.provider),
-				args.termsHash as Hex,
-				BigInt(args.budget),
-				BigInt(args.expiresAt),
-			],
-		});
+		if (assetOf(config) !== "MON") {
+			const approve = await wallet.writeContract({
+				address: getAddress(config.token),
+				abi: tokenAbi,
+				functionName: "approve",
+				args: [getAddress(config.escrow), BigInt(args.budget)],
+			});
+			await publicClient.waitForTransactionReceipt({ hash: approve });
+		}
+		const argsOnChain = [
+			args.id as Hex,
+			getAddress(args.provider),
+			args.termsHash as Hex,
+			toChainAmount(args.budget, assetOf(config)),
+			BigInt(args.expiresAt),
+		] as const;
+		const hash =
+			assetOf(config) === "MON"
+				? await wallet.writeContract({
+						address: getAddress(config.escrow),
+						abi: nativeEscrowAbi,
+						functionName: "openSession",
+						args: argsOnChain,
+						value: toChainAmount(args.budget, "MON"),
+					})
+				: await wallet.writeContract({
+						address: getAddress(config.escrow),
+						abi: escrowAbi,
+						functionName: "openSession",
+						args: argsOnChain,
+					});
 		await publicClient.waitForTransactionReceipt({
 			hash,
 			confirmations: config.mode === "local" ? 1 : 6,
@@ -315,7 +339,8 @@ export async function confirmSettlement(
 				event.args.id.toLowerCase() === id.toLowerCase() &&
 				event.args.nonce === BigInt(nonce) &&
 				event.args.receiptsHash.toLowerCase() === receiptsHash.toLowerCase() &&
-				event.args.cumulativeSpent === BigInt(cumulative),
+				event.args.cumulativeSpent ===
+					toChainAmount(cumulative, assetOf(config)),
 		)
 	)
 		throw new Error("Settlement receipt does not match the committed bill.");
@@ -354,7 +379,11 @@ export async function findSessionClose(id: string) {
 	if (receipt.status !== "success" || !event)
 		throw new Error("Closed session receipt does not match.");
 	const state = await readSession(id, receipt.blockNumber);
-	if (!state.closed || event.args.refund !== BigInt(state.budget - state.spent))
+	if (
+		!state.closed ||
+		event.args.refund !==
+			toChainAmount(state.budget - state.spent, assetOf(config))
+	)
 		throw new Error("Closed session state does not match its receipt.");
 	return { txHash: receipt.transactionHash, state };
 }
@@ -378,7 +407,7 @@ export async function findSettlement(
 		(log) =>
 			!log.removed &&
 			log.args.receiptsHash?.toLowerCase() === receiptsHash.toLowerCase() &&
-			log.args.cumulativeSpent === BigInt(cumulative),
+			log.args.cumulativeSpent === toChainAmount(cumulative, assetOf(config)),
 	)?.transactionHash;
 	return hash
 		? confirmSettlement(hash, id, nonce, receiptsHash, cumulative)

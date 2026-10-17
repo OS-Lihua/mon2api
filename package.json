@@ -29,7 +29,7 @@
 		"test": "vitest run",
 		"typecheck": "tsc --noEmit",
 		"verify": "node scripts/verify.mjs",
-		"dev:web": "next dev --turbo --hostname 127.0.0.1",
+		"dev:web": "pnpm connector:build && next dev --turbo --hostname 127.0.0.1",
 		"chain": "tsx scripts/chain.ts",
 		"contracts:compile": "node scripts/compile.mjs",
 		"test:e2e": "tsx scripts/smoke.ts",
@@ -39,7 +39,11 @@
 		"worker": "node --conditions=react-server --import tsx scripts/worker.ts",
 		"review:resolve": "node --conditions=react-server --import tsx scripts/resolve-review.ts",
 		"preview:local": "node scripts/dev.mjs --production",
-		"test:recovery": "tsx scripts/recovery-smoke.ts"
+		"test:recovery": "tsx scripts/recovery-smoke.ts",
+		"connector": "tsx scripts/connector.ts",
+		"connector:build": "node scripts/build-connector.mjs",
+		"test:connector": "node --conditions=react-server --import tsx scripts/connector-smoke.ts",
+		"test:mon": "node --conditions=react-server --import tsx scripts/native-smoke.ts"
 	},
 	"dependencies": {
 		"@asteasolutions/zod-to-openapi": "^7.3.4",
@@ -82,6 +86,7 @@
 		"@types/react-dom": "^19.2.7",
 		"ajv": "^8.17.1",
 		"dotenv": "^17.4.2",
+		"esbuild": "0.28.2",
 		"ganache": "^7.9.2",
 		"lefthook": "^2.1.12",
 		"postcss": "^8.5.28",
