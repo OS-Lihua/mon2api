@@ -1,0 +1,51 @@
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 3
+    groups:
+      production-major-dependencies:
+        dependency-type: production
+        update-types:
+          - major
+      development-major-dependencies:
+        dependency-type: development
+        update-types:
+          - major
+    ignore:
+      # Template maintainers only review major version changes. Routine
+      # minor/patch churn is intentionally ignored for version-update PRs.
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:15"
+      timezone: Asia/Shanghai
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:30"
+      timezone: Asia/Shanghai
+    groups:
+      docker-images:
+        patterns:
+          - "*"

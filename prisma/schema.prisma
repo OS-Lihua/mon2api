@@ -1,0 +1,144 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Post {
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+}
+
+model Listing {
+  id          String   @id @default(cuid())
+  owner       String
+  name        String
+  description String
+  model       String
+  kind        String
+  inputRate   Int
+  outputRate  Int
+  concurrency Int      @default(2)
+  enabled     Boolean  @default(true)
+  status      String   @default("READY")
+  baseUrl     String?
+  secret      String?
+  createdAt   DateTime @default(now())
+  sessions    Lease[]
+
+  @@index([owner])
+}
+
+model Lease {
+  id          String         @id
+  listingId   String
+  listing     Listing        @relation(fields: [listingId], references: [id])
+  consumer    String
+  provider    String
+  model       String
+  inputRate   Int
+  outputRate  Int
+  termsHash   String
+  budget      Int
+  spent       Int            @default(0)
+  reserved    Int            @default(0)
+  settled     Int            @default(0)
+  status      String         @default("DRAFT")
+  expiresAt   DateTime
+  openTx      String?
+  closeTx     String?
+  createdAt   DateTime       @default(now())
+  requests    MeterRequest[]
+  keys        AccessKey[]
+  settlements Settlement[]
+
+  @@index([consumer, status])
+}
+
+model MeterRequest {
+  id             String      @id @default(cuid())
+  sessionId      String
+  session        Lease       @relation(fields: [sessionId], references: [id])
+  idempotencyKey String
+  reservation    Int
+  cost           Int         @default(0)
+  inputTokens    Int?
+  outputTokens   Int?
+  status         String      @default("RUNNING")
+  usageSource    String      @default("missing")
+  upstreamId     String?
+  errorCode      String?
+  settlementId   String?
+  settlement     Settlement? @relation(fields: [settlementId], references: [id])
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@unique([sessionId, idempotencyKey])
+  @@index([status, createdAt])
+}
+
+model AccessKey {
+  id        String   @id @default(cuid())
+  owner     String
+  sessionId String
+  session   Lease    @relation(fields: [sessionId], references: [id])
+  name      String
+  hash      String   @unique
+  prefix    String
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([owner])
+}
+
+model Settlement {
+  id           String         @id @default(cuid())
+  sessionId    String
+  session      Lease          @relation(fields: [sessionId], references: [id])
+  nonce        Int
+  amount       Int
+  cumulative   Int
+  receiptsHash String
+  status       String         @default("READY")
+  txHash       String?
+  createdAt    DateTime       @default(now())
+  requests     MeterRequest[]
+
+  @@unique([sessionId, nonce])
+}
+
+model LedgerEntry {
+  id        String   @id @default(cuid())
+  sessionId String
+  requestId String?
+  kind      String
+  amount    Int
+  createdAt DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+}
+
+model WalletNonce {
+  id        String   @id @default(cuid())
+  address   String
+  message   String   @unique
+  consumed  Boolean  @default(false)
+  expiresAt DateTime
+}
+
+model ChainBinding {
+  id      String @id
+  chainId Int
+  escrow  String
+  token   String
+}

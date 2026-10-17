@@ -1,0 +1,63 @@
+name: mon2api-testnet
+x-runtime: &runtime
+  DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/mon2api
+  MON2API_MODE: monad-testnet
+  ALLOW_DEMO: "false"
+  APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN}
+  SESSION_PASSWORD: ${SESSION_PASSWORD:?Set SESSION_PASSWORD}
+  METER_PRIVATE_KEY: ${METER_PRIVATE_KEY:?Set METER_PRIVATE_KEY}
+  CHAIN_CONFIG_JSON: ${CHAIN_CONFIG_JSON:?Set CHAIN_CONFIG_JSON}
+  UPSTREAM_ALLOWED_ORIGINS: ${UPSTREAM_ALLOWED_ORIGINS:-}
+  LOG_LEVEL: info
+services:
+  app:
+    build:
+      context: .
+      target: runner
+      args:
+        SKIP_ENV_VALIDATION: "1"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: *runtime
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+  worker:
+    build:
+      context: .
+      target: worker
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: *runtime
+    restart: unless-stopped
+    stop_grace_period: 15s
+  migrate:
+    build:
+      context: .
+      target: migrator
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/mon2api
+    restart: "no"
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mon2api
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_USER: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mon2api"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+volumes:
+  postgres_data:

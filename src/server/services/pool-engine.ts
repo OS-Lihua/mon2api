@@ -1,0 +1,269 @@
+import OpenAI from "openai";
+
+export type EngineInput = {
+	kind: "demo" | "gateway";
+	/** Operator-approved gateway origin (optionally ending in /v1), never caller input. */
+	baseUrl?: string;
+	apiKey?: string;
+	model: string;
+	messages: { role: "system" | "user" | "assistant"; content: string }[];
+	maxTokens: number;
+	/** Server-generated and scoped to tenant + resource, not an arbitrary client header. */
+	conversationId: string;
+};
+
+export type EngineResult = {
+	text: string;
+	inputTokens: number | null;
+	outputTokens: number | null;
+	usageSource: "demo" | "upstream_reported" | "missing";
+	pendingReview: boolean;
+	upstreamRequestId: string | null;
+};
+
+export type EngineFailureCode =
+	| "configuration"
+	| "aborted"
+	| "rate_limited"
+	| "authorization"
+	| "upstream_unavailable"
+	| "invalid_response"
+	| "incomplete_stream";
+
+/** Safe for an API response. Upstream exception messages/bodies are never exposed. */
+export class EngineFailure extends Error {
+	constructor(
+		public readonly code: EngineFailureCode,
+		message: string,
+		public readonly status: number,
+		public readonly pendingReview: boolean,
+		public readonly upstreamRequestId: string | null = null,
+		public readonly retryAfterSeconds: number | null = null,
+	) {
+		super(message);
+		this.name = "EngineFailure";
+	}
+}
+
+type DeltaHandler = (text: string) => void | Promise<void>;
+
+function validTokenCount(value: unknown): value is number {
+	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function aborted(pendingReview: boolean, requestId: string | null = null) {
+	return new EngineFailure(
+		"aborted",
+		"Request cancelled.",
+		499,
+		pendingReview,
+		requestId,
+	);
+}
+
+function demoUnits(text: string): number {
+	// Synthetic demo accounting units, not a model tokenizer or billable real usage.
+	return Math.max(1, Array.from(text).length);
+}
+
+async function runDemo(
+	input: EngineInput,
+	onDelta: DeltaHandler,
+	signal?: AbortSignal,
+): Promise<EngineResult> {
+	const answer =
+		"[SIMULATED DEMO · 模拟响应] mon2api routes requests to provider resources, records usage, and prepares on-chain settlement. No AI model was called.";
+	const units = Array.from(answer).slice(0, input.maxTokens);
+	let text = "";
+	for (let i = 0; i < units.length; i += 12) {
+		if (signal?.aborted) throw aborted(false);
+		const delta = units.slice(i, i + 12).join("");
+		text += delta;
+		await onDelta(delta);
+	}
+	if (signal?.aborted) throw aborted(false);
+	return {
+		text,
+		inputTokens: input.messages.reduce(
+			(total, message) => total + demoUnits(message.content),
+			0,
+		),
+		outputTokens: units.length,
+		usageSource: "demo",
+		pendingReview: false,
+		upstreamRequestId: null,
+	};
+}
+
+/**
+ * Uses the official OpenAI SDK for SSE framing, UTF-8 decoding and cancellation.
+ * gateway owns account scheduling, isolation, health checks and quota cooldowns.
+ * No dispatched request is retried here: a timeout may already have incurred cost.
+ * The caller validates the endpoint against its configured connector allowlist.
+ */
+export async function runEngine(
+	input: EngineInput,
+	onDelta: DeltaHandler,
+	signal?: AbortSignal,
+): Promise<EngineResult> {
+	if (signal?.aborted) throw aborted(false);
+	if (!Number.isSafeInteger(input.maxTokens) || input.maxTokens < 1) {
+		throw new EngineFailure(
+			"configuration",
+			"Invalid output limit.",
+			500,
+			false,
+		);
+	}
+	if (input.kind === "demo") return runDemo(input, onDelta, signal);
+	if (!input.baseUrl || !input.apiKey) {
+		throw new EngineFailure(
+			"configuration",
+			"Provider connector is not configured.",
+			503,
+			false,
+		);
+	}
+	let baseUrl: URL;
+	try {
+		baseUrl = new URL(input.baseUrl);
+		if (
+			!["http:", "https:"].includes(baseUrl.protocol) ||
+			baseUrl.username ||
+			baseUrl.password ||
+			baseUrl.search ||
+			baseUrl.hash
+		) {
+			throw new Error("Invalid endpoint");
+		}
+	} catch {
+		throw new EngineFailure(
+			"configuration",
+			"Provider connector URL is invalid.",
+			503,
+			false,
+		);
+	}
+	const path = baseUrl.pathname.replace(/\/+$/, "");
+	baseUrl.pathname = path.endsWith("/v1") ? path : `${path}/v1`;
+	const client = new OpenAI({
+		apiKey: input.apiKey,
+		baseURL: baseUrl.toString().replace(/\/$/, ""),
+		maxRetries: 0,
+		timeout: 120_000,
+		// Do not let a redirect forward the bearer credential to another host.
+		fetchOptions: { redirect: "error" },
+	});
+	let upstreamRequestId: string | null = null;
+	let cancelStream: (() => void) | undefined;
+	try {
+		const response = await client.chat.completions
+			.create(
+				{
+					model: input.model,
+					messages: input.messages,
+					max_tokens: input.maxTokens,
+					stream: true,
+					stream_options: { include_usage: true },
+				},
+				{
+					signal,
+					headers: { "x-session-id": input.conversationId },
+				},
+			)
+			.withResponse();
+		upstreamRequestId =
+			response.request_id ?? response.response.headers.get("x-request-id");
+		cancelStream = () => response.data.controller.abort();
+		let text = "";
+		let sawFinish = false;
+		let inputTokens: number | null = null;
+		let outputTokens: number | null = null;
+		for await (const chunk of response.data) {
+			if (signal?.aborted) throw aborted(true, upstreamRequestId);
+			if (!upstreamRequestId && chunk.id) upstreamRequestId = chunk.id;
+			for (const choice of chunk.choices) {
+				if (choice.index !== 0) continue;
+				if (choice.delta.tool_calls?.length) {
+					throw new EngineFailure(
+						"invalid_response",
+						"Provider returned unsupported tool calls.",
+						502,
+						true,
+						upstreamRequestId,
+					);
+				}
+				if (choice.finish_reason) sawFinish = true;
+				const delta = choice.delta.content;
+				if (delta) {
+					text += delta;
+					await onDelta(delta);
+					if (signal?.aborted) throw aborted(true, upstreamRequestId);
+				}
+			}
+			if (
+				chunk.usage &&
+				validTokenCount(chunk.usage.prompt_tokens) &&
+				validTokenCount(chunk.usage.completion_tokens)
+			) {
+				inputTokens = chunk.usage.prompt_tokens;
+				outputTokens = chunk.usage.completion_tokens;
+			}
+		}
+		if (signal?.aborted) throw aborted(true, upstreamRequestId);
+		if (!sawFinish) {
+			throw new EngineFailure(
+				"incomplete_stream",
+				"Provider stream ended before completion.",
+				502,
+				true,
+				upstreamRequestId,
+			);
+		}
+		const pendingReview = inputTokens === null || outputTokens === null;
+		return {
+			text,
+			inputTokens,
+			outputTokens,
+			usageSource: pendingReview ? "missing" : "upstream_reported",
+			pendingReview,
+			upstreamRequestId,
+		};
+	} catch (error) {
+		if (error instanceof EngineFailure) throw error;
+		if (signal?.aborted || error instanceof OpenAI.APIUserAbortError)
+			throw aborted(true, upstreamRequestId);
+		if (error instanceof OpenAI.APIError) {
+			upstreamRequestId ??= error.requestID ?? null;
+			if (error.status === 429) {
+				const retry = Number(error.headers?.get("retry-after"));
+				throw new EngineFailure(
+					"rate_limited",
+					"Provider capacity is temporarily unavailable.",
+					429,
+					false,
+					upstreamRequestId,
+					Number.isFinite(retry) && retry > 0 ? Math.ceil(retry) : null,
+				);
+			}
+			if (error.status === 401 || error.status === 403) {
+				throw new EngineFailure(
+					"authorization",
+					"Provider connector needs authorization.",
+					503,
+					false,
+					upstreamRequestId,
+				);
+			}
+		}
+		throw new EngineFailure(
+			"upstream_unavailable",
+			"Provider request failed; usage requires review.",
+			502,
+			true,
+			upstreamRequestId,
+		);
+	} finally {
+		cancelStream?.();
+	}
+}
