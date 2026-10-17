@@ -9,6 +9,8 @@ Tag format:
 
 ## Unreleased
 
+- Fix missing homepage Monad badge and MON artwork by connecting the existing brand assets and styles to the hero.
+
 - Add official Monad and MON artwork to the landing page, align its primary color and responsive hero layout, and document brand asset sources.
 
 - Combine connector setup into one copy action using a five-minute, single-use launch code. The CLI exchanges it for a resource credential and only prompts locally for the upstream key; no long-lived key is included in command arguments.

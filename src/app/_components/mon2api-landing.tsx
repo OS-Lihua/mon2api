@@ -189,6 +189,13 @@ function NetworkSculpture() {
 				<circle cx="527" cy="219" fill="#b69aed" r="4" />
 				<path d="M475 88v16m-8-8h16M100 149v12m-6-6h12" stroke="#9c7ccf" />
 			</svg>
+			<div className={styles.monadOrbit}>
+				<Image alt="" height={64} src="/brand/monad/mon-token.svg" width={64} />
+				<span className={styles.monadOrbitCopy}>
+					MON
+					<span className={styles.monadOrbitCaption}>原生结算</span>
+				</span>
+			</div>
 		</div>
 	);
 }
@@ -370,6 +377,22 @@ export function Mon2ApiLanding() {
 				<section aria-labelledby="hero-title" className={styles.hero}>
 					<div className={`${styles.container} ${styles.heroGrid}`}>
 						<div className={styles.heroCopy}>
+							<a
+								className={styles.monadBadge}
+								href="https://monad.xyz"
+								rel="noreferrer"
+								target="_blank"
+							>
+								<Image
+									alt=""
+									height={20}
+									src="/brand/monad/logomark.svg"
+									style={{ height: "auto" }}
+									width={20}
+								/>
+								构建于 <strong>Monad</strong>
+								<ArrowUpRight aria-hidden="true" size={13} />
+							</a>
 							<h1 id="hero-title">
 								让每一份算力
 								<br />
