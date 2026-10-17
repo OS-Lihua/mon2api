@@ -263,7 +263,7 @@ function WalletSessionProvider({ children }: { children: React.ReactNode }) {
 					locale="zh-CN"
 					modalSize="compact"
 					theme={lightTheme({
-						accentColor: "#176b70",
+						accentColor: "#6e54ff",
 						accentColorForeground: "#ffffff",
 						borderRadius: "medium",
 						fontStack: "system",

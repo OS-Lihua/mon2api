@@ -9,6 +9,11 @@ Tag format:
 
 ## Unreleased
 
+- Align console and wallet styling with Monad's violet, lavender and near-black palette; add monospaced controls, a restrained dot texture and a rounded mon2api connector mark with matching browser icons.
+- Remove repeated console headings, workspace placeholders, promotional copy and implementation notes; keep concise pricing, data scope and action-specific guidance.
+- Add a custom two-ribbon mon2api mark and matching SVG/ICO browser icons; simplify overview flow decoration and improve explanatory text and charge detail readability after visual review.
+- Refine console contrast with a light overview and compact settlement flow; improve resource price hierarchy, searchable result counts, keyboard focus, and mobile touch targets.
+- Guide first-time use from resource pricing and budget creation to calling and billing; align market actions, clarify the budget price snapshot, expose billing shortcuts, and improve narrow-screen tables and metrics.
 - Bind escrow session IDs to the consumer wallet, preventing another wallet from occupying a pending ID; generate matching random IDs for new leases and cover the attack on a local EVM.
 - Document the AI and Web3 native product roadmap for model pricing, Magpie/CC Switch, Monad payments, CLI and MCP, with current capability boundaries.
 - Refresh the mon2api console with a mineral palette, a resource-to-settlement flow, clearer prices and states, accessible activity data, and responsive navigation. Label provider-listed prices and declared model IDs; show demo resources and the absence of comparable official prices without implying a discount. Keep desktop cards spacious and let users expand recent billing and API key records on demand.
