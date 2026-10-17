@@ -17,6 +17,7 @@ export type ListingView = {
 	model: string;
 	owner: string;
 	kind: "demo" | "gateway";
+	connectionMode: "api" | "oauth_pool";
 	enabled: boolean;
 	inputRate: number;
 	outputRate: number;

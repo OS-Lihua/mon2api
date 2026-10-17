@@ -9,6 +9,20 @@ Tag format:
 
 ## Unreleased
 
+- Default contracts, wallet network metadata and Web/worker startup to Monad testnet (10143); isolate its runtime directory, disable demo identities by default, and retain the configured network during RPC failures. Require explicit local mode for isolated EVM tests.
+
+- Add wallet-authenticated versioned REST APIs for merchant resource management, consumer budget sessions, API keys, request ledgers and settlements; add key-scoped usage lookup, strict OpenAPI contracts, local HTTP smoke coverage, and Chinese merchant/consumer integration guides.
+
+- Remove decorative homepage microcopy and rounded logo tiles, keeping the transparent connector mark.
+- Refine the mon2api connector icon with symmetric, stroke-free ribbons; synchronize the homepage, console, hero artwork and SVG/ICO favicons.
+- Add a Monad-inspired public homepage with an animated mon2api ribbon mark, responsive navigation, resource and settlement explanations, copyable TypeScript/Python SDK examples, FAQs and reduced-motion support; preserve the existing wallet-enabled console at `/console`.
+
+- Simplify overview helper text, duplicate network status and empty-state captions; move metric scope to a tooltip and screen-reader text, and show metric breakdowns only when nonzero.
+
+- Add distinct API and OAuth-pool resource onboarding, persist connection modes with an API-compatible default, expose mode filters through REST/OpenAPI, and keep OAuth authorization and account scheduling on the provider's pool gateway.
+- Remove demo sign-in and simulated resource creation from the user console; show gateway resources and their related records, with empty states when none exist. Retain database demo records for local tests.
+
+- Replace native budget-session dropdowns with styled, keyboard-accessible selectors, with option descriptions, selected indicators, and dialog-aware menus.
 - Align console and wallet styling with Monad's violet, lavender and near-black palette; add monospaced controls, a restrained dot texture and a rounded mon2api connector mark with matching browser icons.
 - Remove repeated console headings, workspace placeholders, promotional copy and implementation notes; keep concise pricing, data scope and action-specific guidance.
 - Add a custom two-ribbon mon2api mark and matching SVG/ICO browser icons; simplify overview flow decoration and improve explanatory text and charge detail readability after visual review.

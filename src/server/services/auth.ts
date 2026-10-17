@@ -18,17 +18,14 @@ import { z } from "zod";
 import { db } from "~/server/db";
 import type { Viewer } from "~/shared/mon2api";
 import { demoAccount, clients as publicChain } from "./chain";
+import { walletSignatureSchema } from "./mon2api.schema";
 import { chainConfig, demoEnabled, sessionPassword } from "./runtime";
+
+export { walletSignatureSchema } from "./mon2api.schema";
 
 const challengeLifetimeMs = 300_000;
 const signInStatement =
 	"Sign in to mon2api. This signature does not authorize token transfers.";
-// ERC-1271 signatures can contain several signatures and wallet-specific data.
-export const walletSignatureSchema = z
-	.string()
-	.max(2 + 8192 * 2)
-	.regex(/^0x(?:[\da-fA-F]{2})+$/);
-
 function walletAddress(address: string) {
 	try {
 		return getAddress(address);

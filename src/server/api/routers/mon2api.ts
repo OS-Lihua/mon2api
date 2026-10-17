@@ -20,6 +20,7 @@ import {
 	revokeKey,
 	snapshot,
 	toggleListing,
+	updateListing,
 	withdraw,
 } from "~/server/services/market";
 import { runChat } from "~/server/services/metering";
@@ -27,6 +28,7 @@ import {
 	addressSchema,
 	chatInput,
 	listingInput,
+	listingUpdateInput,
 	openSessionInput,
 	sessionIdSchema,
 } from "~/server/services/mon2api.schema";
@@ -64,9 +66,11 @@ const mutation = publicProcedure.use(async ({ ctx, next }) => {
 	return next();
 });
 export const mon2apiRouter = createTRPCRouter({
-	snapshot: publicProcedure.query(() =>
-		call(async () => snapshot(await viewer())),
-	),
+	snapshot: publicProcedure
+		.input(z.object({ gatewayOnly: z.boolean() }).strict().optional())
+		.query(({ input }) =>
+			call(async () => snapshot(await viewer(), input?.gatewayOnly)),
+		),
 	demoLogin: mutation
 		.input(z.object({ role: z.enum(["consumer", "provider"]) }))
 		.mutation(({ input }) => call(() => demoLogin(input.role))),
@@ -95,6 +99,15 @@ export const mon2apiRouter = createTRPCRouter({
 		.mutation(({ input }) =>
 			call(async () =>
 				toggleListing(await requireViewer(), input.id, input.enabled),
+			),
+		),
+	updateListing: mutation
+		.input(
+			z.object({ id: z.string().cuid(), changes: listingUpdateInput }).strict(),
+		)
+		.mutation(({ input }) =>
+			call(async () =>
+				updateListing(await requireViewer(), input.id, input.changes),
 			),
 		),
 	openSession: mutation

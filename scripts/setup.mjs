@@ -22,5 +22,5 @@ for (const [command, args] of [
 	if (result.status !== 0) process.exit(result.status || 1);
 }
 console.log(
-	"Database ready. Run pnpm dev for local EVM, settlement worker and web console.",
+	"Database ready. Configure Monad testnet contracts with pnpm deploy:testnet, then run pnpm dev for the settlement worker and web console. See docs/deployment/vercel.md.",
 );

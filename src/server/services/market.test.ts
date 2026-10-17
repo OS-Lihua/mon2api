@@ -1,11 +1,13 @@
 import type { Listing, Prisma } from "@prisma/client";
+import { unsealData } from "iron-session";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Viewer } from "~/shared/mon2api";
-import { confirmSession, openSession, snapshot } from "./market";
+import { confirmSession, createListing, openSession, snapshot } from "./market";
+import { listingInput } from "./mon2api.schema";
 
 const mocks = vi.hoisted(() => ({
 	db: {
-		listing: { findMany: vi.fn(), findUnique: vi.fn() },
+		listing: { findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
 		lease: {
 			findMany: vi.fn(),
 			findUnique: vi.fn(),
@@ -21,6 +23,7 @@ const mocks = vi.hoisted(() => ({
 	readSession: vi.fn(),
 	getChainId: vi.fn(),
 	inspectEscrowOwnerGuard: vi.fn(),
+	chainConfig: vi.fn(),
 }));
 
 vi.mock("~/server/db", () => ({ db: mocks.db }));
@@ -49,12 +52,13 @@ vi.mock("./chain", () => ({
 }));
 vi.mock("./runtime", () => ({
 	ensureChainBinding: vi.fn(),
-	chainConfig: () => ({
-		mode: "local",
-		chainId: 31337,
-		escrow: "0xescrow",
-		token: "0xtoken",
-	}),
+	validateConnectorUrl: (url: string) => {
+		if (new URL(url).origin !== "https://pool.example")
+			throw new Error("not allowed");
+		return url;
+	},
+	sessionPassword: () => "test-only-session-password-at-least-32-characters",
+	chainConfig: mocks.chainConfig,
 }));
 
 const createdAt = new Date("2026-10-17T00:00:00.000Z");
@@ -66,6 +70,7 @@ const listing: Listing = {
 	description: "Snapshot regression fixture",
 	model: "test-model",
 	kind: "demo",
+	connectionMode: "api",
 	inputRate: 1_000_000,
 	outputRate: 2_000_000,
 	concurrency: 2,
@@ -103,6 +108,12 @@ function lease(overrides: Partial<LeaseRow> = {}): LeaseRow {
 
 beforeEach(() => {
 	vi.resetAllMocks();
+	mocks.chainConfig.mockReturnValue({
+		mode: "local",
+		chainId: 31337,
+		escrow: "0xescrow",
+		token: "0xtoken",
+	});
 	mocks.db.listing.findMany.mockResolvedValue([listing]);
 	mocks.db.lease.findMany.mockResolvedValue([]);
 	mocks.db.meterRequest.findMany.mockResolvedValue([]);
@@ -118,6 +129,110 @@ beforeEach(() => {
 });
 
 describe("market snapshot accounting", () => {
+	it("shows Monad testnet as unavailable when no deployment is configured", async () => {
+		mocks.chainConfig.mockImplementationOnce(() => {
+			throw new Error("Missing deployment");
+		});
+		const result = await snapshot(null);
+		expect(result.network).toMatchObject({
+			mode: "monad-testnet",
+			chainId: 10143,
+			rpcUrl: "https://testnet-rpc.monad.xyz",
+			ready: false,
+		});
+	});
+	it.each(["disconnected", "wrong chain"])(
+		"retains the configured testnet when its RPC is %s",
+		async (failure) => {
+			mocks.chainConfig.mockReturnValue({
+				mode: "monad-testnet",
+				chainId: 10143,
+				escrow: "0xescrow",
+				token: "0xtoken",
+			});
+			if (failure === "disconnected")
+				mocks.getChainId.mockRejectedValueOnce(new Error("RPC disconnected"));
+			const result = await snapshot(null);
+			expect(result.network).toMatchObject({
+				mode: "monad-testnet",
+				chainId: 10143,
+				escrow: "0xescrow",
+				token: "0xtoken",
+				ready: false,
+			});
+		},
+	);
+	it("preserves the declared OAuth pool mode in snapshots", async () => {
+		mocks.db.listing.findMany.mockResolvedValue([
+			{ ...listing, kind: "gateway", connectionMode: "oauth_pool" },
+		]);
+		const result = await snapshot({ ...viewer, demo: false }, true);
+		expect(result.listings[0]?.connectionMode).toBe("oauth_pool");
+		expect(result.listings[0]).not.toHaveProperty("secret");
+		expect(result.listings[0]).not.toHaveProperty("baseUrl");
+	});
+	it("scopes the user console and all related records to gateway resources", async () => {
+		const walletViewer = { ...viewer, demo: false };
+		const gateway = { ...listing, kind: "gateway" };
+		mocks.db.listing.findMany.mockResolvedValue([gateway]);
+		mocks.db.lease.findMany.mockResolvedValueOnce([
+			lease({ listing: gateway }),
+		]);
+		const result = await snapshot(walletViewer, true);
+		const sessionWhere = {
+			OR: [{ consumer: viewer.address }, { provider: viewer.address }],
+			listing: { kind: "gateway" },
+		};
+		expect(mocks.db.listing.findMany).toHaveBeenCalledWith(
+			expect.objectContaining({ where: { kind: "gateway" } }),
+		);
+		expect(mocks.db.lease.findMany).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({ where: sessionWhere }),
+		);
+		for (const query of [
+			mocks.db.meterRequest.findMany,
+			mocks.db.settlement.findMany,
+		]) {
+			expect(query).toHaveBeenCalledWith(
+				expect.objectContaining({ where: { session: sessionWhere } }),
+			);
+		}
+		expect(mocks.db.accessKey.findMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: {
+					owner: viewer.address,
+					session: { listing: { kind: "gateway" } },
+				},
+			}),
+		);
+		expect(result.viewer).toEqual(walletViewer);
+		expect(result.listings[0]?.kind).toBe("gateway");
+		expect(result.metrics.spent).toBe(50);
+	});
+
+	it("shows an empty private console for a saved demo identity", async () => {
+		mocks.db.listing.findMany.mockResolvedValue([]);
+		const result = await snapshot(viewer, true);
+		expect(result.viewer).toBeNull();
+		expect(result.listings).toEqual([]);
+		expect(result.sessions).toEqual([]);
+		expect(result.requests).toEqual([]);
+		expect(result.keys).toEqual([]);
+		expect(result.settlements).toEqual([]);
+		expect(result.metrics).toMatchObject({
+			requests: 0,
+			spent: 0,
+			claimable: null,
+			walletBalance: null,
+		});
+		expect(mocks.db.lease.findMany).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({ where: { id: "__none__" } }),
+		);
+		expect(mocks.chainBalances).not.toHaveBeenCalled();
+	});
+
 	it("excludes written-off usage from pending and preserves recorded amounts", async () => {
 		mocks.db.lease.findMany.mockResolvedValueOnce([lease()]);
 		mocks.db.meterRequest.findMany.mockResolvedValue([
@@ -253,6 +368,56 @@ describe("market snapshot accounting", () => {
 		});
 		expect(result.sessions).toEqual([]);
 		expect(mocks.chainBalances).not.toHaveBeenCalled();
+	});
+});
+
+describe("resource connection persistence", () => {
+	it.each(["api", "oauth_pool"])(
+		"encrypts the inference key and stores %s under the owner",
+		async (connectionMode) => {
+			mocks.db.listing.create.mockResolvedValue({ id: "resource-id" });
+			const input = listingInput.parse({
+				name: "My resource",
+				description: "Provider resource",
+				model: "example-model",
+				kind: "gateway",
+				connectionMode,
+				baseUrl: "https://pool.example/v1",
+				apiKey: "test-dedicated-inference-key",
+				inputRate: 1,
+				outputRate: 2,
+			});
+			expect(await createListing(viewer, input)).toEqual({ id: "resource-id" });
+			const args = mocks.db.listing.create.mock.calls[0]?.[0];
+			expect(args).toMatchObject({
+				data: { owner: viewer.address, connectionMode, baseUrl: input.baseUrl },
+				select: { id: true },
+			});
+			expect(args.data.secret).not.toContain(input.apiKey);
+			expect(
+				await unsealData(args.data.secret, {
+					password: "test-only-session-password-at-least-32-characters",
+					ttl: 0,
+				}),
+			).toBe(input.apiKey);
+		},
+	);
+	it("applies the origin allowlist to OAuth pools before storing credentials", async () => {
+		const input = listingInput.parse({
+			name: "My pool",
+			description: "Provider pool",
+			model: "example-model",
+			kind: "gateway",
+			connectionMode: "oauth_pool",
+			baseUrl: "https://unapproved.example/v1",
+			apiKey: "test-pool-key",
+			inputRate: 1,
+			outputRate: 2,
+		});
+		await expect(createListing(viewer, input)).rejects.toMatchObject({
+			code: "connector_not_allowed",
+		});
+		expect(mocks.db.listing.create).not.toHaveBeenCalled();
 	});
 });
 

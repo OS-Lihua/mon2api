@@ -14,6 +14,8 @@ import {
 } from "~/server/services/mon2api.contract";
 import { publicChatInput } from "~/server/services/mon2api.schema";
 
+import { registerCommerce } from "./commerce";
+
 const registry = new OpenAPIRegistry();
 registry.registerComponent("securitySchemes", "bearerAuth", {
 	type: "http",
@@ -95,15 +97,17 @@ registry.registerPath({
 	},
 });
 
+registerCommerce(registry, apiError);
+
 export const openApiDocument = new OpenApiGeneratorV31(
 	registry.definitions,
 ).generateDocument({
 	openapi: "3.1.0",
 	info: {
 		title: "mon2api API",
-		version: "0.1.0",
+		version: "0.2.0",
 		description:
-			"Text-only Chat Completions gateway. Off-chain metering and prepaid on-chain settlement. Test dUSD uses 6 decimals.",
+			"Merchant and consumer management over wallet sessions; text inference over scoped API keys. Management endpoints use /api/v1 only. /v1 is an inference alias. Off-chain metering and prepaid on-chain settlement. Test dUSD uses 6 decimals.",
 	},
 	servers: [{ url: "/api/v1" }, { url: "/v1" }],
 	security: [{ bearerAuth: [] }],

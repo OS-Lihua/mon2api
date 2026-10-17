@@ -7,7 +7,7 @@ const mnemonic = "test test test test test test test test test test test junk";
 async function main() {
 	if (
 		process.env.ALLOW_DEMO !== "true" ||
-		process.env.MON2API_MODE === "monad-testnet"
+		process.env.MON2API_MODE !== "local"
 	) {
 		console.log("Demo seed disabled.");
 		return;

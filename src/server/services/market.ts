@@ -7,6 +7,7 @@ import { getAddress, keccak256, stringToHex } from "viem";
 import type { z } from "zod";
 import { db } from "~/server/db";
 import type { OpenSessionResult, Snapshot, Viewer } from "~/shared/mon2api";
+import { MONAD_TESTNET } from "~/shared/network";
 import { AppError } from "./auth";
 import {
 	chainBalances,
@@ -17,7 +18,11 @@ import {
 	readSession,
 } from "./chain";
 import { inspectEscrowOwnerGuard } from "./escrow-version";
-import type { listingInput, openSessionInput } from "./mon2api.schema";
+import type {
+	listingInput,
+	listingUpdateInput,
+	openSessionInput,
+} from "./mon2api.schema";
 import {
 	chainConfig,
 	demoEnabled,
@@ -58,6 +63,7 @@ export async function createListing(
 			description: input.description,
 			model: input.model,
 			kind: input.kind,
+			connectionMode: input.connectionMode,
 			inputRate: input.inputRate,
 			outputRate: input.outputRate,
 			concurrency: input.concurrency,
@@ -75,6 +81,19 @@ export async function toggleListing(
 	const updated = await db.listing.updateMany({
 		where: { id, owner: user.address },
 		data: { enabled, status: enabled ? "READY" : "PAUSED" },
+	});
+	if (updated.count !== 1)
+		throw new AppError("not_found", "资源不存在或不属于此钱包。", 404);
+	return { ok: true };
+}
+export async function updateListing(
+	user: Viewer,
+	id: string,
+	input: z.infer<typeof listingUpdateInput>,
+) {
+	const updated = await db.listing.updateMany({
+		where: { id, owner: user.address },
+		data: input,
 	});
 	if (updated.count !== 1)
 		throw new AppError("not_found", "资源不存在或不属于此钱包。", 404);
@@ -239,12 +258,20 @@ export async function withdraw(user: Viewer) {
 		? { mode: "demo" as const, txHash: await demoWithdraw(user.address) }
 		: { mode: "wallet" as const };
 }
-export async function snapshot(user: Viewer | null): Promise<Snapshot> {
+export async function snapshot(
+	user: Viewer | null,
+	gatewayOnly = false,
+): Promise<Snapshot> {
+	if (gatewayOnly && user?.demo) user = null;
 	const listingRows = await db.listing.findMany({
+		...(gatewayOnly ? { where: { kind: "gateway" } } : {}),
 		orderBy: { createdAt: "asc" },
 	});
 	const leaseWhere = user
-		? { OR: [{ consumer: user.address }, { provider: user.address }] }
+		? {
+				OR: [{ consumer: user.address }, { provider: user.address }],
+				...(gatewayOnly ? { listing: { kind: "gateway" } } : {}),
+			}
 		: { id: "__none__" };
 	const [leases, requests, keys, settlements, running] = await Promise.all([
 		db.lease.findMany({
@@ -260,7 +287,10 @@ export async function snapshot(user: Viewer | null): Promise<Snapshot> {
 			take: 200,
 		}),
 		db.accessKey.findMany({
-			where: { owner: user?.address || "__none__" },
+			where: {
+				owner: user?.address || "__none__",
+				...(gatewayOnly ? { session: { listing: { kind: "gateway" } } } : {}),
+			},
 			orderBy: { createdAt: "desc" },
 		}),
 		db.settlement.findMany({
@@ -275,15 +305,11 @@ export async function snapshot(user: Viewer | null): Promise<Snapshot> {
 		}),
 	]);
 	let network: Snapshot["network"] = {
-		mode: "local",
-		name: "Local EVM",
-		chainId: 31337,
-		rpcUrl: "http://127.0.0.1:8545",
+		...MONAD_TESTNET,
 		escrow: "",
 		token: "",
 		feeBps: 500,
 		ready: false,
-		explorer: "",
 	};
 	let balances: Pick<Snapshot["metrics"], "claimable" | "walletBalance"> = {
 		claimable: null,
@@ -291,23 +317,21 @@ export async function snapshot(user: Viewer | null): Promise<Snapshot> {
 	};
 	try {
 		const config = chainConfig();
-		const { publicClient } = clients();
-		const chainId = await publicClient.getChainId();
 		network = {
 			...network,
 			mode: config.mode,
 			name: config.mode === "local" ? "Local EVM" : "Monad Testnet",
-			chainId,
+			chainId: config.chainId,
 			rpcUrl:
 				config.mode === "local"
 					? "http://127.0.0.1:8545"
-					: "https://testnet-rpc.monad.xyz",
+					: MONAD_TESTNET.rpcUrl,
 			escrow: config.escrow,
 			token: config.token,
-			ready: chainId === config.chainId,
-			explorer:
-				config.mode === "monad-testnet" ? "https://testnet.monadscan.com" : "",
+			explorer: config.mode === "monad-testnet" ? MONAD_TESTNET.explorer : "",
 		};
+		const { publicClient } = clients();
+		network.ready = (await publicClient.getChainId()) === config.chainId;
 		if (user) balances = await chainBalances(user.address);
 	} catch {
 		/* A disconnected chain is shown explicitly; never fake balances. */
@@ -340,6 +364,7 @@ export async function snapshot(user: Viewer | null): Promise<Snapshot> {
 			model: l.model,
 			owner: l.owner,
 			kind: l.kind === "demo" ? "demo" : "gateway",
+			connectionMode: l.connectionMode === "oauth_pool" ? "oauth_pool" : "api",
 			enabled: l.enabled,
 			inputRate: l.inputRate,
 			outputRate: l.outputRate,

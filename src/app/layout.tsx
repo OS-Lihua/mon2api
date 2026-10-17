@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 		{ rel: "icon", url: "/favicon.ico", sizes: "16x16 32x32 48x48" },
 		{
 			rel: "icon",
-			url: "/mon2api-mark.svg",
+			url: "/icon.svg",
 			type: "image/svg+xml",
 			sizes: "any",
 		},

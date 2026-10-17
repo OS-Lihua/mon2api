@@ -2,7 +2,7 @@
 
 AI 资源租赁市场。提供者挂牌号池连接器，开发者锁定预算并通过统一 API 调用；链下计量，链上结算与分账。
 
-当前可运行本地全栈 MVP：资源市场、提供者控制台、调用实验室、API Key、账单、自动结算、退款和提现。演示模型明确输出模拟标记；本地资金操作是真实 EVM 交易，使用无实际价值的 dUSD 测试代币。新版合约已在 Monad 测试网独立完成链上资金验证，尚未接入测试网 Web/数据库、真实浏览器钱包或真实网关；证据见[演示文档](docs/PRODUCT_DEMO.md#monad-测试网合约证据)。
+合约、钱包和结算默认使用 Monad 测试网（chain 10143），使用无实际价值的 dUSD 测试代币。功能包括资源市场、提供者控制台、调用实验室、API Key、账单、自动结算、退款和提现。新版合约已独立完成测试网资金验证；浏览器钱包与真实网关的完整流程仍待验收，证据见[演示文档](docs/PRODUCT_DEMO.md#monad-测试网合约证据)。本地 EVM 仅供显式选择的隔离测试。
 
 ## 本地启动
 
@@ -11,16 +11,37 @@ AI 资源租赁市场。提供者挂牌号池连接器，开发者锁定预算�
 ```bash
 pnpm install
 pnpm setup
+# 配置测试网部署密钥与独立数据库，详见 docs/deployment/vercel.md
+pnpm deploy:testnet
 pnpm dev
 ```
 
-打开 [本地控制台](http://localhost:3000)。`setup` 创建带随机会话密码的本地 `.env`，启动 PostgreSQL，执行迁移并添加演示资源。`dev` 启动持久化本地 EVM、每10秒运行的结算 worker 和 Web 服务。首次为四个公开测试账户各分配500 dUSD；重启复用部署和账本。
+用户端仅展示数据库中的网关资源及其关联会话、请求、密钥和结算。没有网关资源或业务记录时显示空状态。使用者需连接钱包并签名登录；接入资源需填写真实上游地址、模型 ID 和 API Key。预置演示数据保留在数据库中，供本地测试脚本使用，不显示在用户端。旧的演示登录在用户端按未登录处理。
 
-控制台概览以“资源 → 预算 → 用量 → 结算”展示使用路径，并根据活跃预算会话引导前往市场或继续调用。市场卡片并列显示提供者挂牌的输入和输出单价（dUSD / 百万 Token），创建预算时再次展示价格快照；模型 ID 由提供者声明。调用后可直接跳转调用账单，账单页可快速定位会话、请求与链上结算。模拟资源无官方同款；连接器模型身份未核验，均无可比官方参考价。本地 dUSD 无兑付价值，不与美元价格比较。进入使用者演示，创建预算会话并调用模型；切换提供者演示可管理自己的资源和提现。概览和账单中的统计基于当前已加载的最近 200 条相关请求和最近 100 个相关会话，并非完整历史总账。桌面账单默认展示最近 5 个会话、8 条请求和 8 笔结算；API 密钥页默认展示最近 8 个密钥，点击“查看全部”可分别展开当前已加载的记录。待核对用量与无法收回的结算会分别标记，未知 Token 用量不会显示为零。演示签名仅允许回环 chain 31337。真实钱包使用 RainbowKit 钱包选择与签名登录；登录签名不授权代币转账，代币授权和预算锁定需分别确认交易。
+打开 [本地首页](http://localhost:3000) 或 [业务控制台](http://localhost:3000/console)。`setup` 创建带随机会话密码的 `.env`，默认设置 `MON2API_MODE=monad-testnet` 和 `ALLOW_DEMO=false`，启动 PostgreSQL 并执行迁移，不添加演示资源。`deploy:testnet` 写入公开部署配置；已有部署可使用其完整 `chain.json` 或 `CHAIN_CONFIG_JSON`。`dev` 启动 Web 和每 10 秒运行的结算 worker，直接连接测试网，不启动本地 EVM。新钱包需自行准备测试 MON 和 dUSD。已有本地账本必须保留，并为测试网使用独立数据库。
+
+控制台概览以“资源 → 预算 → 用量 → 结算”展示使用路径，并根据活跃预算会话引导前往市场或继续调用。市场卡片并列显示提供者挂牌的输入和输出单价（dUSD / 百万 Token），创建预算时再次展示价格快照；模型 ID 由提供者声明。调用后可直接跳转调用账单，账单页可快速定位会话、请求与链上结算。模拟资源无官方同款；连接器模型身份未核验，均无可比官方参考价。本地 dUSD 无兑付价值，不与美元价格比较。连接钱包后，可创建预算会话并调用网关资源，也可管理自己的资源和提现。概览和账单中的统计基于当前已加载的最近 200 条相关请求和最近 100 个相关会话，并非完整历史总账。桌面账单默认展示最近 5 个会话、8 条请求和 8 笔结算；API 密钥页默认展示最近 8 个密钥，点击“查看全部”可分别展开当前已加载的记录。待核对用量与无法收回的结算会分别标记，未知 Token 用量不会显示为零。演示签名仅允许回环 chain 31337。真实钱包使用 RainbowKit 钱包选择与签名登录；登录签名不授权代币转账，代币授权和预算锁定需分别确认交易。
+
+首页 `/` 采用浅薰衣草底色、紫色立体品牌图形、响应式导航、资源与结算流程、可切换并复制的 TypeScript/Python 接入示例，以及常见问题。卡片光斑交互参考 [React Bits SpotlightCard](https://reactbits.dev/components/spotlight-card)，使用独立 CSS 和 React 实现，无新增动效依赖。原业务控制台保留在 `/console`，首页按钮可直接进入。API 示例中的 `MON2API_KEY`、`MON2API_BASE_URL` 和 `MON2API_MODEL` 是调用方配置，分别对应会话密钥、部署地址加 `/v1` 和会话资源的模型 ID。
 
 界面参考 [Monad 官方视觉体系](https://monad.xyz/brand-and-media-kit)，采用鲜紫、浅薰衣草紫、近黑导航与等宽标签；概览在宽屏并列展示操作入口和结算流程。资源市场支持实时显示搜索结果数量与一键清空；手机端提供折叠导航、可横向滚动的表格和更大的操作按钮。
 
-品牌标志以两条圆润的相向折带表达连接与交换，使用薰衣草紫与白色，侧栏和浏览器图标保持一致。矢量源文件为 [`public/mon2api-mark.svg`](public/mon2api-mark.svg)。
+品牌标志以两条圆润的相向折带表达连接与交换，统一圆角与间距，使用薰衣草紫与白色的无描边轮廓。首页、控制台与首屏图形保持一致。透明矢量源为 [`public/mon2api-mark.svg`](public/mon2api-mark.svg)，透明背景的浏览器图标为 [`public/icon.svg`](public/icon.svg)，ICO 包含 16、32、48 像素版本。浅色页面使用紫色与深紫色，深色侧栏使用薰衣草紫与白色；不使用圆角底板。首页省去 BETA、英文眉题、装饰标签与重复标语，保留功能说明和必要的 API 配置提示。
+
+概览精简重复的辅助说明，空状态只保留必要标题。统计范围可悬停查看，并保留屏幕阅读器说明；输入与输出明细、待结算金额仅在非零时显示。价格单位和测试币标识保留。
+
+预算会话使用统一的下拉选择器，选项显示说明和选中标记。支持方向键选择、输入文字定位和 Escape 关闭菜单；弹窗内先关闭菜单，再按 Escape 关闭弹窗。没有活跃预算会话时，调用配置中的选择器显示空状态并禁用。
+
+## 商家资源接入
+
+「接入资源」提供两种方式，并在资源列表中分别标记：
+
+- **API 接入**：填写上游服务地址、API Key、实际模型 ID、输入/输出报价和并发上限。
+- **OAuth 号池**：先在 vm2api 等号池网关完成账号授权，再创建仅绑定目标账号池的专用推理 Key；在 mon2api 填写该网关地址、专用 Key、模型 ID 和报价。不要填写网关管理密钥、账号密码、OAuth access token 或 refresh token。
+
+两种方式均要求网关支持 `POST /v1/chat/completions`（包括流式响应及 Token usage），且 origin 已在 `UPSTREAM_ALLOWED_ORIGINS` 中配置。OAuth 授权、令牌刷新、账号健康和调度由号池网关管理；mon2api 保存接入类型和加密后的推理 Key，处理资源挂牌、预算、计量和结算。接入类型由商家声明，不表示平台已核验账号授权。尚未配置真实号池网关时，不能将本地界面验证视为真实 OAuth 账号调用验收。
+
+REST 创建资源沿用 `kind: "gateway"`，新增 `connectionMode: "api" | "oauth_pool"`，省略时默认为 `api`。`GET /api/v1/resources` 和 `GET /api/v1/merchant/resources` 支持按 `connectionMode` 筛选。接入类型与连接凭证在上架后不可更改；更换时请暂停旧资源并新建资源。升级已有本地库时运行 `pnpm db:migrate`；生产迁移需按独立迁移流程执行。
 
 ## 钱包连接
 
@@ -30,7 +51,7 @@ pnpm dev
 
 - 不配置服务账号即可连接已安装的 MetaMask、Rabby 等 EIP-6963 浏览器钱包；另有 Rabby 安装入口和通用注入连接器。
 - 在 `.env` 配置 `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` 后重新构建，可增加 MetaMask、Rainbow 与通用 WalletConnect 扫码入口。ID 从 [WalletConnect Dashboard](https://dashboard.walletconnect.com) 获取；仓库不包含任何人的项目 ID。
-- 当前仅配置本地 EVM（31337）或部署所在的 Monad 测试网（10143）。手机无法访问电脑的回环 RPC，扫码端到端验证须使用可访问的测试网部署。
+- 默认配置 Monad 测试网（10143）。本地 EVM（31337）仅在显式设置 `MON2API_MODE=local` 时使用；手机扫码需使用可访问的测试网部署。
 - 切换账户或断开钱包会使旧的钱包登录失效，并清理界面中的私密状态；演示身份保持独立。授权、锁定预算等多步操作在每一步前重新核实当前账户与网络。
 
 浏览器选择弹窗和模拟连接器的账号/网络边界已验证。真实扩展钱包签名、手机扫码和测试网资金操作需对应钱包、Project ID 与测试网部署再验收。
@@ -39,14 +60,15 @@ pnpm dev
 | --- | --- |
 | Web | `http://localhost:3000` |
 | PostgreSQL | `127.0.0.1:55432`，数据库 `mon2api` |
-| 本地 EVM | `http://127.0.0.1:8545`，chain 31337 |
-| 部署信息 | `.runtime/chain.json`，仅公开字段 |
-| 链状态 | `.runtime/ganache/` |
+| Monad 测试网 | `https://testnet-rpc.monad.xyz`，chain 10143 |
+| 部署信息 | `.runtime/monad-testnet/chain.json`，仅公开字段 |
 | API 规范 | `/api/v1/openapi.json` |
 
-数据库和链必须成对保留，不能只删除其中一个后继续使用原账本。每套部署使用独立 `DATABASE_URL` 和 `MON2API_DATA_DIR`；后端验证数据库与部署的绑定。旧托管合约没有会话 ID 所有权保护，服务端会拒绝在旧部署新开会话；已有会话仍可结算、关闭、提现。本次展示使用干净的独立数据库 `mon2api_presentation_20261017` 与 `.runtime/presentation-20261017`；已验证的 `mon2api_showcase_20261017`、原账本及各自链数据均保留。
+数据库和链必须成对保留，不能只删除其中一个后继续使用原账本。每套部署使用独立 `DATABASE_URL` 和 `MON2API_DATA_DIR`；后端验证数据库与部署的绑定。旧托管合约没有会话 ID 所有权保护，服务端会拒绝在旧部署新开会话；已有会话仍可结算、关闭、提现。此前本地展示的 `mon2api_presentation_20261017`、`mon2api_showcase_20261017` 及各自链数据均保留。默认运行目录为 `.runtime/monad-testnet`。隔离本地测试需显式设置 `MON2API_MODE=local`、`ALLOW_DEMO=true`、独立 `DATABASE_URL` 和 `MON2API_DATA_DIR`，再运行 `pnpm setup` 与 `pnpm dev`；`test:e2e`、`test:api` 和故障注入脚本仍只接受本地链。
 
 ## API 调用
+
+商家资源管理、消费者预算会话、Key 和账单查询使用 `/api/v1`，通过钱包签名登录后的 Cookie 认证。推理使用绑定会话的独立 API Key。接入步骤见 [API 总览](docs/API.md)、[商家指南](docs/MERCHANT_GUIDE.md) 和 [下游指南](docs/CONSUMER_GUIDE.md)；完整契约由 `/api/v1/openapi.json` 提供。
 
 在控制台为自己的活跃会话创建平台 Key。Key只显示一次，绑定一个模型、提供者和预算；数据库只保存其哈希。
 
@@ -58,7 +80,7 @@ curl http://localhost:3000/v1/chat/completions \
   -d '{"model":"mon2api-demo","messages":[{"role":"user","content":"Explain settlement"}],"max_tokens":512,"stream":true,"stream_options":{"include_usage":true}}'
 ```
 
-官方 OpenAI SDK 可直接调用兼容接口。下面的示例为每次新调用生成一个请求键；重试同一次调用时须复用原键。服务端会拒绝重复键（409），不会再次调用或扣款。因此，响应丢失后不要用新键重试：用原键确认请求是否已受理，再按时间和模型核对账单状态，确认结果后才能发起新调用。
+官方 OpenAI SDK 可直接调用兼容接口。下面的示例为每次新调用生成一个请求键；重试同一次调用时须复用原键。服务端会拒绝重复键（409），不会再次调用或扣款。响应丢失后，用原 Key 查询 `GET /api/v1/requests/lookup?idempotency_key=原请求键`，核对请求和费用状态；不要用新键重复付费调用。查询不返回生成文本，404 也不能证明在途调用从未受理。
 
 ```ts
 import { randomUUID } from "node:crypto";
@@ -100,12 +122,17 @@ worker每10秒优先处理待结算与待关闭会话，并分页巡检活跃会
 pnpm verify
 # 保持 pnpm dev 运行，在另一终端执行
 pnpm test:e2e
+# REST 登录、资源管理、权限隔离与账单查询（需要 ALLOW_DEMO=true）
+pnpm test:api
 ```
 
 verify顺序运行格式/lint、TypeScript、Vitest和生产构建。端到端smoke仅允许本地演示模式，覆盖普通和流式调用、用量、重复请求、结算幂等、关闭退款、Key撤销和提供者提现。测试会保留审计账单。
 
 ## 文档
 
+- [API 认证、目录与错误处理](docs/API.md)
+- [商家资源管理与核账](docs/MERCHANT_GUIDE.md)
+- [下游预算、Key 与模型调用](docs/CONSUMER_GUIDE.md)
 - [五分钟本地演示与产品主张](docs/PRODUCT_DEMO.md)
 - [模型广场、工具导入、Monad 与支付路线](docs/PRODUCT_STRATEGY.md)
 - [MVP模块职责](docs/MVP.md)

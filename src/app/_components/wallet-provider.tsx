@@ -81,7 +81,10 @@ function configureWallet(network: NetworkInfo) {
 }
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
-	const snapshot = api.mon2api.snapshot.useQuery(undefined, { retry: 1 });
+	const snapshot = api.mon2api.snapshot.useQuery(
+		{ gatewayOnly: true },
+		{ retry: 1 },
+	);
 	const network = snapshot.data?.network;
 	if (!network) {
 		return (
@@ -141,7 +144,7 @@ function WalletSessionProvider({ children }: { children: React.ReactNode }) {
 	const account = useAccount();
 	const config = useConfig();
 	const { disconnectAsync } = useDisconnect();
-	const snapshot = api.mon2api.snapshot.useQuery();
+	const snapshot = api.mon2api.snapshot.useQuery({ gatewayOnly: true });
 	const challenge = api.mon2api.walletChallenge.useMutation();
 	const login = api.mon2api.walletLogin.useMutation();
 	const { mutateAsync: logout } = api.mon2api.logout.useMutation();

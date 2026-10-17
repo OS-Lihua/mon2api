@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { chainConfig, demoEnabled } from "./runtime";
+import { chainConfig, demoEnabled, runtimeDirectory } from "./runtime";
 
 vi.mock("~/server/db", () => ({ db: {} }));
 
@@ -23,6 +23,23 @@ function config(mode: "local" | "monad-testnet") {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("demo identity chain boundary", () => {
+	it("defaults to Monad testnet and rejects implicit local deployments", () => {
+		vi.stubEnv("MON2API_MODE", "");
+		vi.stubEnv("MON2API_DATA_DIR", "");
+		vi.stubEnv("CHAIN_CONFIG_JSON", config("monad-testnet"));
+		expect(chainConfig().chainId).toBe(10143);
+		expect(runtimeDirectory()).toMatch(/\.runtime\/monad-testnet$/);
+		vi.stubEnv("CHAIN_CONFIG_JSON", config("local"));
+		expect(() => chainConfig()).toThrow("MON2API_MODE does not match");
+	});
+	it("rejects a non-testnet chain ID in testnet mode", () => {
+		vi.stubEnv("MON2API_MODE", "monad-testnet");
+		vi.stubEnv(
+			"CHAIN_CONFIG_JSON",
+			config("monad-testnet").replace("10143", "143"),
+		);
+		expect(() => chainConfig()).toThrow("Only Monad testnet is supported");
+	});
 	it("enables the public demo only for a matching loopback deployment", () => {
 		vi.stubEnv("ALLOW_DEMO", "true");
 		vi.stubEnv("MON2API_MODE", "local");

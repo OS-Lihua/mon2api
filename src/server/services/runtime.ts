@@ -18,7 +18,10 @@ export const chainConfigSchema = z.object({
 export type ChainConfig = z.infer<typeof chainConfigSchema>;
 export const runtimeDirectory = () =>
 	path.resolve(
-		/* turbopackIgnore: true */ process.env.MON2API_DATA_DIR || ".runtime",
+		/* turbopackIgnore: true */ process.env.MON2API_DATA_DIR ||
+			(process.env.MON2API_MODE === "local"
+				? ".runtime"
+				: ".runtime/monad-testnet"),
 	);
 export function chainConfig(): ChainConfig {
 	const value = chainConfigSchema.parse(
@@ -35,7 +38,7 @@ export function chainConfig(): ChainConfig {
 		throw new Error("Local chain configuration must use loopback chain 31337.");
 	if (value.mode === "monad-testnet" && value.chainId !== 10143)
 		throw new Error("Only Monad testnet is supported.");
-	if (process.env.MON2API_MODE && process.env.MON2API_MODE !== value.mode)
+	if ((process.env.MON2API_MODE || "monad-testnet") !== value.mode)
 		throw new Error(
 			"MON2API_MODE does not match the active chain configuration.",
 		);
@@ -45,7 +48,7 @@ export function sessionPassword(): string {
 	if (process.env.SESSION_PASSWORD && process.env.SESSION_PASSWORD.length >= 32)
 		return process.env.SESSION_PASSWORD;
 	if (
-		process.env.MON2API_MODE === "monad-testnet" ||
+		process.env.MON2API_MODE !== "local" ||
 		process.env.NODE_ENV === "production"
 	)
 		throw new Error("Set SESSION_PASSWORD to at least 32 random characters.");
@@ -60,7 +63,7 @@ export function sessionPassword(): string {
 }
 export const demoEnabled = () =>
 	process.env.ALLOW_DEMO === "true" &&
-	process.env.MON2API_MODE !== "monad-testnet" &&
+	process.env.MON2API_MODE === "local" &&
 	chainConfig().mode === "local";
 export function validateConnectorUrl(raw: string): string {
 	const url = new URL(raw);

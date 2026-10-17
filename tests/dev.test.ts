@@ -19,6 +19,10 @@ function setup(production = false) {
 			(command: string, args: string[], options: SpawnOptions) => ChildProcess
 		>();
 	for (const child of children) spawnChild.mockReturnValueOnce(child);
+	const environment: NodeJS.ProcessEnv = {
+		MON2API_MODE: "local",
+		NODE_ENV: "test",
+	};
 	const runtime = Object.assign(new EventEmitter(), {
 		execPath: "/fake/node",
 		argv: [
@@ -27,6 +31,7 @@ function setup(production = false) {
 			...(production ? ["--production"] : []),
 		],
 		exitCode: undefined as number | string | undefined,
+		env: environment,
 		stdout: { write: vi.fn((_data: unknown) => true) },
 		stderr: { write: vi.fn(() => true) },
 	});
@@ -37,6 +42,27 @@ function setup(production = false) {
 }
 
 describe("dev process supervision with isolated fake children", () => {
+	it.each([undefined, "monad-testnet"])(
+		"starts web and worker without a local chain when mode is %s",
+		(mode) => {
+			const { start, spawnChild, runtime, children } = setup();
+			runtime.env.MON2API_MODE = mode;
+			start();
+			expect(spawnChild.mock.calls.map((call) => call[1])).toEqual([
+				["node_modules/next/dist/bin/next", "dev", "--hostname", "127.0.0.1"],
+				["--conditions=react-server", "--import", "tsx", "scripts/worker.ts"],
+			]);
+			children[1]?.emit("exit", 23, null);
+			expect(runtime.exitCode).toBe(23);
+			expect(children[0]?.kill).toHaveBeenCalledWith("SIGTERM");
+		},
+	);
+	it("rejects an unsupported network before starting processes", () => {
+		const { start, spawnChild, runtime } = setup();
+		runtime.env.MON2API_MODE = "mainnet";
+		expect(start).toThrow("MON2API_MODE must be");
+		expect(spawnChild).not.toHaveBeenCalled();
+	});
 	it("waits for readiness across arbitrary stdout chunks and starts dependents once", () => {
 		const { chain, spawnChild, runtime, start, ready } = setup();
 		start();

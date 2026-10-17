@@ -19,7 +19,6 @@ import {
 	Layers3,
 	LayoutDashboard,
 	LoaderCircle,
-	LogOut,
 	Menu,
 	Network,
 	Plus,
@@ -43,6 +42,7 @@ import {
 	useState,
 } from "react";
 import { getAddress, isHex } from "viem";
+import { ConsoleSelect } from "~/app/_components/console-select";
 import { useMon2ApiWallet } from "~/app/_components/wallet-provider";
 import { escrowAbi, tokenAbi } from "~/lib/abi";
 import type {
@@ -164,14 +164,14 @@ function Empty({
 }: {
 	icon?: typeof Activity;
 	title: string;
-	description: string;
+	description?: string;
 	children?: ReactNode;
 }) {
 	return (
 		<div className="empty-state">
 			<Icon size={27} strokeWidth={1.3} />
 			<h3>{title}</h3>
-			<p>{description}</p>
+			{description && <p>{description}</p>}
 			{children}
 		</div>
 	);
@@ -221,11 +221,13 @@ function Modal({
 	title,
 	onClose,
 	children,
+	className = "",
 }: {
 	title: string;
 	error?: string | null;
 	onClose: () => void;
 	children: ReactNode;
+	className?: string;
 }) {
 	const dialogRef = useRef<HTMLDialogElement>(null);
 	useEffect(() => {
@@ -236,7 +238,7 @@ function Modal({
 	return (
 		<dialog
 			aria-label={title}
-			className="modal"
+			className={`modal ${className}`}
 			onCancel={(event) => {
 				event.preventDefault();
 				onClose();
@@ -328,12 +330,13 @@ export function Mon2ApiConsole() {
 	const [showAllRequests, setShowAllRequests] = useState(false);
 	const [showAllSettlements, setShowAllSettlements] = useState(false);
 	const [showAllKeys, setShowAllKeys] = useState(false);
-	const snapshot = api.mon2api.snapshot.useQuery(undefined, {
-		refetchInterval: 15_000,
-		retry: 1,
-	});
-	const demoLogin = api.mon2api.demoLogin.useMutation();
-	const logout = api.mon2api.logout.useMutation();
+	const snapshot = api.mon2api.snapshot.useQuery(
+		{ gatewayOnly: true },
+		{
+			refetchInterval: 15_000,
+			retry: 1,
+		},
+	);
 	const createListing = api.mon2api.createListing.useMutation();
 	const toggleListing = api.mon2api.toggleListing.useMutation();
 	const openSession = api.mon2api.openSession.useMutation();
@@ -482,19 +485,6 @@ export function Mon2ApiConsole() {
 			if (isCurrent()) setBusy(null);
 		}
 	};
-	const loginDemo = (role: "consumer" | "provider") =>
-		run("login", async () => {
-			await demoLogin.mutateAsync({ role });
-			setMessages([]);
-			setSelectedSession("");
-			setConversationId("");
-			setNewKey(null);
-			setNotice(
-				role === "consumer"
-					? "已进入使用者演示。预算使用本地测试代币，模型响应为模拟。"
-					: "已切换为资源提供者，可管理种子资源并提取已结算收益。",
-			);
-		});
 	const rent = (event: FormEvent) => {
 		event.preventDefault();
 		void run("rent", async (isCurrent) => {
@@ -628,21 +618,20 @@ export function Mon2ApiConsole() {
 		event.preventDefault();
 		const form = new FormData(event.currentTarget);
 		void run("listing", async (isCurrent) => {
-			const kind = form.get("kind") === "gateway" ? "gateway" : "demo";
+			const connectionMode = form.get("connectionMode");
+			if (connectionMode !== "api" && connectionMode !== "oauth_pool")
+				throw new Error("请选择 API 接入或 OAuth 号池。");
 			await createListing.mutateAsync({
 				name: String(form.get("name")),
 				description: String(form.get("description")),
 				model: String(form.get("model")),
-				kind,
+				kind: "gateway",
+				connectionMode,
 				inputRate: parseMicroDUSD(String(form.get("inputRate"))),
 				outputRate: parseMicroDUSD(String(form.get("outputRate"))),
 				concurrency: Number(form.get("concurrency")),
-				...(kind === "gateway"
-					? {
-							baseUrl: String(form.get("baseUrl")),
-							apiKey: String(form.get("apiKey")),
-						}
-					: {}),
+				baseUrl: String(form.get("baseUrl")),
+				apiKey: String(form.get("apiKey")),
 			});
 			if (!isCurrent()) return;
 			setListingModal(false);
@@ -751,7 +740,7 @@ export function Mon2ApiConsole() {
 		}
 	};
 	const requireLogin = () => {
-		setNotice("先选择演示身份或连接钱包，再创建预算会话。");
+		setNotice("先连接钱包并签名登录，再创建预算会话。");
 		window.scrollTo({ top: 0, behavior: "smooth" });
 	};
 	const openRent = (listing: ListingView) => {
@@ -835,13 +824,7 @@ export function Mon2ApiConsole() {
 								? "Monad Testnet"
 								: "Local EVM"}
 						</div>
-						<p>
-							{data?.network.ready
-								? `Chain ${data.network.chainId} · 合约已连接`
-								: "等待本地合约连接"}
-							<br />
-							测试代币 · 非真实资金
-						</p>
+						<p>测试代币 · 非真实资金</p>
 					</div>
 					<div className="sidebar-links">
 						<a
@@ -875,44 +858,29 @@ export function Mon2ApiConsole() {
 						</strong>
 					</div>
 					<div className="topbar-actions">
-						<span className="topbar-status">
+						<span
+							className="topbar-status"
+							title={
+								data?.network.ready
+									? `Chain ${data.network.chainId} · 合约已连接`
+									: "等待合约连接"
+							}
+						>
 							<span
 								className={`status-dot ${data?.network.ready ? "" : "warn"}`}
 							/>
 							{data?.network.mode === "monad-testnet"
 								? "Monad 测试网"
-								: "本地 EVM"}{" "}
-							· {data?.network.ready ? "合约已连接" : "等待合约连接"}
+								: "本地 EVM"}
 						</span>
-						{viewer?.demo ? (
-							<button
-								className="wallet-button demo-exit"
-								disabled={!!busy}
-								onClick={() =>
-									void run("logout", async () => {
-										await logout.mutateAsync();
-										setNewKey(null);
-										setMessages([]);
-									})
-								}
-								title="退出当前演示身份"
-								type="button"
-							>
-								<span className="demo-pill">演示</span>
-								<span className="mono">{short(viewer.address)}</span>
-								<LogOut size={13} />
-								<span className="demo-exit-label">退出演示</span>
-							</button>
-						) : (
-							<div className="wallet-connect">
-								<ConnectButton
-									accountStatus="address"
-									chainStatus="icon"
-									label="连接钱包"
-									showBalance={false}
-								/>
-							</div>
-						)}
+						<div className="wallet-connect">
+							<ConnectButton
+								accountStatus="address"
+								chainStatus="icon"
+								label="连接钱包"
+								showBalance={false}
+							/>
+						</div>
 					</div>
 				</header>
 				<main className="content">
@@ -1022,15 +990,7 @@ export function Mon2ApiConsole() {
 							{!viewer && section !== "overview" && (
 								<div className="notice info">
 									<Wallet size={14} />
-									<span>连接钱包或进入演示后开始使用。</span>
-									<button
-										className="text-link"
-										disabled={!!busy}
-										onClick={() => void loginDemo("consumer")}
-										type="button"
-									>
-										进入演示 <ArrowRight size={12} />
-									</button>
+									<span>连接钱包并签名登录后开始使用。</span>
 								</div>
 							)}
 							{section === "overview" && (
@@ -1038,77 +998,26 @@ export function Mon2ApiConsole() {
 									<section className="hero">
 										<div className="hero-copy">
 											<h2>先锁预算，再调用 AI 资源。</h2>
-											<p>固定价格，按用量计费。</p>
 											<div className="hero-actions">
-												{viewer ? (
-													<>
-														<button
-															className="button lime"
-															onClick={() =>
-																navigate(sessions.length ? "lab" : "market")
-															}
-															type="button"
-														>
-															{sessions.length ? "继续调用" : "查看可用资源"}{" "}
-															<ArrowRight size={16} />
-														</button>
-														{viewer.demo && (
-															<button
-																className="button"
-																disabled={!!busy}
-																onClick={() =>
-																	void loginDemo(
-																		viewer.name
-																			.toLowerCase()
-																			.includes("provider")
-																			? "consumer"
-																			: "provider",
-																	)
-																}
-																type="button"
-															>
-																<RefreshCw size={11} />
-																切换演示角色
-															</button>
-														)}
-													</>
-												) : (
-													<>
-														<button
-															className="button lime"
-															disabled={!!busy}
-															onClick={() => void loginDemo("consumer")}
-															type="button"
-														>
-															{busy === "login" ? (
-																<LoaderCircle className="spin" size={12} />
-															) : (
-																<Zap size={12} />
-															)}
-															体验使用资源 <ArrowRight size={16} />
-														</button>
-														<button
-															className="button"
-															disabled={!!busy}
-															onClick={() => void loginDemo("provider")}
-															type="button"
-														>
-															体验提供资源 <ArrowUpRight size={16} />
-														</button>
-													</>
+												<button
+													className="button lime"
+													onClick={() =>
+														navigate(sessions.length ? "lab" : "market")
+													}
+													type="button"
+												>
+													{sessions.length ? "继续调用" : "查看可用资源"}{" "}
+													<ArrowRight size={16} />
+												</button>
+												{!viewer && (
+													<ConnectButton
+														accountStatus="address"
+														chainStatus="icon"
+														label="连接钱包"
+														showBalance={false}
+													/>
 												)}
 											</div>
-											{!viewer && (
-												<p className="wallet-onboarding">
-													<a
-														href="https://rabby.io/"
-														rel="noreferrer"
-														target="_blank"
-													>
-														安装钱包 <ExternalLink size={10} />
-													</a>
-												</p>
-											)}
 										</div>
 										<div className="hero-route">
 											<div className="hero-flow">
@@ -1149,11 +1058,7 @@ export function Mon2ApiConsole() {
 									</section>
 									<Stats data={data} />
 									<div className="two-columns">
-										<Panel
-											action={<span className="chart-timezone">本地时间</span>}
-											subtitle="近六小时"
-											title="调用活动"
-										>
+										<Panel title="调用活动">
 											<UsageChart data={data} />
 										</Panel>
 										<Panel className="overview-side" title="网络概况">
@@ -1182,9 +1087,6 @@ export function Mon2ApiConsole() {
 														}
 													</strong>
 												</div>
-												<p>
-													用量由网关报告；链上交易记录结算，不证明请求执行。
-												</p>
 											</div>
 										</Panel>
 									</div>
@@ -1198,7 +1100,9 @@ export function Mon2ApiConsole() {
 												查看市场 <ArrowUpRight size={11} />
 											</button>
 										}
-										subtitle="dUSD / 百万 Token"
+										subtitle={
+											data.listings.length ? "dUSD / 百万 Token" : undefined
+										}
 										title="发现可用资源"
 									>
 										<ResourceTable
@@ -1256,7 +1160,11 @@ export function Mon2ApiConsole() {
 																<Network size={18} />
 															)}
 														</span>
-														{item.kind === "demo" ? "模拟资源" : "号池连接器"}
+														{item.kind === "demo"
+															? "模拟资源"
+															: item.connectionMode === "oauth_pool"
+																? "OAuth 号池"
+																: "API 接入"}
 													</span>
 													<Badge
 														tone={statusTone(
@@ -1374,7 +1282,7 @@ export function Mon2ApiConsole() {
 												viewer?.address.toLowerCase(),
 										) && (
 											<Empty
-												description="使用页首的「接入资源」，添加模拟资源或你自行部署的上游网关。"
+												description="使用页首的「接入资源」，添加你自行部署的上游网关。"
 												title="开始提供第一份资源"
 											/>
 										)}
@@ -1387,24 +1295,26 @@ export function Mon2ApiConsole() {
 										<div className="panel-body">
 											<div className="field">
 												<label htmlFor="lab-session">预算会话</label>
-												<select
+												<ConsoleSelect
 													id="lab-session"
-													onChange={(event) => {
-														setSelectedSession(event.target.value);
+													onValueChange={(value) => {
+														setSelectedSession(value);
 														setMessages([]);
 														setConversationId("");
 													}}
+													options={sessions.map((item) => ({
+														value: item.id,
+														label: item.listingName,
+														description: `${item.model} · ${short(item.id)}`,
+														icon: Wallet,
+													}))}
+													placeholder={
+														sessions.length
+															? "选择使用中的会话"
+															: "暂无可用的预算会话"
+													}
 													value={sessionId}
-												>
-													<option disabled value="">
-														选择一个使用中的会话
-													</option>
-													{sessions.map((item) => (
-														<option key={item.id} value={item.id}>
-															{item.listingName} · {short(item.id)}
-														</option>
-													))}
-												</select>
+												/>
 											</div>
 											<div className="field">
 												<label htmlFor="lab-model">模型</label>
@@ -1949,7 +1859,7 @@ export function Mon2ApiConsole() {
 										title="快速接入"
 									>
 										<div className="panel-body">
-											<pre className="code-block mono">{`curl http://localhost:3000/api/v1/chat/completions \\\n  -H "Authorization: Bearer $MON2API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -H "Idempotency-Key: example-request-0001" \\\n  -d '{\n    "model": "${selected?.model ?? "mon2api-demo"}",\n    "messages": [{"role":"user","content":"Hello"}],\n    "stream": true\n  }'`}</pre>
+											<pre className="code-block mono">{`curl http://localhost:3000/api/v1/chat/completions \\\n  -H "Authorization: Bearer $MON2API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -H "Idempotency-Key: example-request-0001" \\\n  -d '{\n    "model": "${selected?.model ?? "YOUR_MODEL_ID"}",\n    "messages": [{"role":"user","content":"Hello"}],\n    "stream": true\n  }'`}</pre>
 											<p className="code-hint">
 												把地址替换为你的部署域名。API
 												密钥绑定预算会话与资源，请保存在服务端。 每次新调用更换
@@ -1961,10 +1871,6 @@ export function Mon2ApiConsole() {
 							)}
 						</>
 					)}
-					<footer className="footer">
-						<span>mon2api</span>
-						<span>测试环境 · dUSD 无兑付价值</span>
-					</footer>
 				</main>
 			</div>
 			{rentListing && !walletMismatch && (
@@ -2007,7 +1913,7 @@ export function Mon2ApiConsole() {
 							/>
 							<small>
 								会话固定此资源、提供者和挂牌价快照。每次调用先预留预算，关闭会话后可提取未使用的部分。dUSD
-								是无兑付价值的测试代币。演示身份由服务器提交本地链交易；钱包身份需确认代币授权和锁定交易。
+								是无兑付价值的测试代币。请在钱包中确认代币授权和锁定交易。
 							</small>
 						</div>
 						<div className="form-actions">
@@ -2062,19 +1968,19 @@ export function Mon2ApiConsole() {
 						</div>
 						<div className="field">
 							<label htmlFor="key-session">绑定预算会话</label>
-							<select
+							<ConsoleSelect
 								id="key-session"
-								onChange={(event) => setSelectedSession(event.target.value)}
+								onValueChange={setSelectedSession}
+								options={sessions.map((item) => ({
+									value: item.id,
+									label: item.listingName,
+									description: `${short(item.id)} · 剩余 ${usd(Math.max(0, item.budget - item.spent - item.reserved), true)} dUSD`,
+									icon: Wallet,
+								}))}
+								placeholder="选择要绑定的预算会话"
 								required
 								value={sessionId}
-							>
-								{sessions.map((item) => (
-									<option key={item.id} value={item.id}>
-										{item.listingName} · 剩余{" "}
-										{usd(Math.max(0, item.budget - item.spent))}
-									</option>
-								))}
-							</select>
+							/>
 							<small>
 								密钥只能使用该会话的预算和资源，创建后完整密钥只显示一次。
 							</small>
@@ -2122,7 +2028,10 @@ function Stats({ data }: { data: Snapshot }) {
 			value: compact(data.metrics.inputTokens + data.metrics.outputTokens),
 			unit: "tokens",
 			icon: Zap,
-			foot: `${compact(data.metrics.inputTokens)} 输入 / ${compact(data.metrics.outputTokens)} 输出`,
+			foot:
+				data.metrics.inputTokens + data.metrics.outputTokens > 0
+					? `${compact(data.metrics.inputTokens)} 输入 / ${compact(data.metrics.outputTokens)} 输出`
+					: null,
 		},
 		{
 			label: "计费总额",
@@ -2132,14 +2041,17 @@ function Stats({ data }: { data: Snapshot }) {
 			),
 			unit: "dUSD",
 			icon: Wallet,
-			foot: (
-				<>
-					<span>待链上结算 {usd(data.metrics.pending, true)}</span>
-					{data.metrics.writtenOff > 0 && (
-						<span>运营损失 {usd(data.metrics.writtenOff, true)}</span>
-					)}
-				</>
-			),
+			foot:
+				data.metrics.pending > 0 || data.metrics.writtenOff > 0 ? (
+					<>
+						{data.metrics.pending > 0 && (
+							<span>待链上结算 {usd(data.metrics.pending, true)}</span>
+						)}
+						{data.metrics.writtenOff > 0 && (
+							<span>运营损失 {usd(data.metrics.writtenOff, true)}</span>
+						)}
+					</>
+				) : null,
 		},
 		{
 			label: "已结算金额",
@@ -2152,8 +2064,9 @@ function Stats({ data }: { data: Snapshot }) {
 			foot: null,
 		},
 	];
+	const scope = `统计范围：当前 ${data.requests.length} 条请求、${data.sessions.length} 个会话，非完整历史。`;
 	return (
-		<div className="stats-grid">
+		<div className="stats-grid" title={scope}>
 			{items.map(({ label, value, unit, icon: Icon, foot }) => (
 				<section className="stat-card" key={label}>
 					<div className="stat-top">
@@ -2169,10 +2082,7 @@ function Stats({ data }: { data: Snapshot }) {
 					{foot && <div className="stat-foot">{foot}</div>}
 				</section>
 			))}
-			<p className="stats-note">
-				统计范围：当前 {data.requests.length} 条请求、{data.sessions.length}{" "}
-				个会话，非完整历史。
-			</p>
+			<p className="sr-only">{scope}</p>
 		</div>
 	);
 }
@@ -2246,7 +2156,7 @@ function UsageChart({ data }: { data: Snapshot }) {
 				<table>
 					<thead>
 						<tr>
-							<th>时段</th>
+							<th>时段（本地时间）</th>
 							<th>请求数</th>
 						</tr>
 					</thead>
@@ -2274,13 +2184,7 @@ function ResourceTable({
 	onToggle?: (listing: ListingView) => void;
 	busy: boolean;
 }) {
-	if (!listings.length)
-		return onToggle ? null : (
-			<Empty
-				description="资源提供者接入后，模型与价格会展示在这里。"
-				title="暂无资源"
-			/>
-		);
+	if (!listings.length) return onToggle ? null : <Empty title="暂无资源" />;
 	return (
 		<TableScroll>
 			<table>
@@ -2310,7 +2214,11 @@ function ResourceTable({
 							</td>
 							<td>
 								<span className="badge neutral">
-									{item.kind === "demo" ? "DEMO" : "GATEWAY"}
+									{item.kind === "demo"
+										? "DEMO"
+										: item.connectionMode === "oauth_pool"
+											? "OAuth 号池"
+											: "API"}
 								</span>
 							</td>
 							<td className="mono">
@@ -2503,22 +2411,77 @@ function ListingModal({
 	error: string | null;
 	busy: boolean;
 }) {
-	const [kind, setKind] = useState("demo");
+	const [connectionMode, setConnectionMode] = useState<"api" | "oauth_pool">(
+		"api",
+	);
+	const isPool = connectionMode === "oauth_pool";
 	return (
-		<Modal error={error} onClose={onClose} title="接入 AI 资源">
+		<Modal
+			className="resource-modal"
+			error={error}
+			onClose={onClose}
+			title="接入 AI 资源"
+		>
 			<form onSubmit={onSubmit}>
-				<div className="field">
-					<label htmlFor="listing-kind">接入方式</label>
-					<select
-						id="listing-kind"
-						name="kind"
-						onChange={(event) => setKind(event.target.value)}
-						value={kind}
-					>
-						<option value="demo">模拟模型 · 体验计量与结算</option>
-						<option value="gateway">上游网关 · 自部署兼容端点</option>
-					</select>
-				</div>
+				<fieldset className="resource-modes" disabled={busy}>
+					<legend>接入方式</legend>
+					<div className="resource-mode-grid">
+						<label className="resource-mode">
+							<input
+								checked={!isPool}
+								name="connectionMode"
+								onChange={() => setConnectionMode("api")}
+								type="radio"
+								value="api"
+							/>
+							<span aria-hidden="true" className="resource-mode-icon">
+								<KeyRound size={20} />
+							</span>
+							<span className="resource-mode-copy">
+								<strong>API 接入</strong>
+								<span>通过 API Key 提供模型服务</span>
+							</span>
+							<span aria-hidden="true" className="resource-mode-check">
+								{!isPool && <Check size={12} strokeWidth={3} />}
+							</span>
+						</label>
+						<label className="resource-mode">
+							<input
+								checked={isPool}
+								name="connectionMode"
+								onChange={() => setConnectionMode("oauth_pool")}
+								type="radio"
+								value="oauth_pool"
+							/>
+							<span aria-hidden="true" className="resource-mode-icon">
+								<Network size={20} />
+							</span>
+							<span className="resource-mode-copy">
+								<strong>OAuth 号池</strong>
+								<span>接入已授权账号的号池网关</span>
+							</span>
+							<span aria-hidden="true" className="resource-mode-check">
+								{isPool && <Check size={12} strokeWidth={3} />}
+							</span>
+						</label>
+					</div>
+				</fieldset>
+				{isPool && (
+					<div className="pool-connection-guide">
+						<span className="pool-guide-heading">
+							<Layers3 size={15} />
+							连接你的 OAuth 号池
+						</span>
+						<p>
+							先在 vm2api 等号池网关完成账号授权，再创建绑定该号池的专用调用
+							Key。
+						</p>
+						<small>
+							账号授权、令牌刷新和调度由号池网关管理。此处无需提交账号密码或
+							OAuth 令牌。
+						</small>
+					</div>
+				)}
 				<div className="field-row">
 					<div className="field">
 						<label htmlFor="listing-name">资源名称</label>
@@ -2534,10 +2497,10 @@ function ListingModal({
 					<div className="field">
 						<label htmlFor="listing-model">模型标识</label>
 						<input
-							defaultValue="mon2api-demo"
 							id="listing-model"
 							maxLength={100}
 							name="model"
+							placeholder="填写上游实际支持的模型 ID"
 							required
 						/>
 					</div>
@@ -2547,38 +2510,56 @@ function ListingModal({
 					<input
 						id="listing-description"
 						maxLength={300}
+						minLength={2}
 						name="description"
 						placeholder="描述模型能力和适用场景"
 						required
 					/>
 				</div>
-				{kind === "gateway" && (
-					<>
-						<div className="field">
-							<label htmlFor="listing-url">服务地址（HTTPS）</label>
-							<input
-								id="listing-url"
-								name="baseUrl"
-								placeholder="https://your-connector.example/v1"
-								required
-								type="url"
-							/>
-							<small>
-								服务地址需由运营者预先加入允许列表。凭证加密保存在服务端。
-							</small>
-						</div>
-						<div className="field">
-							<label htmlFor="listing-secret">上游 API Key</label>
-							<input
-								autoComplete="new-password"
-								id="listing-secret"
-								name="apiKey"
-								required
-								type="password"
-							/>
-						</div>
-					</>
-				)}
+				<div className="field-row resource-credentials">
+					<div className="field">
+						<label htmlFor="listing-url">
+							{isPool ? "号池网关地址" : "API 服务地址"}
+						</label>
+						<input
+							id="listing-url"
+							key={`url-${connectionMode}`}
+							name="baseUrl"
+							placeholder={
+								isPool
+									? "https://your-pool.example/v1"
+									: "https://api.example.com/v1"
+							}
+							required
+							type="url"
+						/>
+						<small>
+							需支持 OpenAI Chat Completions 并返回 Token
+							用量。服务地址需由运营者加入允许列表。
+						</small>
+					</div>
+					<div className="field">
+						<label htmlFor="listing-secret">
+							{isPool ? "号池专用调用 Key" : "API Key"}
+						</label>
+						<input
+							autoComplete="new-password"
+							id="listing-secret"
+							key={`secret-${connectionMode}`}
+							name="apiKey"
+							placeholder={
+								isPool ? "填写绑定该号池的调用 Key" : "填写上游 API Key"
+							}
+							required
+							type="password"
+						/>
+						<small>
+							{isPool
+								? "请使用仅绑定目标号池的推理 Key，不要使用网关管理密钥。"
+								: "凭证加密保存，仅用于服务端调用，不向使用者公开。"}
+						</small>
+					</div>
+				</div>
 				<div className="field-row">
 					<div className="field">
 						<label htmlFor="listing-input">输入单价 / 百万 Token（dUSD）</label>

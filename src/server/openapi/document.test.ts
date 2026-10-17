@@ -1,18 +1,36 @@
 import Ajv2020 from "ajv/dist/2020";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
+import {
+	requestResponse,
+	resourceResponse,
+} from "~/server/services/commerce.schema";
 import {
 	apiErrorResponseSchema,
 	completionResponseSchema,
 	modelListResponseSchema,
 	streamChunkResponseSchema,
 } from "~/server/services/mon2api.contract";
-import { publicChatInput } from "~/server/services/mon2api.schema";
+import {
+	listingInput,
+	listingUpdateInput,
+	publicChatInput,
+} from "~/server/services/mon2api.schema";
 import { openApiDocument } from "./document";
 
 // OpenAPI stores reusable schemas in components instead of $defs. Ajv resolves
 // these JSON Pointers; allow the OpenAPI container keyword, but keep strict checks
 // on every referenced JSON Schema. Do not apply defaults or remove extra fields.
 const ajv = new Ajv2020({ allErrors: true });
+ajv.addFormat("uri", (value: string) => URL.canParse(value));
+ajv.addFormat(
+	"date-time",
+	(value: string) => z.string().datetime().safeParse(value).success,
+);
+ajv.addFormat(
+	"cuid",
+	(value: string) => z.string().cuid().safeParse(value).success,
+);
 ajv.addKeyword({ keyword: "components", valid: true });
 function contract(name: string) {
 	return ajv.compile({
@@ -34,11 +52,144 @@ function expectInputAgreement(input: unknown, valid: boolean) {
 }
 
 describe("mon2api OpenAPI", () => {
+	it("uses wallet cookies for management, bearer keys for usage lookup and no credentials for discovery", () => {
+		for (const path of [
+			"/merchant/resources",
+			"/consumer/sessions",
+			"/consumer/keys",
+			"/consumer/requests",
+			"/merchant/settlements",
+		]) {
+			expect(openApiDocument.paths?.[path]?.get).toMatchObject({
+				servers: [{ url: "/api/v1" }],
+				security: [{ walletSession: [] }],
+			});
+		}
+		expect(openApiDocument.paths?.["/requests/lookup"]?.get?.security).toEqual([
+			{ bearerAuth: [] },
+		]);
+		expect(openApiDocument.paths?.["/resources"]?.get?.security).toEqual([]);
+		expect(openApiDocument.paths?.["/auth/login"]?.post?.security).toEqual([]);
+		expect(
+			openApiDocument.components?.securitySchemes?.walletSession,
+		).toMatchObject({ type: "apiKey", in: "cookie", name: "mon2api_session" });
+	});
+	it("rejects empty edits, fractional prices and connector replacement in runtime and OpenAPI", () => {
+		const validate = contract("UpdateResource");
+		for (const input of [
+			{},
+			{ inputRate: 1.2 },
+			{ model: "new-model" },
+			{ apiKey: "new-key" },
+			{ connectionMode: "oauth_pool" },
+			{ concurrency: 21 },
+		]) {
+			expect(listingUpdateInput.safeParse(input).success).toBe(false);
+			expect(validate(input), JSON.stringify(validate.errors)).toBe(false);
+		}
+		for (const input of [
+			{ inputRate: 1 },
+			{ name: "新资源", concurrency: 20 },
+			{ description: "😀".repeat(300) },
+		]) {
+			expect(listingUpdateInput.safeParse(input).success).toBe(true);
+			expect(validate(input), JSON.stringify(validate.errors)).toBe(true);
+		}
+	});
+	it("documents only public resource fields and preserves unknown usage with a reservation", () => {
+		const resource = {
+			id: "caaaaaaaaaaaaaaaaaaaaaaaa",
+			owner: `0x${"11".repeat(20)}`,
+			name: "Resource",
+			description: "Text gateway",
+			model: "test-model",
+			kind: "gateway",
+			connectionMode: "api",
+			inputRate: 1,
+			outputRate: 2,
+			concurrency: 2,
+			enabled: true,
+			status: "READY",
+			createdAt: "2026-10-17T00:00:00.000Z",
+		};
+		const usage = {
+			id: resource.id,
+			sessionId: `0x${"22".repeat(32)}`,
+			status: "REVIEW",
+			inputTokens: null,
+			outputTokens: null,
+			reservation: 10,
+			cost: 0,
+			usageSource: "missing",
+			upstreamRequestId: null,
+			errorCode: "incomplete_stream",
+			createdAt: resource.createdAt,
+		};
+		const validateResource = contract("Resource");
+		const validateUsage = contract("MeteredRequest");
+		expect(resourceResponse.safeParse(resource).success).toBe(true);
+		expect(
+			validateResource(resource),
+			JSON.stringify(validateResource.errors),
+		).toBe(true);
+		expect(validateResource({ ...resource, secret: "must-not-leak" })).toBe(
+			false,
+		);
+		expect(
+			resourceResponse.safeParse({ ...resource, secret: "must-not-leak" })
+				.success,
+		).toBe(false);
+		expect(requestResponse.safeParse(usage).success).toBe(true);
+		expect(validateUsage(usage), JSON.stringify(validateUsage.errors)).toBe(
+			true,
+		);
+		expect(validateUsage({ ...usage, reservation: -1 })).toBe(false);
+	});
+	it("documents the same resource connection modes and required pool credentials as runtime validation", () => {
+		const validate = contract("CreateResource");
+		const gateway = {
+			name: "My resource",
+			description: "Provider resource",
+			kind: "gateway",
+			model: "example-model",
+			baseUrl: "https://pool.example/v1",
+			apiKey: "test-pool-key",
+			inputRate: 1,
+			outputRate: 2,
+		};
+		for (const input of [
+			gateway,
+			{ ...gateway, connectionMode: "api" },
+			{ ...gateway, connectionMode: "oauth_pool" },
+		]) {
+			expect(listingInput.safeParse(input).success).toBe(true);
+			expect(validate(input), JSON.stringify(validate.errors)).toBe(true);
+		}
+		for (const input of [
+			{ ...gateway, connectionMode: "oauth_pool", apiKey: undefined },
+			{ ...gateway, connectionMode: "oauth_pool", kind: "demo" },
+			{ ...gateway, connectionMode: "other" },
+		]) {
+			expect(listingInput.safeParse(input).success).toBe(false);
+			expect(validate(input)).toBe(false);
+		}
+		expect(openApiDocument.components?.schemas?.Resource).toMatchObject({
+			properties: { connectionMode: { enum: ["api", "oauth_pool"] } },
+		});
+	});
 	it("documents authenticated versioned model and chat endpoints", () => {
 		expect(openApiDocument.openapi).toBe("3.1.0");
 		const paths = openApiDocument.paths;
 		if (!paths) throw new Error("Missing OpenAPI paths");
-		expect(Object.keys(paths)).toEqual(["/models", "/chat/completions"]);
+		expect(Object.keys(paths)).toEqual(
+			expect.arrayContaining([
+				"/models",
+				"/chat/completions",
+				"/merchant/resources",
+				"/consumer/sessions",
+				"/requests/lookup",
+			]),
+		);
 		expect(openApiDocument.servers).toEqual([
 			{ url: "/api/v1" },
 			{ url: "/v1" },

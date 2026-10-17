@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { spawn } from "node:child_process";
 import { constants } from "node:os";
 import { pathToFileURL } from "node:url";
@@ -8,6 +9,7 @@ import { pathToFileURL } from "node:url";
  *   runtime?: {
  *     execPath: string;
  *     argv: string[];
+ *     env: NodeJS.ProcessEnv;
  *     exitCode?: string | number;
  *     stdout: Pick<NodeJS.WriteStream, "write">;
  *     stderr: Pick<NodeJS.WriteStream, "write">;
@@ -17,6 +19,9 @@ import { pathToFileURL } from "node:url";
  * }} options
  */
 export function startDev({ spawnChild = spawn, runtime = process } = {}) {
+	const mode = runtime.env.MON2API_MODE || "monad-testnet";
+	if (mode !== "local" && mode !== "monad-testnet")
+		throw new Error("MON2API_MODE must be monad-testnet or local.");
 	/** @type {Set<import("node:child_process").ChildProcess>} */
 	const children = new Set();
 	let stopping = false;
@@ -72,6 +77,21 @@ export function startDev({ spawnChild = spawn, runtime = process } = {}) {
 		}
 	}
 
+	function startServices() {
+		const webArgs = runtime.argv.includes("--production")
+			? ["scripts/start.mjs"]
+			: ["node_modules/next/dist/bin/next", "dev", "--hostname", "127.0.0.1"];
+		launch("web", webArgs, { stdio: "inherit" });
+		launch(
+			"worker",
+			["--conditions=react-server", "--import", "tsx", "scripts/worker.ts"],
+			{ stdio: "inherit" },
+		);
+	}
+	if (mode === "monad-testnet") {
+		startServices();
+		return;
+	}
 	const chain = launch("chain", ["--import", "tsx", "scripts/chain.ts"], {
 		stdio: ["inherit", "pipe", "inherit"],
 	});
@@ -87,15 +107,7 @@ export function startDev({ spawnChild = spawn, runtime = process } = {}) {
 			return;
 		}
 		started = true;
-		const webArgs = runtime.argv.includes("--production")
-			? ["scripts/start.mjs"]
-			: ["node_modules/next/dist/bin/next", "dev", "--hostname", "127.0.0.1"];
-		launch("web", webArgs, { stdio: "inherit" });
-		launch(
-			"worker",
-			["--conditions=react-server", "--import", "tsx", "scripts/worker.ts"],
-			{ stdio: "inherit" },
-		);
+		startServices();
 	});
 }
 

@@ -1,10 +1,5 @@
-import { Mon2ApiConsole } from "~/app/_components/mon2api-console";
-import { WalletProvider } from "~/app/_components/wallet-provider";
+import { Mon2ApiLanding } from "~/app/_components/mon2api-landing";
 
 export default function Home() {
-	return (
-		<WalletProvider>
-			<Mon2ApiConsole />
-		</WalletProvider>
-	);
+	return <Mon2ApiLanding />;
 }

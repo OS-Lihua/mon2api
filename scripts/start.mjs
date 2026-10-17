@@ -22,7 +22,12 @@ const server = spawn(process.execPath, [path.join(standalone, "server.js")], {
 		...process.env,
 		HOSTNAME: "127.0.0.1",
 		PORT: process.env.PORT || "3000",
-		MON2API_DATA_DIR: path.resolve(process.env.MON2API_DATA_DIR || ".runtime"),
+		MON2API_DATA_DIR: path.resolve(
+			process.env.MON2API_DATA_DIR ||
+				(process.env.MON2API_MODE === "local"
+					? ".runtime"
+					: ".runtime/monad-testnet"),
+		),
 	},
 });
 for (const signal of ["SIGINT", "SIGTERM"])

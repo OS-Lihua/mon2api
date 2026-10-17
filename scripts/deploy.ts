@@ -15,11 +15,14 @@ import { monadTestnet } from "viem/chains";
 import { escrowAbi, tokenAbi } from "../src/lib/abi";
 import { inspectEscrowOwnerGuard } from "../src/server/services/escrow-version";
 import type { ChainConfig } from "../src/server/services/runtime";
+import { MONAD_TESTNET } from "../src/shared/network";
 
 // This script has no mainnet code path. Every transaction is signed for 10143.
-const chainId = 10143;
-const rpcUrl = process.env.MONAD_RPC_URL || "https://testnet-rpc.monad.xyz";
-const directory = path.resolve(process.env.MON2API_DATA_DIR || ".runtime");
+const chainId = MONAD_TESTNET.chainId;
+const rpcUrl = process.env.MONAD_RPC_URL || MONAD_TESTNET.rpcUrl;
+const directory = path.resolve(
+	process.env.MON2API_DATA_DIR || ".runtime/monad-testnet",
+);
 const configFile = path.join(directory, "chain.json");
 type Artifact = { abi: Abi; bytecode: Hex };
 

@@ -28,7 +28,7 @@ const meter = account(4).address;
 const treasury = account(5).address;
 type Artifact = { abi: Abi; bytecode: Hex };
 
-if (process.env.MON2API_MODE && process.env.MON2API_MODE !== "local") {
+if (process.env.MON2API_MODE !== "local") {
 	throw new Error(
 		"Local chain requires MON2API_MODE=local. Use deploy:testnet for Monad testnet.",
 	);

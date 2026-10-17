@@ -2,7 +2,34 @@ import { z } from "zod";
 import { codePointString, MAX_MESSAGES_BYTES } from "./mon2api.contract";
 export const addressSchema = z.string().regex(/^0x[\da-fA-F]{40}$/);
 export const sessionIdSchema = z.string().regex(/^0x[\da-fA-F]{64}$/);
-export const listingInput = z
+export const walletSignatureSchema = z
+	.string()
+	.max(2 + 8192 * 2)
+	.regex(/^0x(?:[\da-fA-F]{2})+$/);
+
+export const connectionModeSchema = z.enum(["api", "oauth_pool"]).openapi({
+	description:
+		"Provider-declared supply type. api uses an API key; oauth_pool uses a dedicated inference key bound to an OAuth account pool on an OpenAI Chat Completions-compatible gateway. OAuth authorization, token rotation and account scheduling remain on that gateway. This field is not proof of account authorization.",
+});
+
+// A resource's model, kind and connector are immutable: existing leases use them.
+export const listingUpdateInput = z
+	.object({
+		name: codePointString({ trim: true, min: 2, max: 64 }).optional(),
+		description: codePointString({ trim: true, min: 2, max: 300 }).optional(),
+		inputRate: z.number().int().min(1).max(1_000_000_000).optional(),
+		outputRate: z.number().int().min(1).max(1_000_000_000).optional(),
+		concurrency: z.number().int().min(1).max(20).optional(),
+	})
+	.strict()
+	.refine(
+		(value) => Object.values(value).some((field) => field !== undefined),
+		{
+			message: "至少提供一个可更新字段。",
+		},
+	)
+	.openapi({ minProperties: 1 });
+const listingFields = z
 	.object({
 		name: codePointString({ trim: true, min: 2, max: 64 }),
 		description: codePointString({ trim: true, min: 2, max: 300 }),
@@ -17,14 +44,20 @@ export const listingInput = z
 		baseUrl: z.string().url().optional(),
 		apiKey: codePointString({ min: 1, max: 2048 }).optional(),
 	})
-	.strict()
-	.superRefine((v, ctx) => {
-		if (v.kind === "gateway" && (!v.baseUrl || !v.apiKey))
-			ctx.addIssue({
-				code: "custom",
-				message: "真实连接器需要 URL 和 API Key",
-			});
-	});
+	.strict();
+export const listingInput = z.discriminatedUnion("kind", [
+	listingFields.extend({
+		kind: z.literal("demo"),
+		connectionMode: z.literal("api").default("api"),
+	}),
+	listingFields.extend({
+		kind: z.literal("gateway"),
+		connectionMode: connectionModeSchema.default("api"),
+		baseUrl: z.string().url(),
+		apiKey: codePointString({ min: 1, max: 2048 }),
+	}),
+]);
+
 export const openSessionInput = z
 	.object({
 		listingId: z.string().cuid(),

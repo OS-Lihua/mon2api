@@ -20,21 +20,22 @@ model Post {
 }
 
 model Listing {
-  id          String   @id @default(cuid())
-  owner       String
-  name        String
-  description String
-  model       String
-  kind        String
-  inputRate   Int
-  outputRate  Int
-  concurrency Int      @default(2)
-  enabled     Boolean  @default(true)
-  status      String   @default("READY")
-  baseUrl     String?
-  secret      String?
-  createdAt   DateTime @default(now())
-  sessions    Lease[]
+  id             String   @id @default(cuid())
+  owner          String
+  name           String
+  description    String
+  model          String
+  kind           String
+  connectionMode String   @default("api")
+  inputRate      Int
+  outputRate     Int
+  concurrency    Int      @default(2)
+  enabled        Boolean  @default(true)
+  status         String   @default("READY")
+  baseUrl        String?
+  secret         String?
+  createdAt      DateTime @default(now())
+  sessions       Lease[]
 
   @@index([owner])
 }

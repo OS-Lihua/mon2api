@@ -8,7 +8,8 @@ export const env = createEnv({
 	 */
 	server: {
 		DATABASE_URL: z.string().url(),
-		MON2API_MODE: z.enum(["local", "monad-testnet"]).default("local"),
+		MON2API_MODE: z.enum(["local", "monad-testnet"]).default("monad-testnet"),
+		MONAD_RPC_URL: z.string().url().optional(),
 		ALLOW_DEMO: z.enum(["true", "false"]).default("false"),
 		APP_ORIGIN: z.string().url().default("http://localhost:3000"),
 		SESSION_PASSWORD: z.string().min(32).optional(),
@@ -79,6 +80,7 @@ export const env = createEnv({
 			process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID,
 		DATABASE_URL: process.env.DATABASE_URL,
 		MON2API_MODE: process.env.MON2API_MODE,
+		MONAD_RPC_URL: process.env.MONAD_RPC_URL,
 		ALLOW_DEMO: process.env.ALLOW_DEMO,
 		APP_ORIGIN: process.env.APP_ORIGIN,
 		SESSION_PASSWORD: process.env.SESSION_PASSWORD,
