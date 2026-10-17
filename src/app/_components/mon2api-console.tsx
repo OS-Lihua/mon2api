@@ -52,6 +52,7 @@ import type {
 	Snapshot,
 } from "~/shared/mon2api";
 import { formatDUSD, parseMicroDUSD } from "~/shared/money";
+import { previewSnapshot, uiPreview } from "~/shared/ui-preview";
 import { api } from "~/trpc/react";
 
 type Section = "overview" | "market" | "pool" | "lab" | "billing" | "keys";
@@ -347,7 +348,7 @@ export function Mon2ApiConsole() {
 	const settle = api.mon2api.settle.useMutation();
 	const closeSession = api.mon2api.closeSession.useMutation();
 	const withdraw = api.mon2api.withdraw.useMutation();
-	const data = snapshot.data;
+	const data = uiPreview ? previewSnapshot : snapshot.data;
 	const visibleListings = (data?.listings ?? []).filter((item) =>
 		`${item.name} ${item.model} ${item.owner}`
 			.toLowerCase()
@@ -874,12 +875,16 @@ export function Mon2ApiConsole() {
 								: "本地 EVM"}
 						</span>
 						<div className="wallet-connect">
-							<ConnectButton
-								accountStatus="address"
-								chainStatus="icon"
-								label="连接钱包"
-								showBalance={false}
-							/>
+							{uiPreview ? (
+								<span className="demo-pill">UI 预览</span>
+							) : (
+								<ConnectButton
+									accountStatus="address"
+									chainStatus="icon"
+									label="连接钱包"
+									showBalance={false}
+								/>
+							)}
 						</div>
 					</div>
 				</header>
@@ -984,7 +989,11 @@ export function Mon2ApiConsole() {
 							{!data.network.ready && (
 								<div className="notice info">
 									<Server size={14} />
-									<span>链上服务未就绪，暂时无法锁定预算、结算或提现。</span>
+									<span>
+										{uiPreview
+											? "UI 预览 · 当前为模拟资源，未连接数据库或链。调用和保存操作不可用。"
+											: "链上服务未就绪，暂时无法锁定预算、结算或提现。"}
+									</span>
 								</div>
 							)}
 							{!viewer && section !== "overview" && (

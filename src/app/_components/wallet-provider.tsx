@@ -37,6 +37,7 @@ import { getAccount } from "wagmi/actions";
 import { env } from "~/env";
 import { defineWalletChain, getConnectedWallet } from "~/lib/wallet";
 import type { NetworkInfo } from "~/shared/mon2api";
+import { uiPreview } from "~/shared/ui-preview";
 import { api } from "~/trpc/react";
 
 type WalletContextValue = {
@@ -86,6 +87,22 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 		{ retry: 1 },
 	);
 	const network = snapshot.data?.network;
+	if (uiPreview) {
+		return (
+			<WalletContext.Provider
+				value={{
+					address: undefined,
+					isConnected: false,
+					disconnect: async () => {},
+					getWallet: () => {
+						throw new Error("UI 预览模式不连接钱包。");
+					},
+				}}
+			>
+				{children}
+			</WalletContext.Provider>
+		);
+	}
 	if (!network) {
 		return (
 			<div className="wallet-loading" role="status">

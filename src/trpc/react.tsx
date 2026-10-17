@@ -6,8 +6,9 @@ import { createTRPCReact } from "@trpc/react-query";
 import type { inferRouterInputs, inferRouterOutputs } from "@trpc/server";
 import { useState } from "react";
 import SuperJSON from "superjson";
-
 import type { AppRouter } from "~/server/api/root";
+import { uiPreview } from "~/shared/ui-preview";
+import { previewLink } from "./preview-link";
 import { createQueryClient } from "./query-client";
 
 let clientQueryClientSingleton: QueryClient | undefined;
@@ -43,17 +44,19 @@ export function TRPCReactProvider(props: { children: React.ReactNode }) {
 
 	const [trpcClient] = useState(() =>
 		api.createClient({
-			links: [
-				httpBatchLink({
-					transformer: SuperJSON,
-					url: `${getBaseUrl()}/api/trpc`,
-					headers: () => {
-						const headers = new Headers();
-						headers.set("x-trpc-source", "nextjs-react");
-						return headers;
-					},
-				}),
-			],
+			links: uiPreview
+				? [previewLink]
+				: [
+						httpBatchLink({
+							transformer: SuperJSON,
+							url: `${getBaseUrl()}/api/trpc`,
+							headers: () => {
+								const headers = new Headers();
+								headers.set("x-trpc-source", "nextjs-react");
+								return headers;
+							},
+						}),
+					],
 		}),
 	);
 

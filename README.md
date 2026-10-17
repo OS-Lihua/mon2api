@@ -144,3 +144,7 @@ verify顺序运行格式/lint、TypeScript、Vitest和生产构建。端到端sm
 ## 开源基础
 
 基于MIT许可的 [T3 Web API Template](https://github.com/PraxisGrove/t3-web-api-template)，保留原许可。复用Next.js、tRPC、Prisma/PostgreSQL、Zod、官方OpenAI SDK、iron-session、RainbowKit、wagmi、viem和OpenZeppelin。Ganache仅用于本地链和合约测试。资源归属、计费账本和分账规则在本仓库实现。
+
+## 仅预览前端
+
+无需 Docker、数据库或本地链，安装依赖后运行 `NEXT_PUBLIC_UI_PREVIEW=true SKIP_ENV_VALIDATION=1 pnpm dev:web`，访问 `/console`。此开关仅在 development 生效；页面明确显示模拟资源，所有后端写入均拒绝执行。

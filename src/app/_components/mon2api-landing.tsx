@@ -21,7 +21,13 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { type PointerEvent, type ReactNode, useState } from "react";
+import {
+	type PointerEvent,
+	type ReactNode,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import styles from "./mon2api-landing.module.css";
 
 const repository = "https://github.com/OS-Lihua/mon2api";
@@ -215,17 +221,83 @@ export function Mon2ApiLanding() {
 	const [menuOpen, setMenuOpen] = useState(false);
 	const [language, setLanguage] = useState<keyof typeof snippets>("TypeScript");
 	const [copyStatus, setCopyStatus] = useState("");
+	const headerRef = useRef<HTMLElement>(null);
+	const menuRef = useRef<HTMLButtonElement>(null);
+	const copyRequest = useRef(0);
+	const [activeSection, setActiveSection] = useState<string | null>(null);
+	useEffect(() => {
+		let frame = 0;
+		function update() {
+			const limit =
+				(headerRef.current?.getBoundingClientRect().height ?? 76) + 40;
+			let current: string | null = null;
+			for (const id of ["network", "how-it-works", "developers"]) {
+				const section = document.getElementById(id);
+				if (section && section.getBoundingClientRect().top <= limit)
+					current = `#${id}`;
+			}
+			setActiveSection(current);
+		}
+		function schedule() {
+			window.cancelAnimationFrame(frame);
+			frame = window.requestAnimationFrame(update);
+		}
+		schedule();
+		window.addEventListener("scroll", schedule, { passive: true });
+		window.addEventListener("resize", schedule);
+		return () => {
+			window.cancelAnimationFrame(frame);
+			window.removeEventListener("scroll", schedule);
+			window.removeEventListener("resize", schedule);
+		};
+	}, []);
+	useEffect(() => {
+		if (!menuOpen) return;
+		function onKeyDown(event: KeyboardEvent) {
+			if (event.key === "Escape") {
+				setMenuOpen(false);
+				menuRef.current?.focus();
+			}
+		}
+		function onPointerDown(event: globalThis.PointerEvent) {
+			if (
+				event.target instanceof Node &&
+				!headerRef.current?.contains(event.target)
+			)
+				setMenuOpen(false);
+		}
+		const desktop = window.matchMedia("(min-width: 761px)");
+		const onResize = () => {
+			if (desktop.matches) setMenuOpen(false);
+		};
+		window.addEventListener("keydown", onKeyDown);
+		document.addEventListener("pointerdown", onPointerDown);
+		desktop.addEventListener("change", onResize);
+		return () => {
+			window.removeEventListener("keydown", onKeyDown);
+			document.removeEventListener("pointerdown", onPointerDown);
+			desktop.removeEventListener("change", onResize);
+		};
+	}, [menuOpen]);
+	useEffect(() => {
+		if (!copyStatus) return;
+		const timer = window.setTimeout(() => setCopyStatus(""), 3000);
+		return () => window.clearTimeout(timer);
+	}, [copyStatus]);
 	const navigation = [
 		{ label: "网络优势", href: "#network" },
 		{ label: "如何使用", href: "#how-it-works" },
 		{ label: "开发者", href: "#developers" },
 	];
 	async function copyCode() {
+		const request = ++copyRequest.current;
+		setCopyStatus("");
 		try {
 			await navigator.clipboard.writeText(snippets[language]);
-			setCopyStatus("代码已复制");
+			if (request === copyRequest.current) setCopyStatus("代码已复制");
 		} catch {
-			setCopyStatus("复制失败，请选择代码手动复制");
+			if (request === copyRequest.current)
+				setCopyStatus("复制失败，请选择代码手动复制");
 		}
 	}
 	return (
@@ -233,12 +305,18 @@ export function Mon2ApiLanding() {
 			<a className={styles.skipLink} href="#main">
 				跳到主要内容
 			</a>
-			<header className={styles.header}>
+			<header className={styles.header} ref={headerRef}>
 				<div className={styles.navContainer}>
 					<Brand />
 					<nav aria-label="首页导航" className={styles.desktopNav}>
 						{navigation.map((item) => (
-							<a href={item.href} key={item.href}>
+							<a
+								aria-current={
+									activeSection === item.href ? "location" : undefined
+								}
+								href={item.href}
+								key={item.href}
+							>
 								{item.label}
 							</a>
 						))}
@@ -262,6 +340,7 @@ export function Mon2ApiLanding() {
 							aria-label={menuOpen ? "关闭导航" : "打开导航"}
 							className={styles.menuButton}
 							onClick={() => setMenuOpen(!menuOpen)}
+							ref={menuRef}
 							type="button"
 						>
 							{menuOpen ? <X size={23} /> : <Menu size={23} />}
@@ -273,9 +352,6 @@ export function Mon2ApiLanding() {
 						aria-label="移动端首页导航"
 						className={styles.mobileNav}
 						id="landing-mobile-nav"
-						onKeyDown={(event) => {
-							if (event.key === "Escape") setMenuOpen(false);
-						}}
 					>
 						{navigation.map((item) => (
 							<a
@@ -515,6 +591,7 @@ export function Mon2ApiLanding() {
 									id={`tab-${name}`}
 									key={name}
 									onClick={() => {
+										copyRequest.current += 1;
 										setLanguage(name);
 										setCopyStatus("");
 									}}
@@ -524,9 +601,16 @@ export function Mon2ApiLanding() {
 								</button>
 							))}
 							<button
-								aria-label="复制代码"
+								aria-label={
+									copyStatus === "代码已复制" ? "代码已复制" : "复制代码"
+								}
 								className={styles.copyButton}
 								onClick={copyCode}
+								title={
+									copyStatus === "代码已复制"
+										? "代码已复制"
+										: `复制 ${language} 示例`
+								}
 								type="button"
 							>
 								{copyStatus === "代码已复制" ? (
@@ -534,6 +618,7 @@ export function Mon2ApiLanding() {
 								) : (
 									<Copy size={15} />
 								)}
+								<span>{copyStatus === "代码已复制" ? "已复制" : "复制"}</span>
 							</button>
 						</fieldset>
 						<textarea
@@ -551,7 +636,9 @@ export function Mon2ApiLanding() {
 								<span className={styles.statusDot} /> 配置部署地址、会话 Key
 								与模型 ID 后使用
 							</span>
-							<span aria-live="polite">{copyStatus}</span>
+							<span aria-live="polite" className={styles.copyStatus}>
+								{copyStatus}
+							</span>
 						</div>
 					</div>
 				</section>

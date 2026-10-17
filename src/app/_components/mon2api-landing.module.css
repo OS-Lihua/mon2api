@@ -578,7 +578,7 @@
 	padding: 21px 24px;
 	font-family: var(--font-mono);
 
-	font-size: 11px;
+	font-size: 12px;
 	line-height: 1.85;
 	tab-size: 2;
 }
@@ -594,7 +594,7 @@
 
 	color: #b5a1c7;
 
-	font-size: 9px;
+	font-size: 11px;
 }
 .codeFooter > span:first-child {
 	display: inline-flex;
@@ -707,7 +707,7 @@
 	border-top: 1px solid #e9e3ed;
 	color: #a093ab;
 	font-family: var(--font-mono);
-	font-size: 8px;
+	font-size: 11px;
 	letter-spacing: 0.5px;
 }
 .footerBottom a {
@@ -1007,8 +1007,8 @@
 		resize: none;
 		background: transparent;
 		color: #cbb5e5;
-		font-size: 9px;
-		min-height: 328px;
+		font-size: 12px;
+		min-height: 360px;
 	}
 	.codeTabs {
 		padding-inline: 16px;
@@ -1016,7 +1016,7 @@
 
 	.codeFooter {
 		padding-inline: 13px;
-		font-size: 7px;
+		font-size: 11px;
 	}
 	.faqSection {
 		padding-block: 0 64px;
@@ -1057,7 +1057,7 @@
 	}
 	.footerBottom {
 		gap: 10px;
-		font-size: 7px;
+		font-size: 11px;
 	}
 	.footerBottom > span:nth-child(2) {
 		display: none;
@@ -1073,5 +1073,120 @@
 	}
 	.spotlight::before {
 		display: none;
+	}
+}
+
+/* Interaction details stay visible without shifting nearby content. */
+.desktopNav a {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	min-height: 44px;
+}
+.desktopNav a[aria-current="location"] {
+	color: var(--page-accent);
+}
+.desktopNav a[aria-current="location"]::after {
+	position: absolute;
+	right: 0;
+	bottom: 2px;
+	left: 0;
+	height: 2px;
+	border-radius: 1px;
+	background: currentColor;
+	content: "";
+}
+.landing :where(a, button, summary, textarea):focus-visible {
+	outline: 2px solid var(--page-accent);
+	outline-offset: 4px;
+}
+.githubLink {
+	width: 44px;
+	height: 44px;
+	border-radius: 6px;
+}
+.githubLink:hover {
+	background: #eee8f8;
+}
+.codeTabs {
+	height: 48px;
+	align-items: stretch;
+}
+.codeTabs .copyButton {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 7px;
+	min-width: 64px;
+	min-height: 44px;
+	color: #ded0ee;
+}
+.codeTabs .copyButton:hover {
+	color: #fff;
+}
+.codeTabs button:focus-visible,
+.codeExample:focus-visible {
+	outline-color: #c9afff;
+	outline-offset: -3px;
+}
+.copyStatus {
+	min-height: 1.6em;
+}
+.codeFooter {
+	min-height: 64px;
+	align-content: center;
+}
+.faqs summary {
+	border-radius: 4px;
+	transition: color 160ms ease;
+}
+.faqs summary:hover,
+.faqs details[open] summary {
+	color: var(--page-accent);
+}
+.footerBottom {
+	color: #74687e;
+}
+@media (max-width: 760px) {
+	.menuButton {
+		width: 44px;
+		height: 44px;
+		padding: 0;
+		border-radius: 6px;
+	}
+	.navActions {
+		gap: 5px;
+	}
+	.navCta {
+		min-height: 44px;
+	}
+	.codeExample {
+		padding: 18px 16px;
+	}
+	.codeFooter {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 4px;
+		min-height: 76px;
+		line-height: 1.6;
+	}
+	.textButton {
+		min-height: 44px;
+	}
+	.mobileNav a:hover {
+		color: var(--page-accent);
+	}
+}
+@media (max-width: 360px) {
+	.navContainer {
+		gap: 8px;
+	}
+	.brand {
+		font-size: 21px;
+		gap: 5px;
+	}
+	.navCta {
+		padding-inline: 9px;
+		gap: 5px;
 	}
 }
