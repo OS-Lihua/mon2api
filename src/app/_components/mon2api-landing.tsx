@@ -29,6 +29,7 @@ import {
 	useState,
 } from "react";
 import { SETTLEMENT_CHAINS } from "~/shared/network";
+import { AssetGlyph } from "./asset-glyph";
 import { ChainGlyph, chainColor, chainLabel } from "./chain-glyph";
 import styles from "./mon2api-landing.module.css";
 
@@ -166,9 +167,18 @@ function NetworkDiagram() {
 				<span>预算托管 · 按量结算</span>
 			</div>
 			<div className={styles.settlementAssets}>
-				<span>原生代币</span>
-				<span>USDT</span>
-				<span>USDC</span>
+				<span>
+					<AssetGlyph symbol="native" />
+					原生代币
+				</span>
+				<span>
+					<AssetGlyph symbol="USDT" />
+					USDT
+				</span>
+				<span>
+					<AssetGlyph symbol="USDC" />
+					USDC
+				</span>
 			</div>
 		</div>
 	);
@@ -457,7 +467,11 @@ export function Mon2ApiLanding() {
 					</ul>
 					<div className={styles.assetSummary}>
 						<div>
-							<strong>USDT · USDC</strong>
+							<strong className={styles.assetSummaryTitle}>
+								<AssetGlyph size={18} symbol="USDT" />
+								<AssetGlyph size={18} symbol="USDC" />
+								USDT · USDC
+							</strong>
 							<span>稳定币结算按所在链及具体代币合约开通。</span>
 						</div>
 						<p>预算、报价与退款使用同一种资产；网络手续费使用本链原生代币。</p>

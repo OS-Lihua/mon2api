@@ -2262,6 +2262,9 @@ textarea {
 	margin: 24px 0 28px;
 }
 .market-empty-assets > span {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
 	padding: 4px 11px;
 	border: 1px solid #e0e9e4;
 	border-radius: 6px;
@@ -2443,6 +2446,11 @@ textarea {
 .market-context > .badge {
 	margin-left: auto;
 	font-size: 10px;
+}
+.market-context .market-context-asset {
+	display: flex;
+	align-items: center;
+	gap: 6px;
 }
 .console-chain-glyph {
 	display: grid;

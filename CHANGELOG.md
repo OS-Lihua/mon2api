@@ -9,6 +9,8 @@ Tag format:
 
 ## Unreleased
 
+- Add brand icons: SVG marks for every settlement chain, USDT, USDC and native-coin asset icons, an Apple touch icon, a web app manifest with 192/512 and maskable icons, and an Open Graph share image. Metadata URLs resolve from `APP_ORIGIN`.
+
 - Unify all console sections with the multichain landing page: shared chain glyphs, a current-market context bar, supported-network directory, dark overview flow, separate metric cards, refined resource pricing, tables, forms and dialogs. Expand development-only preview data for UI review; preview backend operations remain blocked.
 
 - Refine the multichain UI with a dark network diagram, chain glyphs, clearer card hierarchy, consistent green actions and responsive spacing. Align console surfaces and the unconfigured-market empty state with the landing page.

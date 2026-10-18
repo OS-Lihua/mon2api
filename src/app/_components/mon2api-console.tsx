@@ -42,6 +42,7 @@ import {
 	useState,
 } from "react";
 import { getAddress, isHex } from "viem";
+import { AssetGlyph } from "~/app/_components/asset-glyph";
 import {
 	ChainGlyph,
 	chainColor,
@@ -1112,7 +1113,10 @@ export function Mon2ApiConsole() {
 							</div>
 							<div>
 								<span>结算资产</span>
-								<strong>{asset}</strong>
+								<strong className="market-context-asset">
+									<AssetGlyph size={16} symbol={asset} />
+									{asset}
+								</strong>
 							</div>
 							<div>
 								<span>网络手续费</span>
@@ -1196,9 +1200,18 @@ export function Mon2ApiConsole() {
 								当前尚无可用的结算配置。开通后可查看资源报价、调用预算与结算账单。
 							</p>
 							<div className="market-empty-assets">
-								<span>原生代币</span>
-								<span>USDT</span>
-								<span>USDC</span>
+								<span>
+									<AssetGlyph symbol="native" />
+									原生代币
+								</span>
+								<span>
+									<AssetGlyph symbol="USDT" />
+									USDT
+								</span>
+								<span>
+									<AssetGlyph symbol="USDC" />
+									USDC
+								</span>
 							</div>
 							<button
 								className="button"
