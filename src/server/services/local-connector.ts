@@ -1,6 +1,5 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import { setTimeout as delay } from "node:timers/promises";
 import { Prisma } from "@prisma/client";
 import type { z } from "zod";
 import { db } from "~/server/db";
@@ -308,6 +307,37 @@ export async function pollConnector(
 		};
 	});
 }
+// Waiters in this process wake as soon as their job changes. Other instances
+// fall back to polling, so correctness never depends on this signal.
+const JOB_POLL_MS = 1000;
+const jobWaiters = new Map<string, Set<() => void>>();
+function wakeJob(id: string) {
+	for (const wake of jobWaiters.get(id) ?? []) wake();
+}
+function waitForJob(id: string, signal: AbortSignal) {
+	return new Promise<void>((resolve, reject) => {
+		const waiters = jobWaiters.get(id) ?? new Set<() => void>();
+		jobWaiters.set(id, waiters);
+		const cleanup = () => {
+			clearTimeout(timer);
+			signal.removeEventListener("abort", abort);
+			waiters.delete(done);
+			if (!waiters.size) jobWaiters.delete(id);
+		};
+		const done = () => {
+			cleanup();
+			resolve();
+		};
+		const abort = () => {
+			cleanup();
+			reject(signal.reason);
+		};
+		const timer = setTimeout(done, JOB_POLL_MS);
+		waiters.add(done);
+		if (signal.aborted) abort();
+		else signal.addEventListener("abort", abort, { once: true });
+	});
+}
 export async function updateConnector(
 	authorization: string | null,
 	input: z.infer<typeof connectorUpdate>,
@@ -318,7 +348,7 @@ export async function updateConnector(
 		throw new AppError("invalid_request", "响应内容不一致。", 400);
 	const { listing, credentialHash } =
 		await authenticateConnector(authorization);
-	return db.$transaction(async (tx) => {
+	const updated = await db.$transaction(async (tx) => {
 		await lock(tx, listing.id);
 		const current = await tx.listing.findUniqueOrThrow({
 			where: { id: listing.id },
@@ -371,6 +401,8 @@ export async function updateConnector(
 		});
 		return { ok: true as const };
 	});
+	wakeJob(input.jobId);
+	return updated;
 }
 export async function disconnectConnector(authorization: string | null) {
 	const { listing, credentialHash } =
@@ -440,7 +472,7 @@ export async function runLocalConnector(
 			if (row.status === "CANCELLED")
 				throw new EngineFailure("aborted", "本机任务已取消。", 409, true);
 			if (row.expiresAt.getTime() <= Date.now()) break;
-			await delay(250, undefined, { signal });
+			await waitForJob(job.id, signal);
 		}
 	} catch (error) {
 		if (error instanceof EngineFailure) throw error;

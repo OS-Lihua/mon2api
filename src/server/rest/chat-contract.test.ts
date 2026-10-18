@@ -47,6 +47,7 @@ vi.mock("~/server/services/runtime", () => ({
 vi.mock("~/env", () => ({ env: { ALLOWED_ORIGINS: "" } }));
 vi.mock("~/server/security/rate-limit", () => ({
 	limitRequest: mocks.limitRequest,
+	limitCredential: async () => ({ success: true }),
 }));
 vi.mock("~/server/observability/logger", () => ({
 	logger: { error: vi.fn() },

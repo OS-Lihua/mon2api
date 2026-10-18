@@ -27,8 +27,7 @@ const DEMO_MNEMONIC =
 export function demoAccount(index = 0) {
 	return mnemonicToAccount(DEMO_MNEMONIC, { addressIndex: index });
 }
-export function clients() {
-	const config = chainConfig();
+function createClients(config: ReturnType<typeof chainConfig>) {
 	const chain = defineChain({
 		id: config.chainId,
 		name: networkMetadata(config).name,
@@ -40,9 +39,27 @@ export function clients() {
 		rpcUrls: { default: { http: [config.rpcUrl] } },
 	});
 	return {
-		config,
 		chain,
-		publicClient: createPublicClient({ chain, transport: http(config.rpcUrl) }),
+		// A shared client must not serve cached block numbers to receipt checks.
+		publicClient: createPublicClient({
+			chain,
+			cacheTime: 0,
+			transport: http(config.rpcUrl),
+		}),
+	};
+}
+let clientCache:
+	| ({ key: string } & ReturnType<typeof createClients>)
+	| undefined;
+/** Reuse one RPC client per chain endpoint so connections stay pooled. */
+export function clients() {
+	const config = chainConfig();
+	const key = `${config.mode}:${config.chainId}:${config.rpcUrl}`;
+	if (clientCache?.key !== key) clientCache = { key, ...createClients(config) };
+	return {
+		config,
+		chain: clientCache.chain,
+		publicClient: clientCache.publicClient,
 	};
 }
 function meterWallet() {

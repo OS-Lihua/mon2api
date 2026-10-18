@@ -12,7 +12,8 @@ import { ZodError } from "zod";
 
 import { db } from "~/server/db";
 import { logger } from "~/server/observability/logger";
-import { limitRequest } from "~/server/security/rate-limit";
+import { limitCredential, limitRequest } from "~/server/security/rate-limit";
+import { viewer } from "~/server/services/auth";
 
 /**
  * 1. CONTEXT
@@ -102,7 +103,11 @@ const timingMiddleware = t.middleware(async ({ next, path }) => {
 const rateLimitMiddleware = t.middleware(async ({ ctx, path, next }) => {
 	// Charge every procedure invocation, including each operation in a batch
 	// and server-side callers. Client-controlled headers cannot skip this.
-	const result = await limitRequest(ctx, `trpc:${path}`);
+	// Signed-in wallets get their own quota; the sealed session cookie cannot be forged.
+	const user = await viewer().catch(() => null);
+	const result = user
+		? await limitCredential(`trpc:${path}`, `wallet:${user.address}`)
+		: await limitRequest(ctx, `trpc:${path}`);
 	if (!result.success) {
 		throw new TRPCError({
 			code: "TOO_MANY_REQUESTS",

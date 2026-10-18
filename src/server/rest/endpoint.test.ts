@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-
+import { AppError } from "~/server/services/auth";
 import {
 	BODY_READ_TIMEOUT_MS,
 	MAX_RAW_BODY_BYTES,
@@ -10,6 +10,7 @@ import { createRestMutation, createRestQuery } from "./endpoint";
 
 const mocks = vi.hoisted(() => ({
 	limitRequest: vi.fn(),
+	limitCredential: vi.fn(),
 	loggerError: vi.fn(),
 }));
 
@@ -21,6 +22,7 @@ vi.mock("~/server/observability/logger", () => ({
 
 vi.mock("~/server/security/rate-limit", () => ({
 	limitRequest: mocks.limitRequest,
+	limitCredential: mocks.limitCredential,
 }));
 
 function streamRequest(
@@ -62,6 +64,13 @@ describe("REST endpoint execution", () => {
 		mocks.limitRequest.mockResolvedValue({
 			limit: 60,
 			remaining: 59,
+			reset: 123,
+			success: true,
+		});
+		mocks.limitCredential.mockReset();
+		mocks.limitCredential.mockResolvedValue({
+			limit: 600,
+			remaining: 599,
 			reset: 123,
 			success: true,
 		});
@@ -504,5 +513,105 @@ describe("REST endpoint execution", () => {
 
 		expect(response.status).toBe(202);
 		await expect(response.text()).resolves.toBe("ok");
+	});
+
+	describe("credential-scoped limits", () => {
+		const credentialRequest = (body = "{}") =>
+			new Request("https://example.com/api/v1/chat/completions", {
+				method: "POST",
+				headers: { authorization: "Bearer m2a_test" },
+				body,
+			});
+
+		it("limits a verified credential by subject instead of by IP", async () => {
+			const handler = vi.fn(async () => ({ body: { ok: true } }));
+			const POST = createRestMutation({
+				route: "mon2api:chat",
+				credential: async () => "key:1",
+				input: z.object({}),
+				handler,
+			});
+			const response = await POST(credentialRequest());
+			expect(response.status).toBe(200);
+			expect(mocks.limitCredential).toHaveBeenCalledWith(
+				"mon2api:chat",
+				"key:1",
+			);
+			expect(mocks.limitRequest).not.toHaveBeenCalled();
+		});
+
+		it("rejects an exhausted credential before the handler runs", async () => {
+			mocks.limitCredential.mockResolvedValue({
+				limit: 600,
+				remaining: 0,
+				reset: 123,
+				success: false,
+			});
+			const handler = vi.fn(async () => ({ body: { ok: true } }));
+			const POST = createRestMutation({
+				route: "mon2api:chat",
+				credential: async () => "key:1",
+				input: z.object({}),
+				handler,
+			});
+			expect((await POST(credentialRequest())).status).toBe(429);
+			expect(handler).not.toHaveBeenCalled();
+		});
+
+		it("charges failed credentials to the per-IP anonymous quota", async () => {
+			const credential = vi.fn(async () => {
+				throw new AppError("unauthorized", "API Key 无效或已撤销。", 401);
+			});
+			const POST = createRestMutation({
+				route: "mon2api:chat",
+				credential,
+				input: z.object({}),
+				handler: async () => ({ body: { ok: true } }),
+			});
+			expect((await POST(credentialRequest())).status).toBe(401);
+			expect(mocks.limitRequest).toHaveBeenLastCalledWith(
+				expect.any(Request),
+				"mon2api:chat:anonymous",
+			);
+			mocks.limitRequest.mockResolvedValue({
+				limit: 60,
+				remaining: 0,
+				reset: 123,
+				success: false,
+			});
+			expect((await POST(credentialRequest())).status).toBe(429);
+			expect(mocks.limitCredential).not.toHaveBeenCalled();
+		});
+
+		it("validates the body before authenticating a credential", async () => {
+			const credential = vi.fn(async () => "key:1");
+			const POST = createRestMutation({
+				route: "mon2api:chat",
+				credential,
+				input: z.object({ model: z.string() }),
+				handler: async () => ({ body: { ok: true } }),
+			});
+			expect((await POST(credentialRequest("{}"))).status).toBe(400);
+			expect(credential).not.toHaveBeenCalled();
+			expect(mocks.limitRequest).toHaveBeenCalledWith(
+				expect.any(Request),
+				"mon2api:chat:anonymous",
+			);
+		});
+
+		it("keeps anonymous requests on the per-IP quota", async () => {
+			const credential = vi.fn(async () => "key:1");
+			const GET = createRestQuery({
+				route: "mon2api:models",
+				credential,
+				handler: async () => ({ body: { ok: true } }),
+			});
+			await GET(new Request("https://example.com/api/v1/models"));
+			expect(credential).not.toHaveBeenCalled();
+			expect(mocks.limitRequest).toHaveBeenCalledWith(
+				expect.any(Request),
+				"mon2api:models",
+			);
+		});
 	});
 });

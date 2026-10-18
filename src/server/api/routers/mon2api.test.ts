@@ -16,6 +16,7 @@ vi.mock("~/server/db", () => ({ db: {} }));
 vi.mock("~/server/observability/logger", () => ({ logger: { info: vi.fn() } }));
 vi.mock("~/server/security/rate-limit", () => ({
 	limitRequest: mocks.limitRequest,
+	limitCredential: async () => ({ success: true }),
 }));
 vi.mock("~/server/services/auth", async (importOriginal) => {
 	const actual =

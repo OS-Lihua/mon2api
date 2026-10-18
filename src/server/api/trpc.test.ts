@@ -6,6 +6,7 @@ import { createTRPCContext, createTRPCRouter, publicProcedure } from "./trpc";
 const mocks = vi.hoisted(() => ({ limitRequest: vi.fn() }));
 vi.mock("~/server/security/rate-limit", () => ({
 	limitRequest: mocks.limitRequest,
+	limitCredential: async () => ({ success: true }),
 }));
 vi.mock("~/server/db", () => ({ db: {} }));
 vi.mock("~/server/observability/logger", () => ({ logger: { info: vi.fn() } }));

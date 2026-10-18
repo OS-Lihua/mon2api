@@ -1,6 +1,6 @@
 import type { Lease, MeterRequest, Prisma, Settlement } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { runChat } from "./metering";
+import { resetAdmissionCache, runChat } from "./metering";
 import { EngineFailure, type EngineResult } from "./pool-engine";
 import { resolveReview } from "./review";
 import {
@@ -153,6 +153,7 @@ function changedNumber(
 	);
 }
 beforeEach(() => {
+	resetAdmissionCache();
 	vi.clearAllMocks();
 	lease = {
 		id: sessionId,
@@ -435,6 +436,16 @@ describe("metering lifecycle guards", () => {
 			expect(mocks.runEngine).not.toHaveBeenCalled();
 		},
 	);
+
+	it("shares one chain read across concurrent admissions for a session", async () => {
+		mocks.runEngine.mockResolvedValue(result);
+		await Promise.all([
+			runChat("consumer", args),
+			runChat("consumer", { ...args, idempotencyKey: "request-0002" }),
+		]);
+		expect(mocks.readSession).toHaveBeenCalledTimes(1);
+		expect(lease).toMatchObject({ spent: 40, reserved: 0 });
+	});
 
 	it("captures and releases one reservation after a normal completion", async () => {
 		mocks.runEngine.mockResolvedValue(result);

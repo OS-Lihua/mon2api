@@ -40,6 +40,7 @@ vi.mock("~/server/services/auth", () => ({
 	assertSameOrigin: mocks.origin,
 }));
 vi.mock("~/server/services/local-connector", () => ({
+	authenticateConnector: async () => ({ listing: { id: "listing-1" } }),
 	createLocalListing: mocks.create,
 	rotateConnector: mocks.rotate,
 	pollConnector: mocks.poll,
@@ -54,7 +55,10 @@ vi.mock("~/server/services/local-connector", () => ({
 	redeemConnectorLaunch: mocks.connect,
 }));
 vi.mock("~/server/services/market", () => ({ discoverDirectModels: vi.fn() }));
-vi.mock("~/server/security/rate-limit", () => ({ limitRequest: mocks.limit }));
+vi.mock("~/server/security/rate-limit", () => ({
+	limitRequest: mocks.limit,
+	limitCredential: async () => ({ success: true }),
+}));
 vi.mock("~/server/observability/logger", () => ({
 	logger: { error: vi.fn() },
 }));

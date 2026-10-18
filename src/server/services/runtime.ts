@@ -20,18 +20,23 @@ export const runtimeDirectory = () =>
 				? ".runtime"
 				: `.runtime/evm/${process.env.SETTLEMENT_CHAIN_ID || DEFAULT_NETWORK.chainId}-${(process.env.SETTLEMENT_ASSET || "ETH").toLowerCase()}`),
 	);
+let configCache: { source: string; value: ChainConfig } | undefined;
+/** Parsed once per source. A rewritten chain.json is detected by its mtime. */
 export function chainConfig(): ChainConfig {
+	const mode = process.env.MON2API_MODE || "evm";
+	const inline = process.env.CHAIN_CONFIG_JSON;
+	const file = inline ? "" : path.join(runtimeDirectory(), "chain.json");
+	const source = `${mode}\n${inline || `${file}@${fs.statSync(file).mtimeMs}`}`;
+	if (configCache?.source === source) return configCache.value;
 	const value = chainConfigSchema.parse(
-		JSON.parse(
-			process.env.CHAIN_CONFIG_JSON ||
-				fs.readFileSync(path.join(runtimeDirectory(), "chain.json"), "utf8"),
-		),
+		JSON.parse(inline || fs.readFileSync(file, "utf8")),
 	);
-	if ((process.env.MON2API_MODE || "evm") !== value.mode)
+	if (mode !== value.mode)
 		throw new Error(
 			"MON2API_MODE does not match the active chain configuration.",
 		);
-	return validateChainConfig(value);
+	configCache = { source, value: validateChainConfig(value) };
+	return configCache.value;
 }
 export function sessionPassword(): string {
 	if (process.env.SESSION_PASSWORD && process.env.SESSION_PASSWORD.length >= 32)
@@ -75,8 +80,32 @@ export function validateConnectorUrl(raw: string): string {
 	return url.toString();
 }
 
-export async function ensureChainBinding() {
+let bindingCheck: { key: string; done: Promise<void> } | undefined;
+/** Verify the database binding once per process and configuration. Failures are retried. */
+export function ensureChainBinding(): Promise<void> {
 	const config = chainConfig();
+	const key = [
+		config.chainId,
+		config.escrow.toLowerCase(),
+		config.token.toLowerCase(),
+		assetOf(config),
+		decimalsOf(config),
+	].join(":");
+	if (bindingCheck?.key !== key) {
+		const done = verifyChainBinding(config);
+		bindingCheck = { key, done };
+		done.catch(() => {
+			if (bindingCheck?.done === done) bindingCheck = undefined;
+		});
+	}
+	return bindingCheck.done;
+}
+/** Test hook: forget cached configuration and binding checks. */
+export function resetRuntimeCaches() {
+	configCache = undefined;
+	bindingCheck = undefined;
+}
+async function verifyChainBinding(config: ChainConfig) {
 	const binding = await db.chainBinding.upsert({
 		where: { id: "active" },
 		update: {},

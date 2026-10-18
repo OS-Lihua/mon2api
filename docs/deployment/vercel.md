@@ -23,7 +23,7 @@ pnpm worker
 
 Vercel可以承载Web，不能承载本常驻worker。需要独立worker、数据库和RPC。临时或只读文件系统用服务端 `CHAIN_CONFIG_JSON` 保存部署脚本输出的完整公开配置，替代读取chain.json。不要给配置或私钥加NEXT_PUBLIC_前缀。
 
-单机入口限流使用内存。多Web实例需要模板支持的共享Redis限流，只信任部署平台覆盖的IP头。数据库和签名发送已有跨进程锁，多实例故障切换仍需压力与故障注入验收。
+单机入口限流使用内存。多Web实例需要模板支持的共享Redis限流，只信任部署平台覆盖的IP头。已验证的 API Key、连接器凭证和已登录钱包按凭证单独计数（`RATE_LIMIT_CREDENTIAL_REQUESTS`，默认每窗口 600 次），不再与同一代理后的其他客户端共用 IP 配额；匿名请求与认证失败仍按 IP 计数。高并发时在 `DATABASE_URL` 设置 `connection_limit` 与 `pool_timeout`，所有进程的连接总数应低于数据库 `max_connections`。数据库和签名发送已有跨进程锁，多实例故障切换仍需压力与故障注入验收。
 
 ## Docker
 

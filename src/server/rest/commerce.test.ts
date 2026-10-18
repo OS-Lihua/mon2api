@@ -61,7 +61,10 @@ vi.mock("~/server/services/settlement", () => ({
 	closeSession: vi.fn(),
 	settleSession: mocks.settle,
 }));
-vi.mock("~/server/security/rate-limit", () => ({ limitRequest: mocks.limit }));
+vi.mock("~/server/security/rate-limit", () => ({
+	limitRequest: mocks.limit,
+	limitCredential: async () => ({ success: true }),
+}));
 vi.mock("~/server/observability/logger", () => ({
 	logger: { error: vi.fn() },
 }));

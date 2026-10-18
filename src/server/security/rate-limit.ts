@@ -21,25 +21,48 @@ type MemoryBucket = {
 
 const rateLimitEnabled = env.RATE_LIMIT_ENABLED ?? true;
 const rateLimitRequests = env.RATE_LIMIT_REQUESTS ?? 60;
+const credentialRequests = env.RATE_LIMIT_CREDENTIAL_REQUESTS ?? 600;
 const rateLimitWindowSeconds = env.RATE_LIMIT_WINDOW_SECONDS ?? 60;
 const windowMs = rateLimitWindowSeconds * 1000;
+const maxBuckets = env.RATE_LIMIT_MAX_BUCKETS ?? 10000;
 const limitInMemory = createMemoryRateLimiter({
 	limit: rateLimitRequests,
 	windowMs,
-	maxBuckets: env.RATE_LIMIT_MAX_BUCKETS ?? 10000,
+	maxBuckets,
+});
+// Separate buckets: anonymous traffic cannot exhaust authenticated quotas.
+const limitCredentialInMemory = createMemoryRateLimiter({
+	limit: credentialRequests,
+	windowMs,
+	maxBuckets,
 });
 
-const upstash =
+const redis =
 	env.UPSTASH_REDIS_REST_URL === undefined ||
 	env.UPSTASH_REDIS_REST_TOKEN === undefined
 		? null
+		: new Redis({
+				token: env.UPSTASH_REDIS_REST_TOKEN,
+				url: env.UPSTASH_REDIS_REST_URL,
+			});
+const upstash =
+	redis === null
+		? null
 		: new Ratelimit({
-				redis: new Redis({
-					token: env.UPSTASH_REDIS_REST_TOKEN,
-					url: env.UPSTASH_REDIS_REST_URL,
-				}),
+				redis,
 				limiter: Ratelimit.slidingWindow(
 					rateLimitRequests,
+					`${rateLimitWindowSeconds} s`,
+				),
+			});
+const upstashCredential =
+	redis === null
+		? null
+		: new Ratelimit({
+				redis,
+				prefix: "@upstash/ratelimit/credential",
+				limiter: Ratelimit.slidingWindow(
+					credentialRequests,
 					`${rateLimitWindowSeconds} s`,
 				),
 			});
@@ -74,18 +97,43 @@ export async function limitRequest(
 
 	const identifier = `${route}:${getClientIp(request)}`;
 
-	if (upstash !== null) {
-		const result = await upstash.limit(identifier);
-		// The SDK permits requests on timeout by default. Keep the API closed
-		// when the shared backend cannot confirm the quota.
-		if (result.reason === "timeout") {
-			throw new Error("Rate limit backend timed out");
-		}
-		return result;
-	}
+	if (upstash !== null) return limitShared(upstash, identifier);
 
 	logger.debug({ route }, "Using in-memory rate limiter");
 	return limitInMemory(identifier);
+}
+
+/**
+ * Limit an authenticated caller by its verified credential id, not by IP.
+ * Call only after authentication so unverified tokens never create buckets.
+ */
+export async function limitCredential(
+	route: string,
+	subject: string,
+): Promise<RateLimitResult> {
+	if (!rateLimitEnabled) {
+		return {
+			limit: credentialRequests,
+			remaining: credentialRequests,
+			reset: Date.now() + windowMs,
+			success: true,
+		};
+	}
+
+	const identifier = `${route}:${subject}`;
+	if (upstashCredential !== null)
+		return limitShared(upstashCredential, identifier);
+	return limitCredentialInMemory(identifier);
+}
+
+async function limitShared(limiter: Ratelimit, identifier: string) {
+	const result = await limiter.limit(identifier);
+	// The SDK permits requests on timeout by default. Keep the API closed
+	// when the shared backend cannot confirm the quota.
+	if (result.reason === "timeout") {
+		throw new Error("Rate limit backend timed out");
+	}
+	return result;
 }
 
 export function createMemoryRateLimiter(options: {

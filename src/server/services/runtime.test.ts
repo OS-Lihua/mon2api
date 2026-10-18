@@ -3,6 +3,7 @@ import {
 	chainConfig,
 	demoEnabled,
 	ensureChainBinding,
+	resetRuntimeCaches,
 	runtimeDirectory,
 } from "./runtime";
 
@@ -26,7 +27,10 @@ function config(mode: "local" | "evm") {
 	});
 }
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+	vi.unstubAllEnvs();
+	resetRuntimeCaches();
+});
 
 describe("demo identity chain boundary", () => {
 	it("defaults to Ethereum mainnet and rejects implicit local deployments", () => {
@@ -118,6 +122,20 @@ describe("persistent settlement binding", () => {
 				}),
 			}),
 		);
+	});
+	it("verifies the binding once per process and retries after a failure", async () => {
+		vi.stubEnv("MON2API_MODE", "evm");
+		const configured = JSON.parse(config("evm"));
+		vi.stubEnv("CHAIN_CONFIG_JSON", JSON.stringify(configured));
+		bindingStore.upsert.mockReset();
+		bindingStore.upsert.mockRejectedValueOnce(new Error("database down"));
+		await expect(ensureChainBinding()).rejects.toThrow("database down");
+		bindingStore.upsert.mockImplementation(
+			async ({ create }: { create: unknown }) => create,
+		);
+		await Promise.all([ensureChainBinding(), ensureChainBinding()]);
+		await ensureChainBinding();
+		expect(bindingStore.upsert).toHaveBeenCalledTimes(2);
 	});
 	it.each(["chainId", "asset", "tokenDecimals", "token", "escrow"])(
 		"refuses to reinterpret an existing ledger with different %s",

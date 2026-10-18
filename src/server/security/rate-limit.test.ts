@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	createMemoryRateLimiter,
 	getClientIp,
+	limitCredential,
 	limitRequest,
 } from "./rate-limit";
 
@@ -10,6 +11,7 @@ const settings = vi.hoisted(() => ({
 	RATE_LIMIT_IP_HEADER: "none",
 	RATE_LIMIT_ENABLED: true,
 	RATE_LIMIT_REQUESTS: 2,
+	RATE_LIMIT_CREDENTIAL_REQUESTS: 3,
 	RATE_LIMIT_WINDOW_SECONDS: 60,
 }));
 
@@ -169,5 +171,17 @@ describe("memory rate limiting", () => {
 			);
 			expect(result.success).toBe(i < 2);
 		}
+	});
+
+	it("gives each verified credential its own quota, separate from IP buckets", async () => {
+		settings.RATE_LIMIT_IP_HEADER = "none";
+		for (let i = 0; i < 4; i++)
+			expect((await limitCredential("test:key", "key:a")).success).toBe(i < 3);
+		expect((await limitCredential("test:key", "key:b")).success).toBe(true);
+		const anonymous = await limitRequest(
+			{ headers: new Headers() },
+			"test:key",
+		);
+		expect(anonymous.success).toBe(true);
 	});
 });

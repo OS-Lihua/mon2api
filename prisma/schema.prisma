@@ -65,6 +65,8 @@ model Lease {
   settlements Settlement[]
 
   @@index([consumer, status])
+  @@index([provider])
+  @@index([listingId])
   @@index([status, id])
 }
 
@@ -103,6 +105,7 @@ model AccessKey {
   createdAt DateTime @default(now())
 
   @@index([owner])
+  @@index([sessionId])
 }
 
 model Settlement {

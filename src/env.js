@@ -37,6 +37,11 @@ export const env = createEnv({
 			.default("true")
 			.transform((value) => value === "true"),
 		RATE_LIMIT_REQUESTS: z.coerce.number().int().positive().default(60),
+		RATE_LIMIT_CREDENTIAL_REQUESTS: z.coerce
+			.number()
+			.int()
+			.positive()
+			.default(600),
 		RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
 		RATE_LIMIT_MAX_BUCKETS: z.coerce.number().int().positive().default(10000),
 		RATE_LIMIT_IP_HEADER: z
@@ -105,6 +110,7 @@ export const env = createEnv({
 		LOG_LEVEL: process.env.LOG_LEVEL,
 		RATE_LIMIT_ENABLED: process.env.RATE_LIMIT_ENABLED,
 		RATE_LIMIT_REQUESTS: process.env.RATE_LIMIT_REQUESTS,
+		RATE_LIMIT_CREDENTIAL_REQUESTS: process.env.RATE_LIMIT_CREDENTIAL_REQUESTS,
 		RATE_LIMIT_WINDOW_SECONDS: process.env.RATE_LIMIT_WINDOW_SECONDS,
 		RATE_LIMIT_MAX_BUCKETS: process.env.RATE_LIMIT_MAX_BUCKETS,
 		RATE_LIMIT_IP_HEADER: process.env.RATE_LIMIT_IP_HEADER,

@@ -36,6 +36,34 @@ export function calculateCost(
 	return Number(amount);
 }
 type ChatArgs = z.infer<typeof chatInput>;
+type SessionState = Awaited<ReturnType<typeof readSession>>;
+const SESSION_STATE_TTL_MS = 1000;
+const sessionStates = new Map<
+	string,
+	{ expires: number; state: Promise<SessionState> }
+>();
+/**
+ * Admission-only chain read. Concurrent calls share one RPC request and reuse it
+ * briefly; the database lease status is still checked under the lease lock.
+ */
+function admissionSessionState(id: string): Promise<SessionState> {
+	const now = Date.now();
+	// Entries share one TTL, so insertion order is expiry order.
+	for (const [key, entry] of sessionStates) {
+		if (entry.expires > now) break;
+		sessionStates.delete(key);
+	}
+	const cached = sessionStates.get(id);
+	if (cached) return cached.state;
+	const state = readSession(id);
+	sessionStates.set(id, { expires: now + SESSION_STATE_TTL_MS, state });
+	state.catch(() => sessionStates.delete(id));
+	return state;
+}
+/** Test hook: drop cached admission reads. */
+export function resetAdmissionCache() {
+	sessionStates.clear();
+}
 export async function runChat(
 	owner: string,
 	input: ChatArgs,
@@ -52,7 +80,7 @@ export async function runChat(
 		throw new AppError("not_found", "调用会话不存在。", 404);
 	if (lease.listing.kind === "demo" && !demoEnabled())
 		throw new AppError("demo_disabled", "模拟引擎未启用。", 403);
-	const chain = await readSession(lease.id);
+	const chain = await admissionSessionState(lease.id);
 	if (
 		chain.closed ||
 		chain.closeAfter ||

@@ -380,10 +380,7 @@ export function Mon2ApiConsole() {
 	const [showAllKeys, setShowAllKeys] = useState(false);
 	const snapshot = api.mon2api.snapshot.useQuery(
 		{ gatewayOnly: true },
-		{
-			refetchInterval: 15_000,
-			retry: 1,
-		},
+		{ refetchInterval: 15_000 },
 	);
 	const createLocalDraft = api.mon2api.createLocalDraft.useMutation();
 	const createConnectorLaunch = api.mon2api.createConnectorLaunch.useMutation();

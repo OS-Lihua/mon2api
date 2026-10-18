@@ -9,6 +9,8 @@ Tag format:
 
 ## Unreleased
 
+- Harden the backend for high concurrency: rate-limit verified API keys, connectors and signed-in wallets per credential (`RATE_LIMIT_CREDENTIAL_REQUESTS`) while failed credentials still spend the per-IP quota; cache the parsed chain config, the deployment binding check and the RPC client; share admission chain reads per session; wake local-connector waiters in process instead of polling every 250 ms; cache the dashboard RPC health check; add indexes for per-listing admission counts, provider dashboards and key revocation.
+
 - Remove dead code: the unmounted template post example (router, service, schema, tests, Prisma `Post` model and its table via migration), the unused server analytics helper and `posthog-node`, the unused RSC tRPC caller and router inference types, the `parseMicroDUSD` and `keyCreatedResponse` aliases, the unused legacy `mon2api-mark.svg`, unused global CSS rules, and exports only used inside their own module.
 
 - Add brand icons: SVG marks for every settlement chain, USDT, USDC and native-coin asset icons, an Apple touch icon, a web app manifest with 192/512 and maskable icons, and an Open Graph share image. Metadata URLs resolve from `APP_ORIGIN`.

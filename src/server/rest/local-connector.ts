@@ -6,6 +6,7 @@ import {
 	requireViewer,
 } from "~/server/services/auth";
 import {
+	authenticateConnector,
 	connectorSetup,
 	connectorStatus,
 	createConnectorLaunch,
@@ -64,15 +65,20 @@ function noStore(handler: (request: Request) => Promise<Response>) {
 		return response;
 	};
 }
+/** Connector-token routes are limited per listing instead of per IP. */
+const connectorSubject = async (request: Request) =>
+	`connector:${(await authenticateConnector(request.headers.get("authorization"))).listing.id}`;
 function mutation<T extends z.ZodTypeAny, U extends z.ZodTypeAny>(
 	route: string,
 	input: T,
 	output: U,
 	action: (request: Request, input: z.infer<T>) => Promise<unknown>,
+	credential?: (request: Request) => Promise<string>,
 ) {
 	return noStore(
 		createRestMutation({
 			route,
+			credential,
 			input,
 			handler: ({ request, input }) =>
 				result(output, async () => {
@@ -143,6 +149,7 @@ export const catalogConnectorPost = mutation(
 	connectorOk,
 	(request, input) =>
 		reportConnectorCatalog(request.headers.get("authorization"), input.models),
+	connectorSubject,
 );
 export const rotateConnectorPost = mutation(
 	"connector:rotate",
@@ -156,6 +163,7 @@ export const pollConnectorPost = mutation(
 	connectorPollResponse,
 	(request, input) =>
 		pollConnector(request.headers.get("authorization"), input.model),
+	connectorSubject,
 );
 export const updateConnectorPost = mutation(
 	"connector:update",
@@ -163,16 +171,19 @@ export const updateConnectorPost = mutation(
 	connectorOk,
 	(request, input) =>
 		updateConnector(request.headers.get("authorization"), input),
+	connectorSubject,
 );
 export const disconnectConnectorPost = mutation(
 	"connector:disconnect",
 	z.object({}).strict(),
 	connectorOk,
 	(request) => disconnectConnector(request.headers.get("authorization")),
+	connectorSubject,
 );
 export const connectorStatusGet = noStore(
 	createRestQuery({
 		route: "connector:status",
+		credential: connectorSubject,
 		handler: ({ request }) =>
 			result(connectorStatusResponse, () =>
 				connectorStatus(request.headers.get("authorization")),

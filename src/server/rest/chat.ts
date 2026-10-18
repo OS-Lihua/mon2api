@@ -25,12 +25,25 @@ function errorResponse(error: unknown) {
 		{ status: known ? error.status : 500, headers },
 	);
 }
+// One key lookup per request, shared by the rate limiter and the handler.
+const verifiedKeys = new WeakMap<Request, ReturnType<typeof authenticateKey>>();
+function requestKey(request: Request) {
+	let key = verifiedKeys.get(request);
+	if (!key) {
+		key = authenticateKey(request.headers.get("authorization"));
+		verifiedKeys.set(request, key);
+	}
+	return key;
+}
+const keySubject = async (request: Request) =>
+	`key:${(await requestKey(request)).id}`;
 export const chatPost = createRestMutation({
 	route: "mon2api:chat",
+	credential: keySubject,
 	input: publicChatInput,
 	handler: async ({ input, request }) => {
 		try {
-			const key = await authenticateKey(request.headers.get("authorization"));
+			const key = await requestKey(request);
 			const lease = await db.lease.findUnique({ where: { id: key.sessionId } });
 			if (!lease || lease.model !== input.model)
 				throw new AppError(
@@ -175,9 +188,10 @@ export const chatPost = createRestMutation({
 });
 export const modelsGet = createRestQuery({
 	route: "mon2api:models",
+	credential: keySubject,
 	handler: async ({ request }) => {
 		try {
-			const key = await authenticateKey(request.headers.get("authorization"));
+			const key = await requestKey(request);
 			const lease = await db.lease.findUniqueOrThrow({
 				where: { id: key.sessionId },
 			});

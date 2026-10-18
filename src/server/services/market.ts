@@ -385,6 +385,29 @@ export async function withdraw(user: Viewer) {
 		? { mode: "demo" as const, txHash: await demoWithdraw(user.address) }
 		: { mode: "wallet" as const };
 }
+const CHAIN_READY_TTL_MS = 30_000;
+const chainReady = new WeakMap<
+	object,
+	{ chainId: number; expires: number; ready: Promise<boolean> }
+>();
+/** Dashboard-only RPC health check, shared across polling clients. */
+function chainReachable(chainId: number): Promise<boolean> {
+	const { publicClient } = clients();
+	const cached = chainReady.get(publicClient);
+	if (cached?.chainId === chainId && cached.expires > Date.now())
+		return cached.ready;
+	const ready = publicClient.getChainId().then((id) => id === chainId);
+	const entry = {
+		chainId,
+		expires: Date.now() + CHAIN_READY_TTL_MS,
+		ready,
+	};
+	chainReady.set(publicClient, entry);
+	ready.catch(() => {
+		if (chainReady.get(publicClient) === entry) chainReady.delete(publicClient);
+	});
+	return ready;
+}
 export async function snapshot(
 	user: Viewer | null,
 	gatewayOnly = false,
@@ -468,17 +491,25 @@ export async function snapshot(
 			token: config.token,
 			explorer: networkMetadata(config).explorer,
 		};
-		const { publicClient } = clients();
-		network.ready = (await publicClient.getChainId()) === config.chainId;
+		network.ready = await chainReachable(config.chainId);
 		if (user) balances = await chainBalances(user.address);
 	} catch {
 		/* A disconnected chain is shown explicitly; never fake balances. */
 	}
-	const counts = new Map(running.map((r) => [r.sessionId, r._count]));
 	const allRunning = await db.lease.findMany({
 		where: { id: { in: running.map((r) => r.sessionId) } },
 		select: { id: true, listingId: true },
 	});
+	const sessionListing = new Map(allRunning.map((s) => [s.id, s.listingId]));
+	const activeByListing = new Map<string, number>();
+	for (const r of running) {
+		const listingId = sessionListing.get(r.sessionId);
+		if (listingId)
+			activeByListing.set(
+				listingId,
+				(activeByListing.get(listingId) ?? 0) + r._count,
+			);
+	}
 	return {
 		viewer: user,
 		network,
@@ -509,9 +540,7 @@ export async function snapshot(
 			inputRate: l.inputRate,
 			outputRate: l.outputRate,
 			concurrency: l.concurrency,
-			activeRequests: allRunning
-				.filter((s) => s.listingId === l.id)
-				.reduce((n, s) => n + (counts.get(s.id) || 0), 0),
+			activeRequests: activeByListing.get(l.id) ?? 0,
 			status:
 				l.status !== "DISCOVERING" &&
 				l.transport === "local" &&
