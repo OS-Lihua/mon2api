@@ -13,7 +13,6 @@ import {
 } from "~/shared/settlement-config";
 
 export type { ChainConfig };
-export { chainConfigSchema };
 export const runtimeDirectory = () =>
 	path.resolve(
 		/* turbopackIgnore: true */ process.env.MON2API_DATA_DIR ||

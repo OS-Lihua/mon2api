@@ -68,7 +68,6 @@ export const idResponse = z.object({ id: z.string().cuid() }).strict();
 export const buyerConnectionResponse = z
 	.object({ base_url: z.string().url(), key: z.string(), model: z.string() })
 	.strict();
-export const keyCreatedResponse = buyerConnectionResponse;
 export const challengeResponse = z.object({ message: z.string() }).strict();
 export const networkResponse = z
 	.object({

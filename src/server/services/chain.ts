@@ -1,6 +1,5 @@
 import "server-only";
 import {
-	type Address,
 	createPublicClient,
 	createWalletClient,
 	defineChain,
@@ -23,7 +22,7 @@ import {
 import { chainConfig, demoEnabled } from "./runtime";
 
 // Standard public test mnemonic. Never fund these addresses on a real network.
-export const DEMO_MNEMONIC =
+const DEMO_MNEMONIC =
 	"test test test test test test test test test test test junk";
 export function demoAccount(index = 0) {
 	return mnemonicToAccount(DEMO_MNEMONIC, { addressIndex: index });
@@ -73,7 +72,7 @@ function meterWallet() {
 	return createWalletClient({ account, chain, transport: http(config.rpcUrl) });
 }
 type ChainGlobal = typeof globalThis & { mon2apiChainQueue?: Promise<unknown> };
-export async function serializedChain<T>(action: () => Promise<T>): Promise<T> {
+async function serializedChain<T>(action: () => Promise<T>): Promise<T> {
 	const global = globalThis as ChainGlobal;
 	const previous = global.mon2apiChainQueue || Promise.resolve();
 	const result = previous
@@ -441,4 +440,3 @@ export async function findSettlement(
 		? confirmSettlement(hash, id, nonce, receiptsHash, cumulative)
 		: null;
 }
-export type { Address };

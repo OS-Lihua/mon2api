@@ -9,6 +9,8 @@ Tag format:
 
 ## Unreleased
 
+- Remove dead code: the unmounted template post example (router, service, schema, tests, Prisma `Post` model and its table via migration), the unused server analytics helper and `posthog-node`, the unused RSC tRPC caller and router inference types, the `parseMicroDUSD` and `keyCreatedResponse` aliases, the unused legacy `mon2api-mark.svg`, unused global CSS rules, and exports only used inside their own module.
+
 - Add brand icons: SVG marks for every settlement chain, USDT, USDC and native-coin asset icons, an Apple touch icon, a web app manifest with 192/512 and maskable icons, and an Open Graph share image. Metadata URLs resolve from `APP_ORIGIN`.
 
 - Unify all console sections with the multichain landing page: shared chain glyphs, a current-market context bar, supported-network directory, dark overview flow, separate metric cards, refined resource pricing, tables, forms and dialogs. Expand development-only preview data for UI review; preview backend operations remain blocked.

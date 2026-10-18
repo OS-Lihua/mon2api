@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { formatDUSD, parseMicroDUSD } from "./money";
+import { formatDUSD, parseMicroAmount } from "./money";
 
 describe("dUSD amounts", () => {
 	it("parses exact micro units from user input", () => {
-		expect(parseMicroDUSD("1.000001")).toBe(1_000_001);
-		expect(parseMicroDUSD("100.000000")).toBe(100_000_000);
-		expect(parseMicroDUSD("0.01")).toBe(10_000);
+		expect(parseMicroAmount("1.000001")).toBe(1_000_001);
+		expect(parseMicroAmount("100.000000")).toBe(100_000_000);
+		expect(parseMicroAmount("0.01")).toBe(10_000);
 	});
 
 	it.each(["1.0000001", "1e2", "-1", "1,000", "", "1.", "9007199255"])(
 		"rejects imprecise or invalid input %s",
 		(value) => {
-			expect(() => parseMicroDUSD(value)).toThrow();
+			expect(() => parseMicroAmount(value)).toThrow();
 		},
 	);
 

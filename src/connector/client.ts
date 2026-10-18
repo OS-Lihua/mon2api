@@ -28,7 +28,7 @@ export function serviceUrl(raw: string, upstream = false) {
 		);
 	return url.toString().replace(/\/$/, "");
 }
-export class ConnectorClientError extends Error {
+class ConnectorClientError extends Error {
 	constructor(readonly status: number) {
 		super(`平台请求未完成（HTTP ${status}）。`);
 	}

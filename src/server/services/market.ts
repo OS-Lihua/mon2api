@@ -44,11 +44,11 @@ import {
 	validateConnectorUrl,
 } from "./runtime";
 
-export type Tx = Prisma.TransactionClient;
+type Tx = Prisma.TransactionClient;
 export async function lock(tx: Tx, id: string) {
 	await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(hashtext(${id}))`;
 }
-export const keyHash = (value: string) =>
+const keyHash = (value: string) =>
 	createHash("sha256").update(value).digest("hex");
 export async function discoverDirectModels(input: {
 	baseUrl: string;

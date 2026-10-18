@@ -4,7 +4,7 @@ import { decimalsOf, type SettlementAsset } from "./settlement-asset";
 const MICRO_DUSD_DECIMALS = 6;
 
 /** Parse a user-entered dUSD amount without rounding fractional micro dUSD. */
-export function parseMicroDUSD(value: string): number {
+export function parseMicroAmount(value: string): number {
 	if (!/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(value))
 		throw new Error("金额最多只能输入 6 位小数，且不能使用科学计数法。");
 	const amount = parseUnits(value, MICRO_DUSD_DECIMALS);
@@ -26,8 +26,6 @@ export function formatDUSD(amount: number | string, precise = false): string {
 	return `$${grouped}.${digits}`;
 }
 
-/** Settlement billing uses exact integer micro-units. */
-export const parseMicroAmount = parseMicroDUSD;
 export function formatAmount(amount: number | string, precise = false): string {
 	return formatDUSD(amount, precise).slice(1);
 }

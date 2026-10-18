@@ -44,7 +44,7 @@ export function codePointString(options: {
 		});
 }
 
-export const finishReasonSchema = z.enum(["stop", "length", "content_filter"]);
+const finishReasonSchema = z.enum(["stop", "length", "content_filter"]);
 
 export const usageResponseSchema = z
 	.object({

@@ -35,7 +35,7 @@ export function calculateCost(
 		throw new AppError("overflow", "费用超出支持范围。");
 	return Number(amount);
 }
-export type ChatArgs = z.infer<typeof chatInput>;
+type ChatArgs = z.infer<typeof chatInput>;
 export async function runChat(
 	owner: string,
 	input: ChatArgs,

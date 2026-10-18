@@ -303,40 +303,8 @@ th {
 	background: #8b9b9b;
 }
 
-.wallet-button {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: 8px;
-	max-width: 210px;
-	padding: 8px 13px;
-	border: 1px solid var(--line-strong);
-	border-radius: 7px;
-	background: var(--white);
-	color: var(--ink);
-	font-size: 12px;
-	white-space: nowrap;
-}
-
-.wallet-button:hover {
-	border-color: #b4cee7;
-	background: #f4faf6;
-}
-
 .wallet-connect {
 	min-width: 112px;
-}
-
-.avatar {
-	display: grid;
-	place-items: center;
-	width: 30px;
-	height: 30px;
-	border-radius: 50%;
-	background: #f2faff;
-	color: #1b857a;
-	font-size: 12px;
-	font-weight: 650;
 }
 
 .mobile-menu {
@@ -345,14 +313,6 @@ th {
 	border: 0;
 	background: none;
 	color: var(--ink);
-}
-
-.demo-exit {
-	display: inline-flex;
-	align-items: center;
-	gap: 8px;
-	color: var(--muted);
-	font-size: 12px;
 }
 
 .demo-pill {
@@ -387,27 +347,6 @@ h1 {
 	font-weight: 600;
 	letter-spacing: -0.7px;
 	line-height: 1.3;
-}
-
-.section-lead {
-	display: flex;
-	align-items: flex-end;
-	justify-content: space-between;
-	gap: 16px;
-	margin: 28px 0 14px;
-}
-
-.section-lead h2 {
-	margin: 0;
-	font-size: 18px;
-	font-weight: 650;
-	letter-spacing: -0.2px;
-}
-
-.section-lead p {
-	margin: 4px 0 0;
-	color: var(--muted);
-	font-size: 13px;
 }
 
 .button {
@@ -941,61 +880,6 @@ h1 {
 	font-size: 13px;
 }
 
-.flow-list {
-	display: flex;
-	flex-direction: column;
-	gap: 17px;
-}
-
-.flow-step {
-	position: relative;
-	display: flex;
-	align-items: flex-start;
-	gap: 12px;
-}
-
-.flow-step:not(:last-child)::after {
-	position: absolute;
-	top: 29px;
-	left: 13px;
-	height: 15px;
-	border-left: 1px solid #dfe9ef;
-	content: "";
-}
-
-.flow-step-icon {
-	display: grid;
-	flex: 0 0 28px;
-	place-items: center;
-	width: 28px;
-	height: 28px;
-	border: 1px solid #e5edf3;
-	border-radius: 6px;
-	background: #f0f7f2;
-	color: var(--accent);
-}
-
-.flow-step h3 {
-	margin: 1px 0 5px;
-	font-size: 13px;
-	font-weight: 650;
-}
-
-.flow-step p {
-	margin: 0;
-	color: var(--muted);
-	font-size: 12px;
-	line-height: 1.6;
-}
-
-.flow-step-meta {
-	margin-left: auto;
-	padding-top: 4px;
-	color: var(--muted);
-	font-size: 11px;
-	white-space: nowrap;
-}
-
 /* Tables maintain a readable minimum size even when they scroll on phones. */
 .table-scroll {
 	max-width: 100%;
@@ -1165,37 +1049,6 @@ tr:last-child td {
 	border: 0;
 	background: none;
 	color: inherit;
-}
-
-.section-tabs {
-	display: flex;
-	gap: 4px;
-	width: fit-content;
-	margin-bottom: 21px;
-	padding: 4px;
-	border: 1px solid var(--line);
-	border-radius: 8px;
-	background: #edf3ef;
-}
-
-.section-tabs button {
-	padding: 7px 13px;
-	border: 0;
-	border-radius: 5px;
-	background: transparent;
-	color: var(--muted);
-	font-size: 13px;
-}
-
-.section-tabs button:hover {
-	color: var(--ink);
-}
-
-.section-tabs button.active {
-	background: var(--white);
-	box-shadow: 0 1px 2px #0f141c14;
-	color: #1b857a;
-	font-weight: 600;
 }
 
 .toolbar {
@@ -1774,8 +1627,7 @@ textarea {
 	line-height: 1.45;
 }
 
-.resource-card > p,
-.resource-card-meta {
+.resource-card > p {
 	margin: 0;
 	color: var(--muted);
 	font-size: 13px;
@@ -2126,17 +1978,6 @@ textarea {
 .key-reveal code {
 	color: var(--ink);
 	font-size: 12px;
-}
-
-.modal-backdrop {
-	position: fixed;
-	inset: 0;
-	z-index: 80;
-	display: grid;
-	place-items: center;
-	padding: 20px;
-	background: #102b3299;
-	backdrop-filter: blur(6px);
 }
 
 .modal {
@@ -2755,23 +2596,8 @@ textarea:hover:not(:disabled) {
 		gap: 8px;
 	}
 
-	.wallet-button {
-		max-width: 150px;
-		padding: 7px 9px;
-	}
-
 	.wallet-connect {
 		min-width: 100px;
-	}
-
-	.avatar,
-	.demo-exit-label {
-		display: none;
-	}
-
-	.demo-exit {
-		gap: 6px;
-		padding: 7px 9px;
 	}
 
 	.content {
@@ -2871,10 +2697,6 @@ textarea:hover:not(:disabled) {
 		margin: 10px 0 5px;
 	}
 
-	.section-lead {
-		align-items: flex-start;
-	}
-
 	.toolbar {
 		flex-wrap: wrap;
 	}
@@ -2882,15 +2704,6 @@ textarea:hover:not(:disabled) {
 	.search {
 		min-width: 180px;
 		max-width: none;
-	}
-
-	.section-tabs {
-		width: 100%;
-	}
-
-	.section-tabs button {
-		flex: 1;
-		padding-inline: 8px;
 	}
 
 	.chat-settings .panel-body {
@@ -3029,10 +2842,6 @@ textarea:hover:not(:disabled) {
 
 	.stat-value {
 		font-size: 23px;
-	}
-
-	.section-lead {
-		flex-direction: column;
 	}
 
 	.modal-heading,

@@ -70,7 +70,6 @@
 		"openai": "^6.0.0",
 		"pino": "^10.3.1",
 		"posthog-js": "^1.428.7",
-		"posthog-node": "^5.51.7",
 		"react": "^19.2.8",
 		"react-dom": "^19.2.8",
 		"server-only": "^0.0.1",

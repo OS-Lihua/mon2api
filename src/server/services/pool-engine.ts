@@ -24,7 +24,7 @@ export type EngineResult = {
 	upstreamRequestId: string | null;
 };
 
-export type EngineFailureCode =
+type EngineFailureCode =
 	| "configuration"
 	| "aborted"
 	| "rate_limited"

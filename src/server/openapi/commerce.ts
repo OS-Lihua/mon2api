@@ -325,7 +325,7 @@ export function registerCommerce(
 			tag: "Consumer",
 			auth: "wallet",
 			input: c.createKeyInput,
-			output: c.keyCreatedResponse,
+			output: c.buyerConnectionResponse,
 			created: true,
 			description:
 				"Full key is returned once. Store it server-side. This operation is not replay-safe.",

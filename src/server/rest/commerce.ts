@@ -292,7 +292,7 @@ export const keysGet = managedQuery(
 export const keysPost = mutation({
 	route: "commerce:create-key",
 	input: contract.createKeyInput,
-	output: contract.keyCreatedResponse,
+	output: contract.buyerConnectionResponse,
 	status: 201,
 	action: (input, user) =>
 		createKey(signedIn(user), input.sessionId, input.name),

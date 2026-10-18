@@ -11,7 +11,7 @@ const allowedOrigins = new Set(
 		.filter(Boolean),
 );
 
-export function getCorsHeaders(request: Request): Record<string, string> {
+function getCorsHeaders(request: Request): Record<string, string> {
 	const origin = request.headers.get("origin");
 
 	if (origin === null || !allowedOrigins.has(origin)) {
