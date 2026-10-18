@@ -1,6 +1,6 @@
-# mon2api 号池连接器
+# Token2API 号池连接器
 
-mon2api 负责资源挂牌、买家预算、统一 API、用量账本和链上分账。提供者独立运营上游网关，由上游负责账号授权、凭证刷新、调度、额度管理和执行环境。mon2api 使用官方 OpenAI SDK 调用标准文本接口。
+Token2API 负责资源挂牌、买家预算、统一 API、用量账本和链上分账。提供者独立运营上游网关，由上游负责账号授权、凭证刷新、调度、额度管理和执行环境。Token2API 使用官方 OpenAI SDK 调用标准文本接口。
 
 ## 资源归属
 
@@ -10,8 +10,8 @@ mon2api 负责资源挂牌、买家预算、统一 API、用量账本和链上�
 
 1. 在提供者自己的环境确认模型可用、账号授权有效。
 2. 创建权限仅限模型调用的上游 API Key，不使用管理密钥。
-3. 由 mon2api 运营者将网关 origin 加入 `UPSTREAM_ALLOWED_ORIGINS`。远程连接使用 HTTPS。
-4. 在“我的号池”创建资源，选择上游网关，填写 `baseUrl`、`apiKey`、准确的模型名和价格。地址使用根地址或 `/v1`，不填写完整的 `/chat/completions`。
+3. 由 Token2API 运营者将网关 origin 加入 `UPSTREAM_ALLOWED_ORIGINS`。远程连接使用 HTTPS。
+4. 在“我的资源”创建资源，选择上游网关，填写 `baseUrl`、`apiKey`、准确的模型名和价格。地址使用根地址或 `/v1`，不填写完整的 `/chat/completions`。
 5. 用短文本核对最终 usage、上游请求 ID、消费者账单和提供者收入，再测试429、取消和缺失用量。
 
 ```dotenv
@@ -56,4 +56,4 @@ pnpm review:resolve <requestId> <inputTokens> <outputTokens> <evidenceReference>
 
 `kind: "demo"` 使用明确标记的模拟响应与演示计量单位，不调用真实模型。`kind: "gateway"` 使用真实上游接口。两者均复用同一账本和资金合约。
 
-账号登录、隔离运行环境、额度冷却和健康检查由提供者的上游系统实现。mon2api 当前没有内置VM编排或账号防封机制，也不承诺账号不会被停用。提供者应验证工具权限、文件系统和网络隔离；mon2api 不发送tools，也不执行返回的工具调用。
+账号登录、隔离运行环境、额度冷却和健康检查由提供者的上游系统实现。Token2API 当前没有内置VM编排或账号防封机制，也不承诺账号不会被停用。提供者应验证工具权限、文件系统和网络隔离；Token2API 不发送tools，也不执行返回的工具调用。

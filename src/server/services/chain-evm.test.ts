@@ -24,8 +24,8 @@ const fixture = vi.hoisted(() => ({
 		| ReturnType<typeof import("viem")["custom"]>
 		| undefined,
 	config: {
-		mode: "monad-testnet",
-		chainId: 10143,
+		mode: "evm",
+		chainId: 8453,
 		rpcUrl: "http://127.0.0.1:1",
 		escrow: "",
 		token: "",

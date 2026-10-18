@@ -23,7 +23,7 @@ import {
 import { escrowAbi, nativeEscrowAbi } from "../src/lib/abi";
 import { NATIVE_TOKEN, toChainAmount } from "../src/shared/settlement-asset";
 
-const budget = toChainAmount(1_000_000, "MON");
+const budget = toChainAmount(1_000_000, "ETH");
 const digest = `0x${"ab".repeat(32)}` as Hex;
 async function fixture() {
 	const provider = ganache.provider({
@@ -119,7 +119,7 @@ async function fixture() {
 	};
 }
 
-describe("native MON escrow on an isolated EVM", () => {
+describe("native token escrow on an isolated EVM", () => {
 	let f: Awaited<ReturnType<typeof fixture>>;
 	let snapshot: string;
 	beforeAll(async () => {
@@ -144,10 +144,10 @@ describe("native MON escrow on an isolated EVM", () => {
 				functionName: "token",
 			}),
 		).toBe(NATIVE_TOKEN);
-		await expect(f.open(0n)).rejects.toThrow("invalid MON deposit");
-		await expect(f.open(budget + 1n)).rejects.toThrow("invalid MON deposit");
+		await expect(f.open(0n)).rejects.toThrow("invalid native deposit");
+		await expect(f.open(budget + 1n)).rejects.toThrow("invalid native deposit");
 		await expect(f.open(budget + 1n, budget + 1n)).rejects.toThrow(
-			"invalid MON deposit",
+			"invalid native deposit",
 		);
 		await expect(f.open(budget, budget, digest)).rejects.toThrow(
 			"session owner mismatch",
@@ -156,9 +156,9 @@ describe("native MON escrow on an isolated EVM", () => {
 		expect(await f.client.getBalance({ address: f.escrow })).toBe(budget);
 	});
 
-	it("conserves deposited MON through fee allocation, refund and all withdrawals", async () => {
+	it("conserves deposited native asset through fee allocation, refund and all withdrawals", async () => {
 		await f.open();
-		const spent = toChainAmount(123_457, "MON");
+		const spent = toChainAmount(123_457, "ETH");
 		await f.settle(spent, 0n);
 		await f.close();
 		const fee = (spent * 500n) / 10_000n;
@@ -195,7 +195,7 @@ describe("native MON escrow on an isolated EVM", () => {
 	it("rejects overcharging, replay, unauthorized settlement and sub-billing precision", async () => {
 		await f.open();
 		await expect(
-			f.settle(budget + toChainAmount(1, "MON"), 0n),
+			f.settle(budget + toChainAmount(1, "ETH"), 0n),
 		).rejects.toThrow("invalid amount");
 		await expect(f.settle(1n, 0n)).rejects.toThrow("invalid billing precision");
 		await expect(
@@ -203,16 +203,16 @@ describe("native MON escrow on an isolated EVM", () => {
 				address: f.escrow,
 				abi: escrowAbi,
 				functionName: "settle",
-				args: [f.id, toChainAmount(1, "MON"), 0n, digest],
+				args: [f.id, toChainAmount(1, "ETH"), 0n, digest],
 			}),
 		).rejects.toThrow("meter only");
-		await f.settle(toChainAmount(1, "MON"), 0n);
-		await expect(f.settle(toChainAmount(2, "MON"), 0n)).rejects.toThrow(
+		await f.settle(toChainAmount(1, "ETH"), 0n);
+		await expect(f.settle(toChainAmount(2, "ETH"), 0n)).rejects.toThrow(
 			"invalid receipt",
 		);
 	});
 
-	it("lets the consumer recover unused MON when the meter is unavailable", async () => {
+	it("lets the consumer recover unused native asset when the meter is unavailable", async () => {
 		await f.open();
 		await f.buyer.writeContract({
 			address: f.escrow,
@@ -237,7 +237,7 @@ describe("native MON escrow on an isolated EVM", () => {
 			args: [f.id],
 		});
 		expect(await f.claimable(f.buyer.account.address)).toBe(budget);
-		await expect(f.settle(toChainAmount(1, "MON"), 0n)).rejects.toThrow(
+		await expect(f.settle(toChainAmount(1, "ETH"), 0n)).rejects.toThrow(
 			"inactive session",
 		);
 	});

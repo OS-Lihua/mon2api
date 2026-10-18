@@ -25,7 +25,7 @@ export { walletSignatureSchema } from "./mon2api.schema";
 
 const challengeLifetimeMs = 300_000;
 const signInStatement =
-	"Sign in to mon2api. This signature does not authorize token transfers.";
+	"Sign in to Token2API. This signature does not authorize token transfers.";
 function walletAddress(address: string) {
 	try {
 		return getAddress(address);

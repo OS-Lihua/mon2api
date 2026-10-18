@@ -1,5 +1,5 @@
 {
-	"name": "mon2api",
+	"name": "token2api",
 	"version": "0.1.0",
 	"private": true,
 	"type": "module",
@@ -35,7 +35,7 @@
 		"test:e2e": "tsx scripts/smoke.ts",
 		"test:api": "tsx scripts/api-smoke.ts",
 		"setup": "node scripts/setup.mjs",
-		"deploy:testnet": "tsx scripts/deploy.ts",
+		"deploy:evm": "tsx scripts/deploy.ts",
 		"worker": "node --conditions=react-server --import tsx scripts/worker.ts",
 		"review:resolve": "node --conditions=react-server --import tsx scripts/resolve-review.ts",
 		"preview:local": "node scripts/dev.mjs --production",
@@ -43,7 +43,8 @@
 		"connector": "tsx scripts/connector.ts",
 		"connector:build": "node scripts/build-connector.mjs",
 		"test:connector": "node --conditions=react-server --import tsx scripts/connector-smoke.ts",
-		"test:mon": "node --conditions=react-server --import tsx scripts/native-smoke.ts"
+		"test:stable": "node --conditions=react-server --import tsx scripts/native-smoke.ts --stable",
+		"test:native": "node --conditions=react-server --import tsx scripts/native-smoke.ts"
 	},
 	"dependencies": {
 		"@asteasolutions/zod-to-openapi": "^7.3.4",

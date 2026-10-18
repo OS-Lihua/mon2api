@@ -3,8 +3,13 @@ import type { Prisma } from "@prisma/client";
 import type { z } from "zod";
 import { db } from "~/server/db";
 import type { Viewer } from "~/shared/mon2api";
-import { MONAD_TESTNET } from "~/shared/network";
-import { assetOf, billingUnit } from "~/shared/settlement-asset";
+import { networkMetadata } from "~/shared/network";
+import {
+	assetOf,
+	balanceUnit,
+	billingUnit,
+	decimalsOf,
+} from "~/shared/settlement-asset";
 import { AppError } from "./auth";
 import { chainBalances, clients } from "./chain";
 import type {
@@ -270,26 +275,23 @@ export async function networkInfo() {
 	return {
 		asset: assetOf(config),
 		ledgerUnit: billingUnit(assetOf(config)),
-		balanceUnit: assetOf(config) === "MON" ? "wei" : "micro_dUSD",
+		balanceUnit: balanceUnit(assetOf(config)),
+		tokenDecimals: decimalsOf(config),
 		mode: config.mode,
 		chainId: config.chainId,
 		token: config.token,
 		escrow: config.escrow,
 		feeBps: 500,
 		ready,
-		rpcUrl:
-			config.mode === "local" ? "http://127.0.0.1:8545" : MONAD_TESTNET.rpcUrl,
-		explorer: config.mode === "local" ? "" : MONAD_TESTNET.explorer,
+		rpcUrl: networkMetadata(config).rpcUrl,
+		explorer: networkMetadata(config).explorer,
 	};
 }
 export async function accountBalances(user: Viewer) {
 	try {
 		return {
 			...(await chainBalances(user.address)),
-			unit:
-				assetOf(chainConfig()) === "MON"
-					? ("wei" as const)
-					: ("micro_dUSD" as const),
+			unit: balanceUnit(assetOf(chainConfig())),
 		};
 	} catch {
 		throw new AppError("chain_unavailable", "暂时无法读取链上余额。", 503);

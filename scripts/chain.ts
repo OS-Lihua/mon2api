@@ -31,7 +31,7 @@ type Artifact = { abi: Abi; bytecode: Hex };
 
 if (process.env.MON2API_MODE !== "local") {
 	throw new Error(
-		"Local chain requires MON2API_MODE=local. Use deploy:testnet for Monad testnet.",
+		"Local chain requires MON2API_MODE=local. Use deploy:evm for EVM network.",
 	);
 }
 fs.mkdirSync(directory, { recursive: true });
@@ -86,7 +86,7 @@ async function main() {
 		const token = getAddress(existing.token);
 		const escrow = getAddress(existing.escrow);
 		const [tokenCode, escrowCode] = await Promise.all([
-			assetOf(existing) === "MON"
+			assetOf(existing) === "ETH"
 				? Promise.resolve("native")
 				: client.getCode({ address: token }),
 			client.getCode({ address: escrow }),
@@ -160,11 +160,11 @@ async function main() {
 		}),
 	});
 	if (escrowReceipt.status !== "success" || !escrowReceipt.contractAddress)
-		throw new Error("Native MON escrow deployment failed.");
+		throw new Error("Native token escrow deployment failed.");
 	const token = NATIVE_TOKEN;
 	const config: ChainConfig = {
 		mode: "local",
-		asset: "MON",
+		asset: "ETH",
 		chainId: foundry.id,
 		rpcUrl,
 		token,
@@ -175,7 +175,7 @@ async function main() {
 	};
 	fs.writeFileSync(`${configFile}.tmp`, `${JSON.stringify(config, null, 2)}\n`);
 	fs.renameSync(`${configFile}.tmp`, configFile);
-	console.log(`Local native MON; escrow ${config.escrow}`);
+	console.log(`Local native token; escrow ${config.escrow}`);
 	console.log("MON2API_CHAIN_READY");
 }
 

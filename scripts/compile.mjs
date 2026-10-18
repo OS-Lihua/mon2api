@@ -3,11 +3,18 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import solc from "solc";
 
-export function compile() {
+export function compile(testTokens = false) {
+	const names = ["DemoUSD", "UsageEscrow", "NativeUsageEscrow"];
+	if (testTokens) names.push("SettlementTestToken");
 	const sources = Object.fromEntries(
-		["DemoUSD", "UsageEscrow", "NativeUsageEscrow"].map((name) => [
+		names.map((name) => [
 			`${name}.sol`,
-			{ content: fs.readFileSync(`contracts/src/${name}.sol`, "utf8") },
+			{
+				content: fs.readFileSync(
+					`contracts/${name === "SettlementTestToken" ? "test" : "src"}/${name}.sol`,
+					"utf8",
+				),
+			},
 		]),
 	);
 	const output = JSON.parse(
@@ -42,7 +49,7 @@ export function compile() {
 		throw new Error(errors.map((e) => e.formattedMessage).join("\n"));
 	fs.mkdirSync("contracts/artifacts", { recursive: true });
 	const artifacts = {};
-	for (const name of ["DemoUSD", "UsageEscrow", "NativeUsageEscrow"]) {
+	for (const name of names) {
 		const c = output.contracts[`${name}.sol`][name];
 		artifacts[name] = { abi: c.abi, bytecode: `0x${c.evm.bytecode.object}` };
 		fs.writeFileSync(
@@ -53,6 +60,6 @@ export function compile() {
 	return artifacts;
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-	compile();
-	console.log("Compiled legacy ERC20 and native MON escrows (Shanghai EVM).");
+	compile(process.argv.includes("--test-tokens"));
+	console.log("Compiled legacy ERC20 and native token escrows (Shanghai EVM).");
 }

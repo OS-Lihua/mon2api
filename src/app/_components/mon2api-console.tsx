@@ -42,9 +42,14 @@ import {
 	useState,
 } from "react";
 import { getAddress, isHex } from "viem";
+import {
+	ChainGlyph,
+	chainColor,
+	chainLabel,
+} from "~/app/_components/chain-glyph";
 import { ConsoleSelect } from "~/app/_components/console-select";
 import { useMon2ApiWallet } from "~/app/_components/wallet-provider";
-import { escrowAbi, nativeEscrowAbi } from "~/lib/abi";
+import { escrowAbi, nativeEscrowAbi, tokenAbi } from "~/lib/abi";
 import { connectorStartCommand } from "~/shared/connector-distribution";
 import type {
 	BuyerConnection,
@@ -54,8 +59,17 @@ import type {
 	SessionView,
 	Snapshot,
 } from "~/shared/mon2api";
-import { formatAsset, formatChainBalance, parseMicroMON } from "~/shared/money";
-import { type SettlementAsset, toChainAmount } from "~/shared/settlement-asset";
+import {
+	formatAsset,
+	formatChainBalance,
+	parseMicroAmount,
+} from "~/shared/money";
+import { networkMetadata, SETTLEMENT_CHAINS } from "~/shared/network";
+import {
+	isNativeAsset,
+	type SettlementAsset,
+	toChainAmount,
+} from "~/shared/settlement-asset";
 import { previewSnapshot, uiPreview } from "~/shared/ui-preview";
 import { api } from "~/trpc/react";
 
@@ -63,20 +77,28 @@ type Section = "overview" | "market" | "pool" | "lab" | "billing" | "keys";
 const navigation = [
 	{ id: "overview", label: "概览", icon: LayoutDashboard },
 	{ id: "market", label: "资源市场", icon: Globe2 },
-	{ id: "pool", label: "我的号池", icon: Layers3 },
+	{ id: "pool", label: "我的资源", icon: Layers3 },
 	{ id: "lab", label: "调用实验室", icon: FlaskConical },
-	{ id: "billing", label: "账单结算", icon: Blocks },
+	{ id: "billing", label: "账单与结算", icon: Blocks },
 	{ id: "keys", label: "API 密钥", icon: KeyRound },
 ] satisfies { id: Section; label: string; icon: typeof Activity }[];
 const titles: Record<Section, string> = {
 	overview: "概览",
 	market: "资源市场",
-	pool: "我的号池",
+	pool: "我的资源",
 	lab: "调用实验室",
 	billing: "账单与结算",
 	keys: "API 密钥",
 };
 
+const sectionDescriptions: Record<Section, string> = {
+	overview: "查看资源、调用活动与当前市场的结算情况。",
+	market: "比较模型与报价，选择适合你的调用资源。",
+	pool: "接入并管理资源，查看连接状态与挂牌价格。",
+	lab: "选择预算会话，发送请求并核对调用用量。",
+	billing: "核对预算、用量与链上结算，管理未用余额。",
+	keys: "为应用管理独立密钥，每个密钥绑定一个预算会话。",
+};
 const compact = (amount: number) =>
 	Intl.NumberFormat("en-US", {
 		notation: "compact",
@@ -345,7 +367,9 @@ export function Mon2ApiConsole() {
 			? (launch?.command ?? null)
 			: null;
 	const [newKey, setNewKey] = useState<BuyerConnection | null>(null);
-	const [prompt, setPrompt] = useState("用三句话解释 mon2api 的链上结算流程。");
+	const [prompt, setPrompt] = useState(
+		"用三句话解释 Token2API 的链上结算流程。",
+	);
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
 	const [conversationId, setConversationId] = useState(() => "");
 	const [copied, setCopied] = useState(false);
@@ -375,7 +399,8 @@ export function Mon2ApiConsole() {
 	const requestRefund = api.mon2api.requestRefund.useMutation();
 	const withdraw = api.mon2api.withdraw.useMutation();
 	const data = uiPreview ? previewSnapshot : snapshot.data;
-	const asset = data?.network.asset ?? "MON";
+	const asset = data?.network.asset ?? "ETH";
+	const nativeSymbol = data ? networkMetadata(data.network).nativeSymbol : "";
 	const usd = (amount: number | string, precise = false) =>
 		formatAsset(amount, asset, precise);
 	const visibleListings = (data?.listings ?? []).filter(
@@ -534,11 +559,13 @@ export function Mon2ApiConsole() {
 		event.preventDefault();
 		void run("rent", async (isCurrent) => {
 			if (!rentListing || !data || !viewer) return;
-			const amount = parseMicroMON(budget);
+			const amount = parseMicroAmount(budget);
 			if (amount < 1_000_000 || amount > 100_000_000)
-				throw new Error("预算应在 1 至 100 MON 之间。");
-			if (asset !== "MON")
-				throw new Error("旧 dUSD 部署仅服务已有会话，请切换到 MON 部署。");
+				throw new Error(`预算应在 1 至 100 ${asset} 之间。`);
+			if (asset === "dUSD")
+				throw new Error(
+					"此市场仅支持已有预算，请在已开通的结算市场创建新预算。",
+				);
 			if (!viewer.demo) await getWallet(data.network, viewer.address);
 			if (!isCurrent()) return;
 			const result = await openSession.mutateAsync({
@@ -556,20 +583,61 @@ export function Mon2ApiConsole() {
 				const { id, termsHash } = result.transaction;
 				if (!isHex(id) || !isHex(termsHash))
 					throw new Error("会话交易参数无效。");
-				const hash = await verifiedWallet.wallet.writeContract({
-					account: verifiedWallet.account,
-					address: getAddress(data.network.escrow),
-					abi: nativeEscrowAbi,
-					functionName: "openSession",
-					value: toChainAmount(result.transaction.budget, "MON"),
-					args: [
-						id,
-						getAddress(result.transaction.provider),
-						termsHash,
-						toChainAmount(result.transaction.budget, "MON"),
-						BigInt(result.transaction.expiresAt),
-					],
-				});
+				const chainBudget = toChainAmount(
+					result.transaction.budget,
+					asset,
+					data.network.tokenDecimals,
+				);
+				if (!isNativeAsset(asset)) {
+					// Reset first for tokens that require zero allowance before replacement (USDT).
+					for (const allowance of [0n, chainBudget]) {
+						const approvalWallet = await getWallet(
+							data.network,
+							viewer.address,
+						);
+						if (!isCurrent()) return;
+						const approval = await approvalWallet.wallet.writeContract({
+							account: approvalWallet.account,
+							address: getAddress(data.network.token),
+							abi: tokenAbi,
+							functionName: "approve",
+							args: [getAddress(data.network.escrow), allowance],
+						});
+						const receipt =
+							await approvalWallet.publicClient.waitForTransactionReceipt({
+								hash: approval,
+							});
+						if (receipt.status !== "success")
+							throw new Error("代币授权交易失败。");
+						if (!isCurrent()) return;
+						await getWallet(data.network, viewer.address);
+					}
+				}
+				const currentWallet = await getWallet(data.network, viewer.address);
+				if (!isCurrent()) return;
+				const args = [
+					id,
+					getAddress(result.transaction.provider),
+					termsHash,
+					chainBudget,
+					BigInt(result.transaction.expiresAt),
+				] as const;
+				const hash = isNativeAsset(asset)
+					? await currentWallet.wallet.writeContract({
+							account: currentWallet.account,
+							address: getAddress(data.network.escrow),
+							abi: nativeEscrowAbi,
+							functionName: "openSession",
+							value: chainBudget,
+							args,
+						})
+					: await currentWallet.wallet.writeContract({
+							account: currentWallet.account,
+							address: getAddress(data.network.escrow),
+							abi: escrowAbi,
+							functionName: "openSession",
+							args,
+						});
 				const receipt =
 					await verifiedWallet.publicClient.waitForTransactionReceipt({ hash });
 				if (receipt.status !== "success") throw new Error("预算锁定交易失败。");
@@ -586,7 +654,7 @@ export function Mon2ApiConsole() {
 			setSelectedSession(result.id);
 			setRentListing(null);
 			navigate("keys");
-			setNotice("MON 预算已开通。请保存下方 Base URL、API Key 和模型名。");
+			setNotice(`${asset} 预算已开通。请保存下方 Base URL、API Key 和模型名。`);
 		});
 	};
 	const submitChat = (event: FormEvent) => {
@@ -672,8 +740,8 @@ export function Mon2ApiConsole() {
 				await createListing.mutateAsync({
 					...common,
 					model: String(form.get("model")),
-					inputRate: parseMicroMON(String(form.get("inputRate"))),
-					outputRate: parseMicroMON(String(form.get("outputRate"))),
+					inputRate: parseMicroAmount(String(form.get("inputRate"))),
+					outputRate: parseMicroAmount(String(form.get("outputRate"))),
 					concurrency: Number(form.get("concurrency")),
 					baseUrl: String(form.get("baseUrl")),
 					apiKey: String(form.get("apiKey")),
@@ -810,8 +878,16 @@ export function Mon2ApiConsole() {
 		window.scrollTo({ top: 0, behavior: "smooth" });
 	};
 	const openRent = (listing: ListingView) => {
+		if (uiPreview) {
+			setRentListing(listing);
+			return;
+		}
 		if (!data?.network.ready) {
-			setNotice("链上服务尚未就绪，请先启动本地链并部署合约。");
+			setNotice(
+				uiPreview
+					? "当前为界面预览，暂不支持创建预算。"
+					: "当前市场的结算服务暂不可用，请稍后重试。",
+			);
 			return;
 		}
 		if (!viewer) {
@@ -836,20 +912,20 @@ export function Mon2ApiConsole() {
 				className={`sidebar ${mobileOpen ? "is-open" : ""}`}
 				ref={sidebarRef}
 			>
-				<a aria-label="mon2api 首页" className="brand" href="/">
+				<a aria-label="Token2API 首页" className="brand" href="/">
 					<span className="brand-mark">
 						<Image
 							alt=""
 							height={36}
 							loading="eager"
-							src="/mon2api-mark.svg"
+							src="/token2api-mark.svg"
 							unoptimized
 							width={36}
 						/>
 					</span>
 					<div>
 						<div className="brand-name">
-							mon2api<span className="brand-dot">.</span>
+							Token2API<span className="brand-dot">.</span>
 						</div>
 					</div>
 				</a>
@@ -861,6 +937,7 @@ export function Mon2ApiConsole() {
 				>
 					<X size={18} />
 				</button>
+				<span className="sidebar-caption">工作台</span>
 				<nav aria-label="主导航">
 					{navigation.map(({ id, label, icon: Icon }) => (
 						<button
@@ -884,20 +961,37 @@ export function Mon2ApiConsole() {
 					))}
 				</nav>
 				<div className="sidebar-bottom">
+					<div className="supported-chain-directory">
+						<span className="sidebar-caption">
+							支持网络 <small>{SETTLEMENT_CHAINS.length} EVM</small>
+						</span>
+						<div>
+							{SETTLEMENT_CHAINS.map((chain) => (
+								<span key={chain.id} title={chain.name}>
+									<i style={{ background: chainColor(chain.id) }} />
+									{chainLabel(chain.id, chain.name)}
+								</span>
+							))}
+						</div>
+					</div>
 					<div className="network-panel">
 						<div className="network-title">
 							<span
 								className={`status-dot ${data?.network.ready ? "" : "warn"}`}
 							/>
-							{data?.network.mode === "monad-testnet"
-								? "Monad Testnet"
-								: "Local EVM"}
+							{data?.network.escrow ? data.network.name : "结算网络未配置"}
 						</div>
-						<p>测试代币 · 非真实资金</p>
+						<p>
+							{data?.network.mode === "local"
+								? "本地测试资产"
+								: data?.network.escrow
+									? `${asset} · ${data.network.ready ? "结算服务可用" : "结算服务暂不可用"}`
+									: "等待市场开通"}
+						</p>
 					</div>
 					<div className="sidebar-links">
 						<a
-							href="https://github.com/OS-Lihua/mon2api"
+							href="https://github.com/OS-Lihua/token2api"
 							rel="noreferrer"
 							target="_blank"
 						>
@@ -931,16 +1025,16 @@ export function Mon2ApiConsole() {
 							className="topbar-status"
 							title={
 								data?.network.ready
-									? `Chain ${data.network.chainId} · 合约已连接`
-									: "等待合约连接"
+									? `${data.network.name} · ${asset} 结算`
+									: "结算服务暂不可用"
 							}
 						>
 							<span
 								className={`status-dot ${data?.network.ready ? "" : "warn"}`}
 							/>
-							{data?.network.mode === "monad-testnet"
-								? "Monad 测试网"
-								: "本地 EVM"}
+							{data?.network.escrow
+								? `${data.network.name} · ${asset}`
+								: "结算网络未配置"}
 						</span>
 						<div className="wallet-connect">
 							{uiPreview ? (
@@ -961,9 +1055,13 @@ export function Mon2ApiConsole() {
 						className={`page-heading ${section === "overview" ? "overview-heading" : ""}`}
 					>
 						<div>
+							<span className="workspace-caption">多链结算工作台</span>
 							<h1 ref={headingRef} tabIndex={-1}>
 								{currentTitle}
 							</h1>
+							<p className="workspace-description">
+								{sectionDescriptions[section]}
+							</p>
 						</div>
 						{section === "overview" ? (
 							<button
@@ -981,7 +1079,7 @@ export function Mon2ApiConsole() {
 						) : section === "pool" ? (
 							<button
 								className="button primary"
-								disabled={!viewer || !!busy}
+								disabled={!viewer || !data?.network.escrow || !!busy}
 								onClick={() => setListingModal(true)}
 								type="button"
 							>
@@ -1000,6 +1098,31 @@ export function Mon2ApiConsole() {
 							</button>
 						) : null}
 					</div>
+					{data?.network.escrow && (
+						<section aria-label="当前结算市场" className="market-context">
+							<div className="market-context-network">
+								<ChainGlyph
+									className="console-chain-glyph"
+									id={data.network.chainId}
+								/>
+								<div>
+									<span>当前网络</span>
+									<strong>{data.network.name}</strong>
+								</div>
+							</div>
+							<div>
+								<span>结算资产</span>
+								<strong>{asset}</strong>
+							</div>
+							<div>
+								<span>网络手续费</span>
+								<strong>{nativeSymbol}</strong>
+							</div>
+							<Badge tone={data.network.ready ? "green" : "warn"}>
+								{data.network.ready ? "结算可用" : "结算待就绪"}
+							</Badge>
+						</section>
+					)}
 					{error && (
 						<div className="notice error" role="alert">
 							<CircleHelp size={14} />
@@ -1052,6 +1175,39 @@ export function Mon2ApiConsole() {
 								</>
 							)}
 						</div>
+					) : !data.network.escrow ? (
+						<div className="market-empty">
+							<div aria-hidden="true" className="market-empty-art">
+								<span>
+									<Layers3 size={23} />
+								</span>
+								<i className="market-empty-line" />
+								<div>
+									<Image alt="" height={44} src="/icon.svg" width={44} />
+								</div>
+								<i className="market-empty-line" />
+								<span>
+									<Wallet size={23} />
+								</span>
+							</div>
+							<span className="market-empty-label">多链结算工作台</span>
+							<h2>结算市场待开通</h2>
+							<p>
+								当前尚无可用的结算配置。开通后可查看资源报价、调用预算与结算账单。
+							</p>
+							<div className="market-empty-assets">
+								<span>原生代币</span>
+								<span>USDT</span>
+								<span>USDC</span>
+							</div>
+							<button
+								className="button"
+								onClick={() => void snapshot.refetch()}
+								type="button"
+							>
+								刷新市场状态
+							</button>
+						</div>
 					) : (
 						<>
 							{!data.network.ready && (
@@ -1074,7 +1230,13 @@ export function Mon2ApiConsole() {
 								<>
 									<section className="hero">
 										<div className="hero-copy">
-											<h2>先锁预算，再调用 AI 资源。</h2>
+											<span className="hero-eyebrow">
+												资源 · 预算 · 按量结算
+											</span>
+											<h2>选择资源，开始调用。</h2>
+											<p className="settlement-intro">
+												在同一工作台核对预算、用量与结算记录。
+											</p>
 											<div className="hero-actions">
 												<button
 													className="button lime"
@@ -1138,8 +1300,27 @@ export function Mon2ApiConsole() {
 										<Panel title="调用活动">
 											<UsageChart data={data} />
 										</Panel>
-										<Panel className="overview-side" title="网络概况">
+										<Panel className="overview-side" title="当前市场">
 											<div className="panel-body overview-ledger">
+												<div className="overview-ledger-row">
+													<span>结算网络</span>
+													<strong className="settlement-value">
+														{data.network.escrow ? data.network.name : "未配置"}
+													</strong>
+												</div>
+												<div className="overview-ledger-row">
+													<span>结算资产</span>
+													<strong className="settlement-value">
+														{data.network.escrow ? asset : "待开通"}
+													</strong>
+												</div>
+												<div className="overview-ledger-row">
+													<span>网络手续费</span>
+													<strong className="settlement-value">
+														{data.network.escrow ? nativeSymbol : "—"}
+													</strong>
+												</div>
+
 												<div className="overview-ledger-row">
 													<span>可用资源</span>
 													<strong>
@@ -1221,8 +1402,10 @@ export function Mon2ApiConsole() {
 										</output>
 									</div>
 									<p className="market-disclosure">
-										模型 ID 与价格由提供者声明 · 暂无可比官方价 · 测试网资产
-										为无兑付价值的测试代币
+										模型 ID 与价格由提供者声明 · 暂无可比官方价
+										{data.network.mode === "local"
+											? " · 本地资产仅供测试"
+											: ` · 使用 ${asset} 结算`}
 									</p>
 									<div className="resource-grid">
 										{visibleListings.map((item) => (
@@ -1304,7 +1487,7 @@ export function Mon2ApiConsole() {
 														disabled={
 															!item.enabled ||
 															!item.online ||
-															!data.network.ready ||
+															(!uiPreview && !data.network.ready) ||
 															!!busy
 														}
 														onClick={() => openRent(item)}
@@ -1505,7 +1688,7 @@ export function Mon2ApiConsole() {
 															)}
 															{message.role === "user"
 																? "YOU"
-																: "MON2API / RESPONSE"}
+																: "TOKEN2API / RESPONSE"}
 														</div>
 														<p>{message.content}</p>
 														{message.meta && (
@@ -1602,7 +1785,11 @@ export function Mon2ApiConsole() {
 												<div className="stat-value">
 													{data.metrics.claimable === null
 														? "暂不可用"
-														: formatChainBalance(data.metrics.claimable, asset)}
+														: formatChainBalance(
+																data.metrics.claimable,
+																asset,
+																data.network.tokenDecimals,
+															)}
 													{data.metrics.claimable !== null && (
 														<small>{asset}</small>
 													)}
@@ -1615,6 +1802,7 @@ export function Mon2ApiConsole() {
 															: formatChainBalance(
 																	data.metrics.walletBalance,
 																	asset,
+																	data.network.tokenDecimals,
 																)}
 													</span>
 													<button
@@ -1642,7 +1830,7 @@ export function Mon2ApiConsole() {
 												平台服务费 {(data.network.feeBps / 100).toFixed(1)}
 												%。每批账单按累计费用结算，避免重复扣款。关闭会话后，剩余预算依合约规则退回钱包。
 												<p className="mono escrow-address">
-													ESCROW / {data.network.escrow || "尚未部署"}
+													托管合约 / {data.network.escrow || "未配置"}
 												</p>
 											</div>
 										</Panel>
@@ -2009,7 +2197,7 @@ export function Mon2ApiConsole() {
 										title="快速接入"
 									>
 										<div className="panel-body">
-											<pre className="code-block mono">{`curl ${newKey?.base_url ?? (typeof window === "undefined" ? "/v1" : `${window.location.origin}/v1`)}/chat/completions \\\n  -H "Authorization: Bearer $MON2API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -H "Idempotency-Key: example-request-0001" \\\n  -d '{\n    "model": "${selected?.model ?? "YOUR_MODEL_ID"}",\n    "messages": [{"role":"user","content":"Hello"}],\n    "stream": true\n  }'`}</pre>
+											<pre className="code-block mono">{`curl ${newKey?.base_url ?? (typeof window === "undefined" ? "/v1" : `${window.location.origin}/v1`)}/chat/completions \\\n  -H "Authorization: Bearer $TOKEN2API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -H "Idempotency-Key: example-request-0001" \\\n  -d '{\n    "model": "${selected?.model ?? "YOUR_MODEL_ID"}",\n    "messages": [{"role":"user","content":"Hello"}],\n    "stream": true\n  }'`}</pre>
 											<p className="code-hint">
 												Base URL 使用当前平台地址。API
 												密钥绑定预算会话与资源，请保存在服务端。 每次新调用更换
@@ -2032,7 +2220,7 @@ export function Mon2ApiConsole() {
 							setRefundInfo(null);
 						}
 					}}
-					title="退回未使用的 MON"
+					title={`退回未使用的 ${asset}`}
 				>
 					<div className="panel-body">
 						<p>
@@ -2055,8 +2243,9 @@ export function Mon2ApiConsole() {
 							</strong>
 						</p>
 						<p>
-							申请后停止新调用。已消费的费用与网络 Gas
-							不退；执行中或待核对用量继续保留预留，处理完后释放剩余预算。
+							申请后停止新调用。退款仍使用 {asset}，提取时的网络手续费使用{" "}
+							{nativeSymbol}
+							。已消费费用和网络手续费不退；待核对用量继续保留预留。
 						</p>
 						{currentRefund && (
 							<div className="notice info">
@@ -2093,7 +2282,7 @@ export function Mon2ApiConsole() {
 									onClick={() => void doWithdraw()}
 									type="button"
 								>
-									提取可提现 MON 到钱包
+									提取可提现 {asset} 到钱包
 								</button>
 							) : (
 								<button
@@ -2140,6 +2329,15 @@ export function Mon2ApiConsole() {
 							<span className="rent-model mono">{rentListing.model}</span>
 							<dl>
 								<div>
+									<dt>结算网络</dt>
+									<dd>{data?.network.name}</dd>
+								</div>
+								<div>
+									<dt>结算资产</dt>
+									<dd>{asset}</dd>
+								</div>
+
+								<div>
 									<dt>输入 / 百万 Token</dt>
 									<dd>
 										{usd(rentListing.inputRate)} {asset}
@@ -2152,6 +2350,11 @@ export function Mon2ApiConsole() {
 									</dd>
 								</div>
 							</dl>
+							{!isNativeAsset(asset) && data && (
+								<p className="settlement-token">
+									代币合约 <code>{data.network.token}</code>
+								</p>
+							)}
 							<p>
 								{rentListing.kind === "demo"
 									? "模拟资源，无官方同款可比较。"
@@ -2159,7 +2362,7 @@ export function Mon2ApiConsole() {
 							</p>
 						</div>
 						<div className="field">
-							<label htmlFor="rent-budget">锁定预算（MON）</label>
+							<label htmlFor="rent-budget">锁定预算（{asset}）</label>
 							<input
 								id="rent-budget"
 								max="100"
@@ -2171,10 +2374,12 @@ export function Mon2ApiConsole() {
 								value={budget}
 							/>
 							<small>
-								会话固定此资源、提供者和 MON
-								挂牌价快照。每次调用先预留预算，关闭后可提取未使用的
-								MON。使用测试网
-								MON；钱包交易费另计。请在钱包中确认预算锁定交易。
+								会话固定此资源、提供者和 {asset}{" "}
+								挂牌价快照。每次调用先预留预算，关闭后可提取未使用的 {asset}
+								。网络手续费使用 {nativeSymbol}，另计。
+								{isNativeAsset(asset)
+									? `请在钱包中确认 ${asset} 预算锁定交易。`
+									: `需先确认 ${asset} 授权，再确认预算锁定交易。`}
 							</small>
 						</div>
 						<div className="form-actions">
@@ -2188,7 +2393,7 @@ export function Mon2ApiConsole() {
 							</button>
 							<button
 								className="button primary"
-								disabled={!!busy}
+								disabled={!!busy || uiPreview}
 								type="submit"
 							>
 								{busy === "rent" ? (
@@ -2196,7 +2401,11 @@ export function Mon2ApiConsole() {
 								) : (
 									<Wallet size={12} />
 								)}
-								{busy === "rent" ? "正在确认链上交易…" : "锁定预算并开始"}
+								{uiPreview
+									? "预览模式 · 不执行交易"
+									: busy === "rent"
+										? "正在确认链上交易…"
+										: "锁定预算并开始"}
 							</button>
 						</div>
 					</form>
@@ -2204,6 +2413,7 @@ export function Mon2ApiConsole() {
 			)}
 			{newConnector && newConnector.model === "" && (
 				<ConnectorSetupModal
+					asset={asset}
 					busy={!!busy}
 					connection={newConnector}
 					copied={copied && !!launchCommand}
@@ -2294,6 +2504,7 @@ export function Mon2ApiConsole() {
 
 			{listingModal && !walletMismatch && (
 				<ListingModal
+					asset={asset}
 					busy={!!busy}
 					error={error}
 					onClose={() => !busy && setListingModal(false)}
@@ -2783,6 +2994,7 @@ function SessionTable({
 	);
 }
 function ConnectorSetupModal({
+	asset,
 	connection,
 	copied,
 	busy,
@@ -2794,6 +3006,7 @@ function ConnectorSetupModal({
 	onPublish,
 	onReset,
 }: {
+	asset: SettlementAsset;
 	connection: { id: string; token: string };
 	copied: boolean;
 	busy: boolean;
@@ -2882,8 +3095,8 @@ function ConnectorSetupModal({
 					try {
 						onPublish({
 							model: selected,
-							inputRate: parseMicroMON(String(form.get("inputRate"))),
-							outputRate: parseMicroMON(String(form.get("outputRate"))),
+							inputRate: parseMicroAmount(String(form.get("inputRate"))),
+							outputRate: parseMicroAmount(String(form.get("outputRate"))),
 						});
 					} catch (error) {
 						setPriceError(
@@ -2904,14 +3117,16 @@ function ConnectorSetupModal({
 						value={selected}
 					/>
 					<small>
-						模型列表来自网关声明，不表示模型身份已核验。上架后模型固定。
+						模型列表来自网关声明，不表示模型身份已核验。上架后模型固定，按{" "}
+						{asset} / 百万 Token 报价。
 					</small>
 				</div>
 				<div className="field-row">
 					{(["inputRate", "outputRate"] as const).map((name) => (
 						<div className="field" key={name}>
 							<label htmlFor={`discovered-${name}`}>
-								{name === "inputRate" ? "输入" : "输出"}单价 / 百万 Token（MON）
+								{name === "inputRate" ? "输入" : "输出"}单价 / 百万 Token（
+								{asset}）
 							</label>
 							<input
 								defaultValue={name === "inputRate" ? "1" : "3"}
@@ -2949,11 +3164,13 @@ function ConnectorSetupModal({
 }
 
 function ListingModal({
+	asset,
 	error,
 	onClose,
 	onSubmit,
 	busy,
 }: {
+	asset: SettlementAsset;
 	onClose: () => void;
 	onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 	error: string | null;
@@ -3201,7 +3418,7 @@ function ListingModal({
 						<div className="field-row">
 							<div className="field">
 								<label htmlFor="listing-input">
-									输入单价 / 百万 Token（MON）
+									输入单价 / 百万 Token（{asset}）
 								</label>
 								<input
 									defaultValue="1"
@@ -3216,7 +3433,7 @@ function ListingModal({
 							</div>
 							<div className="field">
 								<label htmlFor="listing-output">
-									输出单价 / 百万 Token（MON）
+									输出单价 / 百万 Token（{asset}）
 								</label>
 								<input
 									defaultValue="3"

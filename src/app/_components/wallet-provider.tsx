@@ -72,7 +72,7 @@ function configureWallet(network: NetworkInfo) {
 	return createConfig({
 		chains: [chain],
 		connectors: connectorsForWallets([{ groupName: "连接钱包", wallets }], {
-			appName: "mon2api",
+			appName: "Token2API",
 			projectId,
 		}),
 		multiInjectedProviderDiscovery: true,
@@ -106,7 +106,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 	if (!network) {
 		return (
 			<div className="wallet-loading" role="status">
-				<strong>mon2api</strong>
+				<strong>Token2API</strong>
 				<span>
 					{snapshot.error
 						? "连接服务暂不可用，请确认服务已启动。"
@@ -279,11 +279,11 @@ function WalletSessionProvider({ children }: { children: React.ReactNode }) {
 				}
 			>
 				<RainbowKitProvider
-					appInfo={{ appName: "mon2api" }}
+					appInfo={{ appName: "Token2API" }}
 					locale="zh-CN"
 					modalSize="compact"
 					theme={lightTheme({
-						accentColor: "#6e54ff",
+						accentColor: "#0f766e",
 						accentColorForeground: "#ffffff",
 						borderRadius: "medium",
 						fontStack: "system",

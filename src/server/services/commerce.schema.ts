@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SETTLEMENT_ASSETS } from "~/shared/settlement-asset";
 import { codePointString } from "./mon2api.contract";
 import {
 	addressSchema,
@@ -71,10 +72,19 @@ export const keyCreatedResponse = buyerConnectionResponse;
 export const challengeResponse = z.object({ message: z.string() }).strict();
 export const networkResponse = z
 	.object({
-		asset: z.enum(["MON", "dUSD"]),
-		ledgerUnit: z.enum(["micro_MON", "micro_dUSD"]),
-		balanceUnit: z.enum(["wei", "micro_dUSD"]),
-		mode: z.enum(["local", "monad-testnet"]),
+		asset: z.enum(SETTLEMENT_ASSETS),
+		tokenDecimals: z.number().int().min(6).max(18),
+		ledgerUnit: z.enum([
+			"micro_ETH",
+			"micro_BNB",
+			"micro_POL",
+			"micro_AVAX",
+			"micro_USDT",
+			"micro_USDC",
+			"micro_dUSD",
+		]),
+		balanceUnit: z.enum(["wei", "atomic", "micro_dUSD"]),
+		mode: z.enum(["local", "evm"]),
 		chainId: z.number().int(),
 		token: addressSchema,
 		escrow: addressSchema,
@@ -88,7 +98,7 @@ export const balancesResponse = z
 	.object({
 		walletBalance: z.string().regex(/^\d+$/),
 		claimable: z.string().regex(/^\d+$/),
-		unit: z.enum(["wei", "micro_dUSD"]),
+		unit: z.enum(["wei", "atomic", "micro_dUSD"]),
 	})
 	.strict();
 export const resourceResponse = z
@@ -214,7 +224,15 @@ export const refundResponse = z
 		status: z.enum(["PROCESSING", "PENDING_REVIEW", "AVAILABLE"]),
 		amount,
 		reserved: amount,
-		unit: z.enum(["micro_MON", "micro_dUSD"]),
+		unit: z.enum([
+			"micro_ETH",
+			"micro_BNB",
+			"micro_POL",
+			"micro_AVAX",
+			"micro_USDT",
+			"micro_USDC",
+			"micro_dUSD",
+		]),
 		requestedAt: timestamp,
 		txHash: sessionIdSchema.nullable(),
 		withdrawRequired: z.boolean(),

@@ -1,26 +1,28 @@
 # 商家本机连接器
 
-商家可以保留本机 API Key，并出售该 Key 对应的模型调用能力。连接器主动访问 mon2api，不需要开放本机端口。买家通过 mon2api 调用，无法取得商家的上游 Key。
+产品已更名为 Token2API。新版使用 `token2api-connector`，同时保留 `mon2api-connector` 命令别名。凭证环境变量继续使用 `MON2API_CONNECTOR_TOKEN` 和 `MON2API_UPSTREAM_KEY`，已有配置无需修改。
+
+商家可以保留本机 API Key，并出售该 Key 对应的模型调用能力。连接器主动访问 Token2API，不需要开放本机端口。买家通过 Token2API 调用，无法取得商家的上游 Key。
 
 ```text
-买家 → mon2api 预留预算 → 数据库任务 → 商家连接器 → 本机选定的上游
+买家 → Token2API 预留预算 → 数据库任务 → 商家连接器 → 本机选定的上游
 买家 ← 流式响应与账单 ← 用量核销 ← 结果与用量 ← 上游
 ```
 
 ## 启动
 
-1. 在运行网关的电脑安装 Node.js 24 或更高版本（包含 npm / npx）。商家无需下载 mon2api 源码、安装 pnpm 或配置数据库；可以在任意目录启动连接器。平台数据库迁移由运营者在部署流程中单独执行。
-2. 在网页连接钱包并签名登录，打开“我的号池 → 接入资源”。保留“Key 保留在本机”选项，只填写资源名称和简介。此时创建未上架的连接草稿，无需填写模型或价格。API Key 或 OAuth 号池均可通过本机选定的 OpenAI 兼容网关提供。
-3. 点击“复制并启动”，在本机终端粘贴运行。一次复制就包含安装包地址、平台地址、上游地址和一次性启动码，无需单独粘贴平台连接凭证。启动码五分钟内有效、只能使用一次；过期或连接失败时重新点击复制。复制命令不会中断现有连接；命令成功兑换后会替换此资源的旧连接凭证。关闭弹窗后可从“我的号池 → 继续接入”恢复。
+1. 在运行网关的电脑安装 Node.js 24 或更高版本（包含 npm / npx）。商家无需下载 Token2API 源码、安装 pnpm 或配置数据库；可以在任意目录启动连接器。平台数据库迁移由运营者在部署流程中单独执行。
+2. 在网页连接钱包并签名登录，打开“我的资源 → 接入资源”。保留“Key 保留在本机”选项，只填写资源名称和简介。此时创建未上架的连接草稿，无需填写模型或价格。API Key 或 OAuth 号池均可通过本机选定的 OpenAI 兼容网关提供。
+3. 点击“复制并启动”，在本机终端粘贴运行。一次复制就包含安装包地址、平台地址、上游地址和一次性启动码，无需单独粘贴平台连接凭证。启动码五分钟内有效、只能使用一次；过期或连接失败时重新点击复制。复制命令不会中断现有连接；命令成功兑换后会替换此资源的旧连接凭证。关闭弹窗后可从“我的资源 → 继续接入”恢复。
 4. 复制网页提供的完整启动命令，在商家的机器执行。npx 从当前平台下载带版本号的独立安装包并缓存，无需进入项目目录。仅需指定网关地址，不指定模型 ID。Magpie 默认使用下面的地址：
 
 ```sh
-npx --yes --package=https://market.example/downloads/mon2api-connector-0.1.1.tgz mon2api-connector start --platform https://market.example --upstream http://127.0.0.1:3425/v1
+npx --yes --package=https://market.example/downloads/token2api-connector-0.1.2.tgz token2api-connector start --platform https://market.example --upstream http://127.0.0.1:3425/v1
 ```
 
 将示例中两处 `https://market.example` 换成真实平台地址。网页复制的命令含 `--connect-code`，CLI 自动兑换平台连接凭证，只用隐藏输入读取本机上游 Key。命令行里没有长期平台凭证或上游 Key。下面不带启动码的手动示例仍会询问平台连接器凭证，可在网页“手动连接（高级）”中获取。不要把长期密钥写进命令行参数。一次性启动码也不要分享；它在兑换或过期后失效。直接使用外部 API 时，将 `--upstream` 换成对应的 HTTPS API 地址。连接器自动读取上游 `/v1/models`，每分钟刷新一次，仅向平台发送模型 ID 列表，不发送上游 URL、Key 或供应商配置。网关返回空列表、错误、无效 ID 或超出限制时明确失败，不会猜测或生成模型 ID。目录最多 500 个模型，响应最多 512 KiB。
 
-5. 回到网页，从自动显示的模型列表选择一个模型，填写输入和输出单价后确认上架。价格单位为 dUSD / 百万 Token。未选择模型或连接器离线时不能上架；目录需在两分钟内刷新。草稿不进入公开市场，也不能创建预算会话。一个资源固定一个模型；上架后不可更换模型。网页仅展示网关声明的 ID，不验证真实模型身份。
+5. 回到网页，从自动显示的模型列表选择一个模型，填写输入和输出单价后确认上架。价格单位为当前部署的结算资产 / 百万 Token。未选择模型或连接器离线时不能上架；目录需在两分钟内刷新。草稿不进入公开市场，也不能创建预算会话。一个资源固定一个模型；上架后不可更换模型。网页仅展示网关声明的 ID，不验证真实模型身份。
 6. 保持进程运行。连接器每两秒向平台请求任务，或回传在执行任务的进度。15 秒无心跳后资源显示离线并停止接收新调用。Ctrl+C / SIGTERM 会停止进程并尝试通知平台离线。网页的“暂停”阻止新接单，已经领取的任务继续回传用量。
 
 旧的固定模型资源仍可用 `--model <模型 ID>` 启动。已有资源及预算会话不会被模型发现修改。使用自动发现模式时，若挂牌模型不再存在于网关目录中，资源离线且停止接收新调用。
@@ -30,20 +32,20 @@ npx --yes --package=https://market.example/downloads/mon2api-connector-0.1.1.tgz
 查询自己的连接状态：
 
 ```sh
-npx --yes --package=https://market.example/downloads/mon2api-connector-0.1.1.tgz mon2api-connector status --platform https://market.example
+npx --yes --package=https://market.example/downloads/token2api-connector-0.1.2.tgz token2api-connector status --platform https://market.example
 ```
 
 也可在任意目录全局安装，再使用短命令：
 
 ```sh
-npm install --global https://market.example/downloads/mon2api-connector-0.1.1.tgz
-mon2api-connector start --platform https://market.example --upstream http://127.0.0.1:3425/v1
-mon2api-connector --version
+npm install --global https://market.example/downloads/token2api-connector-0.1.2.tgz
+token2api-connector start --platform https://market.example --upstream http://127.0.0.1:3425/v1
+token2api-connector --version
 ```
 
 ## 后台运行
 
-这是一个持续运行的 CLI 服务。可交由 systemd、launchd、容器或已有进程管理器管理。建议后台服务全局安装后使用 `mon2api-connector`，并固定安装包版本。服务重新启动后只领取新任务，不重复执行之前领取的请求。不自动安装开机启动项。
+这是一个持续运行的 CLI 服务。可交由 systemd、launchd、容器或已有进程管理器管理。建议后台服务全局安装后使用 `token2api-connector`，并固定安装包版本。服务重新启动后只领取新任务，不重复执行之前领取的请求。不自动安装开机启动项。
 
 无人值守时，进程管理器可以从其凭据存储提供 `MON2API_CONNECTOR_TOKEN` 和 `MON2API_UPSTREAM_KEY`。也可使用 `--credentials-stdin`，从标准输入读取下面形状的 JSON。示例中的值均为占位符；不要把真实值写进 shell 历史、仓库、日志或公共部署变量。
 
@@ -77,14 +79,14 @@ mon2api-connector --version
 pnpm connector:build
 ```
 
-生成 `packages/connector/dist/connector.mjs` 和 `public/downloads/mon2api-connector-0.1.1.tgz`。安装包包含 JavaScript、包元数据、说明和许可证，无运行时 npm 依赖，也无安装脚本；不包含网站、Prisma、数据库配置、源码映射或凭证。生成文件不入库，由部署构建生成并随 public 目录发布。更新版本时修改 `packages/connector/package.json` 的 `version`，并同步文档中的示例版本；网页命令自动读取该版本。用户需要复制新版网页命令或重新全局安装以升级。
+生成 `packages/connector/dist/connector.mjs` 和 `public/downloads/token2api-connector-0.1.2.tgz`。安装包包含 JavaScript、包元数据、说明和许可证，无运行时 npm 依赖，也无安装脚本；不包含网站、Prisma、数据库配置、源码映射或凭证。生成文件不入库，由部署构建生成并随 public 目录发布。更新版本时修改 `packages/connector/package.json` 的 `version`，并同步文档中的示例版本；网页命令自动读取该版本。用户需要复制新版网页命令或重新全局安装以升级。
 
-平台托管安装包不依赖 npm 登录。若要发布到 npm，先完成验证并确认 npm 账号拥有 `@mon2api` scope 的发布权限，然后在本机登录并发布同一安装包：
+平台托管安装包不依赖 npm 登录。若要发布到 npm，先完成验证并确认 npm 账号拥有 `@token2api` scope 的发布权限，然后在本机登录并发布同一安装包：
 
 ```sh
 pnpm verify
 npm login
-npm publish public/downloads/mon2api-connector-0.1.1.tgz --access public
+npm publish public/downloads/token2api-connector-0.1.2.tgz --access public
 ```
 
-只有 npm 发布成功后，用户才可改用 `npx --yes @mon2api/connector@0.1.1 start ...`。发布前使用网页提供的平台安装包地址。
+只有 npm 发布成功后，用户才可改用 `npx --yes @token2api/connector@0.1.2 start ...`。发布前使用网页提供的平台安装包地址。

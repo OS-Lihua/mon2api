@@ -1,11 +1,16 @@
-import type { SettlementAsset } from "./settlement-asset";
+import type {
+	BalanceUnit,
+	BillingUnit,
+	SettlementAsset,
+} from "./settlement-asset";
 
 export type Viewer = { address: string; name: string; demo: boolean };
 export type NetworkInfo = {
 	asset: SettlementAsset;
-	ledgerUnit: "micro_MON" | "micro_dUSD";
-	balanceUnit: "wei" | "micro_dUSD";
-	mode: "local" | "monad-testnet";
+	tokenDecimals: number;
+	ledgerUnit: BillingUnit;
+	balanceUnit: BalanceUnit;
+	mode: "local" | "evm";
 	name: string;
 	chainId: number;
 	rpcUrl: string;
@@ -129,7 +134,7 @@ export type RefundView = {
 	status: "PROCESSING" | "PENDING_REVIEW" | "AVAILABLE";
 	amount: number;
 	reserved: number;
-	unit: "micro_MON" | "micro_dUSD";
+	unit: BillingUnit;
 	requestedAt: string;
 	txHash: string | null;
 	withdrawRequired: boolean;

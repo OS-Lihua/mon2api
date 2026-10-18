@@ -8,8 +8,16 @@ export const env = createEnv({
 	 */
 	server: {
 		DATABASE_URL: z.string().url(),
-		MON2API_MODE: z.enum(["local", "monad-testnet"]).default("monad-testnet"),
-		MONAD_RPC_URL: z.string().url().optional(),
+		MON2API_MODE: z.enum(["local", "evm"]).default("evm"),
+		EVM_RPC_URL: z.string().url().optional(),
+		SETTLEMENT_CHAIN_ID: z.coerce.number().int().positive().optional(),
+		SETTLEMENT_ASSET: z
+			.enum(["ETH", "BNB", "POL", "AVAX", "USDT", "USDC"])
+			.optional(),
+		SETTLEMENT_TOKEN_ADDRESS: z
+			.string()
+			.regex(/^0x[\da-fA-F]{40}$/)
+			.optional(),
 		ALLOW_DEMO: z.enum(["true", "false"]).default("false"),
 		APP_ORIGIN: z.string().url().default("http://localhost:3000"),
 		SESSION_PASSWORD: z.string().min(32).optional(),
@@ -79,7 +87,10 @@ export const env = createEnv({
 			process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID,
 		DATABASE_URL: process.env.DATABASE_URL,
 		MON2API_MODE: process.env.MON2API_MODE,
-		MONAD_RPC_URL: process.env.MONAD_RPC_URL,
+		EVM_RPC_URL: process.env.EVM_RPC_URL,
+		SETTLEMENT_CHAIN_ID: process.env.SETTLEMENT_CHAIN_ID,
+		SETTLEMENT_ASSET: process.env.SETTLEMENT_ASSET,
+		SETTLEMENT_TOKEN_ADDRESS: process.env.SETTLEMENT_TOKEN_ADDRESS,
 		ALLOW_DEMO: process.env.ALLOW_DEMO,
 		APP_ORIGIN: process.env.APP_ORIGIN,
 		SESSION_PASSWORD: process.env.SESSION_PASSWORD,

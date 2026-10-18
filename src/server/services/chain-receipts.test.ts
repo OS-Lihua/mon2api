@@ -26,9 +26,9 @@ const mocks = vi.hoisted(() => ({
 	},
 	wallet: { writeContract: vi.fn() },
 	config: {
-		asset: "dUSD" as "MON" | "dUSD",
-		mode: "monad-testnet",
-		chainId: 10143,
+		asset: "dUSD" as "ETH" | "dUSD",
+		mode: "evm",
+		chainId: 8453,
 		rpcUrl: "http://127.0.0.1:1",
 		escrow: `0x${"11".repeat(20)}`,
 		meter: "",
@@ -117,7 +117,7 @@ function receipt(logs = [log()], status: "success" | "reverted" = "success") {
 beforeEach(() => {
 	vi.clearAllMocks();
 	mocks.config.asset = "dUSD";
-	mocks.config.mode = "monad-testnet";
+	mocks.config.mode = "evm";
 	mocks.config.meter = "0x0000000000000000000000000000000000000000";
 	mocks.client.waitForTransactionReceipt.mockResolvedValue(receipt());
 	mocks.client.getContractEvents.mockResolvedValue([
@@ -366,8 +366,8 @@ describe("confirmed chain closure evidence", () => {
 	);
 });
 
-it("sends and recovers native MON settlements using exact wei receipts", async () => {
-	mocks.config.asset = "MON";
+it("sends and recovers native token settlements using exact wei receipts", async () => {
+	mocks.config.asset = "ETH";
 	mocks.config.mode = "local";
 	mocks.config.meter = demoAccount(4).address;
 	mocks.client.readContract.mockResolvedValue([

@@ -133,7 +133,7 @@ export function registerCommerce(
 			auth: "wallet",
 			output: balances,
 			description:
-				"Native MON balances use wei (18 decimals); legacy ERC20 balances use micro_dUSD (6 decimals). Check unit. 503 means unavailable; never infer zero. Withdrawal is a separate consumer-signed contract withdraw() transaction.",
+				"Native balances use wei (18 decimals); USDT/USDC balances use atomic token units with network.tokenDecimals. Legacy dUSD uses micro_dUSD. Check unit and network asset. 503 means unavailable; never infer zero. Withdrawal is a separate consumer-signed contract withdraw() transaction.",
 		},
 		{
 			method: "get",
@@ -288,7 +288,7 @@ export function registerCommerce(
 			method: "post",
 			path: "/consumer/sessions/{id}/refund",
 			operationId: "requestUnusedBudgetRefund",
-			summary: "Request release of unused MON budget",
+			summary: "Request release of unused native asset budget",
 			tag: "Consumer",
 			auth: "wallet",
 			id: sessionIdSchema,
@@ -391,7 +391,7 @@ export function registerCommerce(
 						: [{ bearerAuth: [] }],
 			description: [
 				op.description,
-				"Billing amounts/prices are integer microMON on native MON deployments (network.ledgerUnit=micro_MON); rates are per million tokens. 1 microMON = 10^12 wei. Transaction budget arguments and native msg.value must be scaled to wei. Legacy isolated dUSD deployments retain micro_dUSD, with new budgets disabled. Raw balances have their own unit. List endpoints are newest-first by createdAt then id, use limit (1..100, default 20) and nextCursor; each page is a live view, not an immutable snapshot. All responses are no-store. Unknown or duplicate query parameters are rejected. POST bodies must be JSON, including {} for empty actions.",
+				"Billing amounts/prices are integer millionths of the configured asset (network.ledgerUnit=micro_<asset>); rates are per million tokens. Chain amounts equal billing amounts times 10^(network.tokenDecimals-6). Native assets require msg.value; USDT/USDC require ERC20 approval. Each isolated deployment fixes one chain, asset, token precision and escrow. Legacy isolated dUSD deployments retain micro_dUSD, with new budgets disabled. Raw balances have their own unit. List endpoints are newest-first by createdAt then id, use limit (1..100, default 20) and nextCursor; each page is a live view, not an immutable snapshot. All responses are no-store. Unknown or duplicate query parameters are rejected. POST bodies must be JSON, including {} for empty actions.",
 			]
 				.filter(Boolean)
 				.join(" "),

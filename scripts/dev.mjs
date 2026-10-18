@@ -19,9 +19,9 @@ import { pathToFileURL } from "node:url";
  * }} options
  */
 export function startDev({ spawnChild = spawn, runtime = process } = {}) {
-	const mode = runtime.env.MON2API_MODE || "monad-testnet";
-	if (mode !== "local" && mode !== "monad-testnet")
-		throw new Error("MON2API_MODE must be monad-testnet or local.");
+	const mode = runtime.env.MON2API_MODE || "evm";
+	if (mode !== "local" && mode !== "evm")
+		throw new Error("MON2API_MODE must be evm or local.");
 	/** @type {Set<import("node:child_process").ChildProcess>} */
 	const children = new Set();
 	let stopping = false;
@@ -88,7 +88,7 @@ export function startDev({ spawnChild = spawn, runtime = process } = {}) {
 			{ stdio: "inherit" },
 		);
 	}
-	if (mode === "monad-testnet") {
+	if (mode === "evm") {
 		startServices();
 		return;
 	}

@@ -12,8 +12,14 @@ import type {
 	Snapshot,
 	Viewer,
 } from "~/shared/mon2api";
-import { MONAD_TESTNET } from "~/shared/network";
-import { assetOf, billingUnit, toChainAmount } from "~/shared/settlement-asset";
+import { DEFAULT_NETWORK, networkMetadata } from "~/shared/network";
+import {
+	assetOf,
+	balanceUnit,
+	billingUnit,
+	decimalsOf,
+	toChainAmount,
+} from "~/shared/settlement-asset";
 import { AppError } from "./auth";
 import {
 	chainBalances,
@@ -149,10 +155,10 @@ export async function openSession(
 ): Promise<OpenSessionResult> {
 	await ensureChainBinding();
 	const { config, publicClient } = clients();
-	if (assetOf(config) !== "MON")
+	if (assetOf(config) === "dUSD")
 		throw new AppError(
 			"legacy_asset",
-			"旧 dUSD 部署仅服务已有会话。请在隔离数据库中部署 MON 合约后开通新预算。",
+			"旧 dUSD 部署仅服务已有会话。请使用独立账本部署新的结算资产。",
 			409,
 		);
 	let ownerGuard: "guarded" | "legacy";
@@ -192,9 +198,10 @@ export async function openSession(
 				outputRate: listing.outputRate,
 				feeBps: 500,
 				maxOutput: 2048,
-				version: 2,
-				asset: "MON",
-				unit: "micro_MON",
+				version: 3,
+				asset: assetOf(config),
+				unit: billingUnit(assetOf(config)),
+				tokenDecimals: decimalsOf(config),
 				chainId: config.chainId,
 				escrow: config.escrow.toLowerCase(),
 			}),
@@ -251,7 +258,12 @@ export async function confirmSession(
 		event.args.consumer.toLowerCase() !== user.address.toLowerCase() ||
 		event.args.provider.toLowerCase() !== lease.provider.toLowerCase() ||
 		event.args.termsHash.toLowerCase() !== lease.termsHash.toLowerCase() ||
-		event.args.budget !== toChainAmount(lease.budget, assetOf(chainConfig())) ||
+		event.args.budget !==
+			toChainAmount(
+				lease.budget,
+				assetOf(chainConfig()),
+				decimalsOf(chainConfig()),
+			) ||
 		event.args.expiresAt !==
 			BigInt(Math.floor(lease.expiresAt.getTime() / 1000))
 	)
@@ -426,9 +438,10 @@ export async function snapshot(
 		}),
 	]);
 	let network: Snapshot["network"] = {
-		...MONAD_TESTNET,
-		asset: "MON",
-		ledgerUnit: "micro_MON",
+		...DEFAULT_NETWORK,
+		asset: "ETH",
+		tokenDecimals: 18,
+		ledgerUnit: "micro_ETH",
 		balanceUnit: "wei",
 		escrow: "",
 		token: "",
@@ -445,17 +458,15 @@ export async function snapshot(
 			...network,
 			asset: assetOf(config),
 			ledgerUnit: billingUnit(assetOf(config)),
-			balanceUnit: assetOf(config) === "MON" ? "wei" : "micro_dUSD",
+			balanceUnit: balanceUnit(assetOf(config)),
+			tokenDecimals: decimalsOf(config),
 			mode: config.mode,
-			name: config.mode === "local" ? "Local EVM" : "Monad Testnet",
+			name: networkMetadata(config).name,
 			chainId: config.chainId,
-			rpcUrl:
-				config.mode === "local"
-					? "http://127.0.0.1:8545"
-					: MONAD_TESTNET.rpcUrl,
+			rpcUrl: networkMetadata(config).rpcUrl,
 			escrow: config.escrow,
 			token: config.token,
-			explorer: config.mode === "monad-testnet" ? MONAD_TESTNET.explorer : "",
+			explorer: networkMetadata(config).explorer,
 		};
 		const { publicClient } = clients();
 		network.ready = (await publicClient.getChainId()) === config.chainId;

@@ -26,7 +26,7 @@ const mocks = vi.hoisted(() => ({
 		$queryRaw: vi.fn(),
 		settlement: { findMany: vi.fn() },
 	},
-	clientAsset: "MON" as "MON" | "dUSD",
+	clientAsset: "ETH" as "ETH" | "dUSD",
 	chainBalances: vi.fn(),
 	findSessionOpen: vi.fn(),
 	readSession: vi.fn(),
@@ -130,7 +130,7 @@ function lease(overrides: Partial<LeaseRow> = {}): LeaseRow {
 
 beforeEach(() => {
 	vi.resetAllMocks();
-	mocks.clientAsset = "MON";
+	mocks.clientAsset = "ETH";
 	mocks.db.$transaction.mockImplementation(async (action) => action(mocks.db));
 	mocks.chainConfig.mockReturnValue({
 		mode: "local",
@@ -180,15 +180,17 @@ describe("direct gateway discovery boundaries", () => {
 	});
 });
 describe("market snapshot accounting", () => {
-	it("shows Monad testnet as unavailable when no deployment is configured", async () => {
+	it("shows Ethereum mainnet as unavailable when no deployment is configured", async () => {
 		mocks.chainConfig.mockImplementationOnce(() => {
 			throw new Error("Missing deployment");
 		});
 		const result = await snapshot(null);
 		expect(result.network).toMatchObject({
-			mode: "monad-testnet",
-			chainId: 10143,
-			rpcUrl: "https://testnet-rpc.monad.xyz",
+			mode: "evm",
+			chainId: 1,
+			name: "Ethereum",
+			asset: "ETH",
+			rpcUrl: "https://ethereum.reth.rs/rpc",
 			ready: false,
 		});
 	});
@@ -196,8 +198,8 @@ describe("market snapshot accounting", () => {
 		"retains the configured testnet when its RPC is %s",
 		async (failure) => {
 			mocks.chainConfig.mockReturnValue({
-				mode: "monad-testnet",
-				chainId: 10143,
+				mode: "evm",
+				chainId: 8453,
 				escrow: "0xescrow",
 				token: "0xtoken",
 			});
@@ -205,8 +207,8 @@ describe("market snapshot accounting", () => {
 				mocks.getChainId.mockRejectedValueOnce(new Error("RPC disconnected"));
 			const result = await snapshot(null);
 			expect(result.network).toMatchObject({
-				mode: "monad-testnet",
-				chainId: 10143,
+				mode: "evm",
+				chainId: 8453,
 				escrow: "0xescrow",
 				token: "0xtoken",
 				ready: false,
@@ -577,7 +579,7 @@ describe("contract wallet lease activation", () => {
 	});
 });
 
-describe("native MON activation credentials", () => {
+describe("native token activation credentials", () => {
 	const buyer = {
 		address: "0x1111111111111111111111111111111111111111",
 		name: "Buyer",
@@ -588,7 +590,7 @@ describe("native MON activation credentials", () => {
 	const hash = `0x${"bb".repeat(32)}`;
 	const termsHash = `0x${"cc".repeat(32)}`;
 	beforeEach(() => {
-		mocks.chainConfig.mockReturnValue({ asset: "MON" });
+		mocks.chainConfig.mockReturnValue({ asset: "ETH" });
 		const expiresAt = new Date(Date.now() + 3600_000);
 		mocks.db.lease.findUnique.mockResolvedValue({
 			consumer: buyer.address,

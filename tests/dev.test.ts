@@ -42,7 +42,7 @@ function setup(production = false) {
 }
 
 describe("dev process supervision with isolated fake children", () => {
-	it.each([undefined, "monad-testnet"])(
+	it.each([undefined, "evm"])(
 		"starts web and worker without a local chain when mode is %s",
 		(mode) => {
 			const { start, spawnChild, runtime, children } = setup();

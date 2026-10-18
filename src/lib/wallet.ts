@@ -8,13 +8,12 @@ import {
 import type { Config } from "wagmi";
 import { getAccount, getConnectorClient, switchChain } from "wagmi/actions";
 import type { NetworkInfo } from "~/shared/mon2api";
+import { networkMetadata, settlementChain } from "~/shared/network";
 
 export function defineWalletChain(network: NetworkInfo) {
-	if (
-		(network.mode === "local" && network.chainId !== 31337) ||
-		(network.mode === "monad-testnet" && network.chainId !== 10143)
-	)
-		throw new Error("仅支持本地链和 Monad 测试网。");
+	if (network.mode === "local" && network.chainId !== 31337)
+		throw new Error("本地链必须使用 chain 31337。");
+	if (network.mode === "evm") settlementChain(network.chainId);
 	const rpc = new URL(network.rpcUrl);
 	if (
 		!["http:", "https:"].includes(rpc.protocol) ||
@@ -27,7 +26,11 @@ export function defineWalletChain(network: NetworkInfo) {
 	return defineChain({
 		id: network.chainId,
 		name: network.name,
-		nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
+		nativeCurrency: {
+			name: networkMetadata(network).nativeName,
+			symbol: networkMetadata(network).nativeSymbol,
+			decimals: 18,
+		},
 		rpcUrls: { default: { http: [network.rpcUrl] } },
 	});
 }

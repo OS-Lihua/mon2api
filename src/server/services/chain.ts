@@ -12,9 +12,12 @@ import {
 import { mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
 import { escrowAbi, nativeEscrowAbi, tokenAbi } from "~/lib/abi";
 import { db } from "~/server/db";
+import { networkMetadata } from "~/shared/network";
 import {
 	assetOf,
+	decimalsOf,
 	fromChainAmount,
+	isNativeAsset,
 	toChainAmount,
 } from "~/shared/settlement-asset";
 import { chainConfig, demoEnabled } from "./runtime";
@@ -29,8 +32,12 @@ export function clients() {
 	const config = chainConfig();
 	const chain = defineChain({
 		id: config.chainId,
-		name: config.mode === "local" ? "Local EVM" : "Monad Testnet",
-		nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
+		name: networkMetadata(config).name,
+		nativeCurrency: {
+			name: networkMetadata(config).nativeName,
+			symbol: networkMetadata(config).nativeSymbol,
+			decimals: 18,
+		},
 		rpcUrls: { default: { http: [config.rpcUrl] } },
 	});
 	return {
@@ -51,6 +58,16 @@ function meterWallet() {
 		config.mode === "local"
 			? demoAccount(4)
 			: privateKeyToAccount(privateKey as Hex);
+	if (
+		config.mode !== "local" &&
+		Array.from(
+			{ length: 10 },
+			(_, index) => demoAccount(index).address,
+		).includes(account.address)
+	)
+		throw new Error(
+			"Public demo accounts are restricted to loopback chain 31337.",
+		);
 	if (account.address.toLowerCase() !== config.meter.toLowerCase())
 		throw new Error("Meter signer mismatch.");
 	return createWalletClient({ account, chain, transport: http(config.rpcUrl) });
@@ -96,8 +113,8 @@ export async function readSession(id: string, blockNumber?: bigint) {
 		consumer,
 		provider,
 		termsHash,
-		budget: fromChainAmount(budget, assetOf(config)),
-		spent: fromChainAmount(spent, assetOf(config)),
+		budget: fromChainAmount(budget, assetOf(config), decimalsOf(config)),
+		spent: fromChainAmount(spent, assetOf(config), decimalsOf(config)),
 		nonce: Number(nonce),
 		expiresAt: Number(expiresAt),
 		closeAfter: Number(closeAfter),
@@ -160,7 +177,7 @@ export async function chainBalances(address: string) {
 			functionName: "claimable",
 			args: [owner],
 		}),
-		assetOf(config) === "MON"
+		isNativeAsset(assetOf(config))
 			? publicClient.getBalance({ address: owner })
 			: publicClient.readContract({
 					address: getAddress(config.token),
@@ -199,7 +216,7 @@ export async function sendSettlement(
 			functionName: "settle",
 			args: [
 				id as Hex,
-				toChainAmount(cumulative, assetOf(config)),
+				toChainAmount(cumulative, assetOf(config), decimalsOf(config)),
 				BigInt(nonce),
 				receiptsHash as Hex,
 			],
@@ -248,12 +265,15 @@ export async function demoOpen(
 			chain,
 			transport: http(config.rpcUrl),
 		});
-		if (assetOf(config) !== "MON") {
+		if (!isNativeAsset(assetOf(config))) {
 			const approve = await wallet.writeContract({
 				address: getAddress(config.token),
 				abi: tokenAbi,
 				functionName: "approve",
-				args: [getAddress(config.escrow), BigInt(args.budget)],
+				args: [
+					getAddress(config.escrow),
+					toChainAmount(args.budget, assetOf(config), decimalsOf(config)),
+				],
 			});
 			await publicClient.waitForTransactionReceipt({ hash: approve });
 		}
@@ -261,24 +281,27 @@ export async function demoOpen(
 			args.id as Hex,
 			getAddress(args.provider),
 			args.termsHash as Hex,
-			toChainAmount(args.budget, assetOf(config)),
+			toChainAmount(args.budget, assetOf(config), decimalsOf(config)),
 			BigInt(args.expiresAt),
 		] as const;
-		const hash =
-			assetOf(config) === "MON"
-				? await wallet.writeContract({
-						address: getAddress(config.escrow),
-						abi: nativeEscrowAbi,
-						functionName: "openSession",
-						args: argsOnChain,
-						value: toChainAmount(args.budget, "MON"),
-					})
-				: await wallet.writeContract({
-						address: getAddress(config.escrow),
-						abi: escrowAbi,
-						functionName: "openSession",
-						args: argsOnChain,
-					});
+		const hash = isNativeAsset(assetOf(config))
+			? await wallet.writeContract({
+					address: getAddress(config.escrow),
+					abi: nativeEscrowAbi,
+					functionName: "openSession",
+					args: argsOnChain,
+					value: toChainAmount(
+						args.budget,
+						assetOf(config),
+						decimalsOf(config),
+					),
+				})
+			: await wallet.writeContract({
+					address: getAddress(config.escrow),
+					abi: escrowAbi,
+					functionName: "openSession",
+					args: argsOnChain,
+				});
 		await publicClient.waitForTransactionReceipt({
 			hash,
 			confirmations: config.mode === "local" ? 1 : 6,
@@ -340,7 +363,7 @@ export async function confirmSettlement(
 				event.args.nonce === BigInt(nonce) &&
 				event.args.receiptsHash.toLowerCase() === receiptsHash.toLowerCase() &&
 				event.args.cumulativeSpent ===
-					toChainAmount(cumulative, assetOf(config)),
+					toChainAmount(cumulative, assetOf(config), decimalsOf(config)),
 		)
 	)
 		throw new Error("Settlement receipt does not match the committed bill.");
@@ -382,7 +405,11 @@ export async function findSessionClose(id: string) {
 	if (
 		!state.closed ||
 		event.args.refund !==
-			toChainAmount(state.budget - state.spent, assetOf(config))
+			toChainAmount(
+				state.budget - state.spent,
+				assetOf(config),
+				decimalsOf(config),
+			)
 	)
 		throw new Error("Closed session state does not match its receipt.");
 	return { txHash: receipt.transactionHash, state };
@@ -407,7 +434,8 @@ export async function findSettlement(
 		(log) =>
 			!log.removed &&
 			log.args.receiptsHash?.toLowerCase() === receiptsHash.toLowerCase() &&
-			log.args.cumulativeSpent === toChainAmount(cumulative, assetOf(config)),
+			log.args.cumulativeSpent ===
+				toChainAmount(cumulative, assetOf(config), decimalsOf(config)),
 	)?.transactionHash;
 	return hash
 		? confirmSettlement(hash, id, nonce, receiptsHash, cumulative)

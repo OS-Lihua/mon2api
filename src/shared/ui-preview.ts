@@ -1,5 +1,5 @@
 import type { Snapshot } from "./mon2api";
-import { MONAD_TESTNET } from "./network";
+import { DEFAULT_NETWORK } from "./network";
 
 export const uiPreview =
 	process.env.NODE_ENV === "development" &&
@@ -8,9 +8,10 @@ const owner = "0x0000000000000000000000000000000000000001";
 export const previewSnapshot: Snapshot = {
 	viewer: { address: owner, name: "UI 预览", demo: true },
 	network: {
-		...MONAD_TESTNET,
-		asset: "MON",
-		ledgerUnit: "micro_MON",
+		...DEFAULT_NETWORK,
+		asset: "ETH",
+		tokenDecimals: 18,
+		ledgerUnit: "micro_ETH",
 		balanceUnit: "wei",
 		escrow: owner,
 		token: "0x0000000000000000000000000000000000000000",
@@ -19,12 +20,12 @@ export const previewSnapshot: Snapshot = {
 		explorer: "",
 	},
 	metrics: {
-		requests: 0,
-		inputTokens: 0,
-		outputTokens: 0,
-		spent: 0,
-		pending: 0,
-		settled: 0,
+		requests: 3,
+		inputTokens: 8600,
+		outputTokens: 2500,
+		spent: 18000,
+		pending: 6000,
+		settled: 12000,
 		writtenOff: 0,
 		claimable: null,
 		walletBalance: null,
@@ -49,8 +50,55 @@ export const previewSnapshot: Snapshot = {
 			createdAt: "2026-10-17T00:00:00.000Z",
 		}),
 	),
-	sessions: [],
-	requests: [],
-	keys: [],
-	settlements: [],
+	sessions: [0, 1].map((index) => ({
+		id: `0x${String(index + 1).repeat(64)}`,
+		listingId: `ui-preview-${index}`,
+		listingName: ["Northstar Pool", "Orbit Compute"][index] ?? "UI 预览资源",
+		model: "ui-preview-model",
+		consumer: owner,
+		provider: owner,
+		budget: 5_000_000,
+		spent: index === 0 ? 12000 : 6000,
+		reserved: 0,
+		settled: index === 0 ? 12000 : 0,
+		writtenOff: 0,
+		status: "ACTIVE",
+		expiresAt: "2099-10-18T12:00:00.000Z",
+		openTx: null,
+		closeTx: null,
+	})),
+	requests: [0, 1, 2].map((index) => ({
+		id: `ui-preview-request-${index}`,
+		sessionId: `0x${"1".repeat(64)}`,
+		listingName: "Northstar Pool",
+		model: "ui-preview-model",
+		status: "COMPLETED",
+		inputTokens: [3000, 2800, 2800][index] ?? 2800,
+		outputTokens: [900, 800, 800][index] ?? 800,
+		cost: 6000,
+		usageSource: "upstream",
+		upstreamRequestId: null,
+		createdAt: `2026-10-18T0${index + 1}:00:00.000Z`,
+		settled: index < 2,
+	})),
+	keys: [
+		{
+			id: "ui-preview-key",
+			name: "预览应用",
+			prefix: "preview_only",
+			sessionId: `0x${"1".repeat(64)}`,
+			revoked: false,
+			createdAt: "2026-10-18T00:00:00.000Z",
+		},
+	],
+	settlements: [
+		{
+			id: "ui-preview-settlement",
+			sessionId: `0x${"1".repeat(64)}`,
+			amount: 12000,
+			status: "CONFIRMED",
+			txHash: null,
+			createdAt: "2026-10-18T02:00:00.000Z",
+		},
+	],
 };

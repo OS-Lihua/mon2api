@@ -1,6 +1,6 @@
 import { version } from "../../packages/connector/package.json";
 
-export const connectorDownloadPath = `/downloads/mon2api-connector-${version}.tgz`;
+export const connectorDownloadPath = `/downloads/token2api-connector-${version}.tgz`;
 
 function shellArgument(value: string) {
 	return /^[\w./:@-]+$/.test(value)
@@ -17,7 +17,7 @@ export function connectorStartCommand(
 		"npx",
 		"--yes",
 		`--package=${shellArgument(new URL(connectorDownloadPath, platform).href)}`,
-		"mon2api-connector start",
+		"token2api-connector start",
 		`--platform ${shellArgument(platform)}`,
 		`--upstream ${model ? "YOUR_UPSTREAM_URL" : "http://127.0.0.1:3425/v1"}`,
 		...(model ? [`--model ${shellArgument(model)}`] : []),

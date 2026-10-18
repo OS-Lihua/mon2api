@@ -9,7 +9,7 @@ process.on("SIGTERM", () => {
 process.on("SIGINT", () => {
 	stopping = true;
 });
-console.log("mon2api settlement worker: every 10 seconds.");
+console.log("Token2API settlement worker: every 10 seconds.");
 while (!stopping) {
 	try {
 		const results = await processSettlementQueue();

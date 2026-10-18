@@ -1,4 +1,4 @@
-# mon2api API 使用说明
+# Token2API API 使用说明
 
 商家和下游管理接口统一使用 `/api/v1`。推理接口额外兼容 `/v1/models` 与 `/v1/chat/completions`。管理接口没有 `/v1` 别名。完整请求、响应及约束见运行服务的 [`/api/v1/openapi.json`](http://localhost:3000/api/v1/openapi.json)。
 
@@ -89,9 +89,9 @@ CLI/服务端客户端用自己的钱包签名器完成同一流程，并保存 
 
 ## 金额与状态
 
-金额、预算和报价都是整数 **micro dUSD**。`1 dUSD = 1_000_000 micro dUSD`。输入、输出报价为每百万 Token 的 micro dUSD，例如 `inputRate: 2000000` 表示输入每百万 Token 为 2 dUSD。金额字段不能传小数或美元价格。
+金额、预算和报价都是当前结算资产的整数百万分之一。`inputRate: 2000000` 表示输入每百万 Token 为 2 单位该资产。账本单位为 `micro_<asset>`，不可传小数或未经换算的其他资产价格。
 
-`GET /account/balances` 用十进制字符串返回大整数余额，并带 `unit: "micro_dUSD"`。RPC 失败返回 503，不返回伪造的零余额。当前 dUSD 是无兑付价值的测试代币。
+`GET /network` 返回 `chainId`、`asset`、`tokenDecimals` 和单位。链上金额等于账本金额乘以 `10 ** (tokenDecimals - 6)`。`GET /account/balances` 返回原始整数余额字符串，原生资产的 `unit` 为 `wei`，USDT、USDC 为 `atomic`，旧 dUSD 为 `micro_dUSD`。RPC 失败返回 503，不返回零余额。各实例账本独立，部署细节见[多链结算](./MULTICHAIN.md)。
 
 | 对象 | 关键状态 |
 | --- | --- |

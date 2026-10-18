@@ -8,8 +8,9 @@ import { defineWalletChain, getConnectedWallet } from "./wallet";
 const first = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 const second = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
 const local: NetworkInfo = {
-	asset: "MON",
-	ledgerUnit: "micro_MON",
+	asset: "ETH",
+	tokenDecimals: 18,
+	ledgerUnit: "micro_ETH",
 	balanceUnit: "wei",
 	mode: "local",
 	name: "Local EVM",
@@ -23,10 +24,10 @@ const local: NetworkInfo = {
 };
 const testnet: NetworkInfo = {
 	...local,
-	mode: "monad-testnet",
-	name: "Monad Testnet",
-	chainId: 10143,
-	rpcUrl: "https://testnet-rpc.monad.xyz",
+	mode: "evm",
+	name: "Base",
+	chainId: 8453,
+	rpcUrl: "https://mainnet.base.org",
 };
 type Features = Parameters<typeof mock>[0]["features"];
 
@@ -34,7 +35,7 @@ async function fixture(features?: Features, connected = true) {
 	const config = createConfig({
 		chains: [defineWalletChain(local), defineWalletChain(testnet)],
 		connectors: [mock({ accounts: [first], features })],
-		transports: { 31337: http(), 10143: http() },
+		transports: { 31337: http(), 8453: http() },
 		storage: null,
 		ssr: true,
 		multiInjectedProviderDiscovery: false,
@@ -96,10 +97,10 @@ describe("selected Wagmi connector wallet", () => {
 		const switchNetwork = vi.spyOn(connector, "switchChain");
 		const result = await getConnectedWallet(config, testnet, first);
 		expect(switchNetwork).toHaveBeenCalledWith(
-			expect.objectContaining({ chainId: 10143 }),
+			expect.objectContaining({ chainId: 8453 }),
 		);
-		expect(await connector.getChainId()).toBe(10143);
-		expect(result.wallet.chain?.id).toBe(10143);
+		expect(await connector.getChainId()).toBe(8453);
+		expect(result.wallet.chain?.id).toBe(8453);
 	});
 
 	it("propagates a rejected switch and keeps the original chain", async () => {
@@ -175,8 +176,8 @@ describe("selected Wagmi connector wallet", () => {
 	});
 
 	it("rejects an unsupported chain or non-local development RPC", () => {
-		expect(() => defineWalletChain({ ...testnet, chainId: 1 })).toThrow(
-			"仅支持",
+		expect(() => defineWalletChain({ ...testnet, chainId: 999 })).toThrow(
+			"Unsupported settlement chain",
 		);
 		expect(() =>
 			defineWalletChain({ ...local, rpcUrl: "https://remote.example" }),

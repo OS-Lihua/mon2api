@@ -16,7 +16,7 @@ const server = spawn(process.execPath, [path.join(runtime, "server.js")], {
 			process.env.MON2API_DATA_DIR ||
 				(process.env.MON2API_MODE === "local"
 					? ".runtime"
-					: ".runtime/monad-testnet"),
+					: `.runtime/evm/${process.env.SETTLEMENT_CHAIN_ID || "1"}-${(process.env.SETTLEMENT_ASSET || "ETH").toLowerCase()}`),
 		),
 	},
 });

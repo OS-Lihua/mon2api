@@ -4,6 +4,15 @@
  */
 import "./src/env.js";
 import { withSentryConfig } from "@sentry/nextjs/config";
+import {
+	arbitrum,
+	avalanche,
+	base,
+	bsc,
+	mainnet,
+	optimism,
+	polygon,
+} from "viem/chains";
 
 /** @type {import("next").NextConfig} */
 const config = {
@@ -19,6 +28,14 @@ const config = {
 		const walletFrames = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
 			? " https://verify.walletconnect.com https://verify.walletconnect.org"
 			: "";
+		const settlementSources = `${[
+			...new Set(
+				[mainnet, base, arbitrum, optimism, bsc, polygon, avalanche].flatMap(
+					(chain) =>
+						chain.rpcUrls.default.http.map((rpc) => new URL(rpc).origin),
+				),
+			),
+		].join(" ")} https://rpc.mainnet.chain.robinhood.com`;
 		return [
 			{
 				source: "/(.*)",
@@ -35,7 +52,7 @@ const config = {
 							"font-src 'self' data:",
 							"style-src 'self' 'unsafe-inline'",
 							"script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-							`connect-src 'self' http://127.0.0.1:8545 http://localhost:8545 https://testnet-rpc.monad.xyz https://*.sentry.io https://*.posthog.com https://us.i.posthog.com${walletSources}`,
+							`connect-src 'self' http://127.0.0.1:8545 http://localhost:8545 ${settlementSources} https://*.sentry.io https://*.posthog.com https://us.i.posthog.com${walletSources}`,
 							"form-action 'self'",
 							"upgrade-insecure-requests",
 						].join("; "),

@@ -1,6 +1,6 @@
 # Agent Instructions
 
-mon2api is an AI resource marketplace built on a production-oriented T3 web API template. Preserve the shared infrastructure and keep financial logic in explicit domain services.
+Token2API is an AI resource marketplace built on a production-oriented T3 web API template. Preserve the shared infrastructure and keep financial logic in explicit domain services.
 
 ## Communication Style
 
@@ -74,12 +74,12 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-## mon2api domain rules
+## Token2API domain rules
 
-- Money is integer microMON on new native MON deployments; prices are microMON per million tokens. Chain transfers use wei (1 microMON = 10^12 wei). Legacy dUSD deployments retain integer micro dUSD and a separate database. Never reinterpret or convert legacy balances.
+- Money is integer millionths of the configured settlement asset; prices are micro-units per million tokens. Convert chain amounts using tokenDecimals (6–18). Each deployment fixes chain, asset, token precision and escrow in an isolated database. Never reinterpret or convert legacy balances.
 - A lease fixes one provider, resource and price snapshot. Never charge above its budget.
 - Keep uncertain usage in REVIEW with a retained reservation. Do not infer zero usage.
 - Persist settlement jobs before sending transactions; recover by nonce and receipt hash.
 - Demo identities and public test keys only operate on loopback chain 31337.
-- Keep the product name mon2api. Connector terminology is gateway or pool connector.
+- Keep the product name Token2API; use token2api for repository and package names. Retain legacy configuration and protocol identifiers for compatibility. Connector terminology is gateway or pool connector.
 - If a .codegraph directory exists, use CodeGraph before searching or reading code.

@@ -373,7 +373,7 @@ describe("wallet SIWE authentication", () => {
 		const current = mocks.publicChain();
 		mocks.publicChain.mockReturnValue({
 			...current,
-			config: { chainId: 10143 },
+			config: { chainId: 8453 },
 		});
 		await expect(
 			walletLogin(signer.address, message, signature),

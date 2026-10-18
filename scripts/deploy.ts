@@ -10,160 +10,228 @@ import {
 	type Hex,
 	http,
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
-import { monadTestnet } from "viem/chains";
-import { escrowAbi } from "../src/lib/abi";
-import { inspectEscrowOwnerGuard } from "../src/server/services/escrow-version";
-import type { ChainConfig } from "../src/server/services/runtime";
-import { MONAD_TESTNET } from "../src/shared/network";
-import { assetOf, NATIVE_TOKEN } from "../src/shared/settlement-asset";
-
-// This script has no mainnet code path. Every transaction is signed for 10143.
-const chainId = MONAD_TESTNET.chainId;
-const rpcUrl = process.env.MONAD_RPC_URL || MONAD_TESTNET.rpcUrl;
-const directory = path.resolve(
-	process.env.MON2API_DATA_DIR || ".runtime/monad-testnet",
-);
-const configFile = path.join(directory, "chain.json");
-type Artifact = { abi: Abi; bytecode: Hex };
+import { mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
+import { z } from "zod";
+import { escrowAbi, tokenAbi } from "../src/lib/abi";
+import { assertEscrowOwnerGuard } from "../src/server/services/escrow-version";
+import { settlementChain } from "../src/shared/network";
+import {
+	decimalsOf,
+	isNativeAsset,
+	NATIVE_TOKEN,
+	SETTLEMENT_ASSETS,
+} from "../src/shared/settlement-asset";
+import {
+	chainConfigSchema,
+	validateChainConfig,
+} from "../src/shared/settlement-config";
 
 function requiredKey(name: "DEPLOYER_PRIVATE_KEY" | "METER_PRIVATE_KEY"): Hex {
 	const value = process.env[name];
-	if (!value || !/^0x[\da-fA-F]{64}$/.test(value))
-		throw new Error(`${name} must be explicitly set to a testnet private key.`);
-	return value as Hex;
+	if (!value || !/^0x[\da-fA-F]{64}$/.test(value) || !value.startsWith("0x"))
+		throw new Error(`${name} must be explicitly configured.`);
+	// startsWith is not a template-literal type guard; validate with Zod's typed predicate.
+	return z
+		.custom<Hex>(
+			(input) => typeof input === "string" && /^0x[\da-fA-F]{64}$/.test(input),
+		)
+		.parse(value);
 }
-
 async function main() {
+	const chain = settlementChain(
+		z.coerce.number().int().positive().parse(process.env.SETTLEMENT_CHAIN_ID),
+	);
+	const asset = z
+		.enum(SETTLEMENT_ASSETS)
+		.refine(
+			(value) => value !== "dUSD",
+			"New deployments require a native asset, USDT or USDC.",
+		)
+		.parse(process.env.SETTLEMENT_ASSET);
+	const rpcUrl = z
+		.string()
+		.url()
+		.parse(process.env.EVM_RPC_URL || chain.rpcUrls.default.http[0]);
+	if (new URL(rpcUrl).protocol !== "https:")
+		throw new Error("Remote deployment RPC must use HTTPS.");
+	const token = isNativeAsset(asset)
+		? NATIVE_TOKEN
+		: getAddress(
+				z
+					.string()
+					.regex(/^0x[\da-fA-F]{40}$/)
+					.parse(process.env.SETTLEMENT_TOKEN_ADDRESS),
+			);
+	if (!isNativeAsset(asset) && token === NATIVE_TOKEN)
+		throw new Error("Stablecoins require a nonzero ERC20 contract address.");
+	if (isNativeAsset(asset) && asset !== chain.nativeCurrency.symbol)
+		throw new Error("Native asset does not match the selected chain.");
+	const directory = path.resolve(
+		process.env.MON2API_DATA_DIR ||
+			`.runtime/evm/${chain.id}-${asset.toLowerCase()}`,
+	);
+	const configFile = path.join(directory, "chain.json");
 	const deployer = privateKeyToAccount(requiredKey("DEPLOYER_PRIVATE_KEY"));
 	const meter = privateKeyToAccount(requiredKey("METER_PRIVATE_KEY")).address;
-	if (!process.env.TREASURY_ADDRESS)
-		throw new Error("TREASURY_ADDRESS must be explicitly set.");
-	const treasury = getAddress(process.env.TREASURY_ADDRESS);
-	if (treasury === "0x0000000000000000000000000000000000000000")
+	for (let index = 0; index < 10; index++) {
+		const demo = mnemonicToAccount(
+			"test test test test test test test test test test test junk",
+			{ addressIndex: index },
+		).address;
+		if ([deployer.address, meter].includes(demo))
+			throw new Error(
+				"Public demo accounts are restricted to loopback chain 31337.",
+			);
+	}
+	const treasury = getAddress(
+		z
+			.string()
+			.regex(/^0x[\da-fA-F]{40}$/)
+			.parse(process.env.TREASURY_ADDRESS),
+	);
+	if (treasury === NATIVE_TOKEN)
 		throw new Error("TREASURY_ADDRESS cannot be zero.");
-	const client = createPublicClient({
-		chain: monadTestnet,
-		transport: http(rpcUrl),
-		pollingInterval: 1000,
-	});
-	if (monadTestnet.id !== chainId || (await client.getChainId()) !== chainId)
-		throw new Error(
-			"Refusing deployment: RPC must be Monad testnet, chain 10143.",
-		);
-	const wallet = createWalletClient({
-		account: deployer,
-		chain: monadTestnet,
-		transport: http(rpcUrl),
-	});
+	const client = createPublicClient({ chain, transport: http(rpcUrl) });
+	if ((await client.getChainId()) !== chain.id)
+		throw new Error("RPC chain ID does not match the requested deployment.");
+	const tokenDecimals = isNativeAsset(asset)
+		? 18
+		: await client.readContract({
+				address: token,
+				abi: tokenAbi,
+				functionName: "decimals",
+			});
+	if (tokenDecimals < 6 || tokenDecimals > 18)
+		throw new Error("Unsupported token precision.");
+	if (!isNativeAsset(asset)) {
+		const code = await client.getCode({ address: token });
+		if (!code || code === "0x")
+			throw new Error("Settlement token is not a contract.");
+	}
 	if (fs.existsSync(configFile)) {
-		const existing = JSON.parse(
-			fs.readFileSync(configFile, "utf8"),
-		) as ChainConfig;
+		const existing = validateChainConfig(
+			chainConfigSchema.parse(JSON.parse(fs.readFileSync(configFile, "utf8"))),
+		);
 		if (
-			existing.mode !== "monad-testnet" ||
-			existing.chainId !== chainId ||
+			existing.mode !== "evm" ||
+			existing.chainId !== chain.id ||
+			existing.asset !== asset ||
+			decimalsOf(existing) !== tokenDecimals ||
+			getAddress(existing.token) !== token ||
 			getAddress(existing.meter) !== meter ||
 			getAddress(existing.treasury) !== treasury
-		) {
-			throw new Error(
-				"Existing deployment uses another network or signer. Use a separate MON2API_DATA_DIR.",
-			);
-		}
-		const token = getAddress(existing.token);
-		const escrow = getAddress(existing.escrow);
-		const [tokenCode, escrowCode] = await Promise.all([
-			assetOf(existing) === "MON"
-				? Promise.resolve("native")
-				: client.getCode({ address: token }),
-			client.getCode({ address: escrow }),
-		]);
-		if (!tokenCode || tokenCode === "0x" || !escrowCode || escrowCode === "0x")
-			throw new Error(
-				"Saved contracts are absent; refusing to replace the existing ledger.",
-			);
-		const [actualToken, actualMeter, actualTreasury, actualFee] =
-			await Promise.all([
-				client.readContract({
-					address: escrow,
-					abi: escrowAbi,
-					functionName: "token",
-				}),
-				client.readContract({
-					address: escrow,
-					abi: escrowAbi,
-					functionName: "meter",
-				}),
-				client.readContract({
-					address: escrow,
-					abi: escrowAbi,
-					functionName: "treasury",
-				}),
-				client.readContract({
-					address: escrow,
-					abi: escrowAbi,
-					functionName: "feeBps",
-				}),
-			]);
-		if (
-			actualToken !== token ||
-			actualMeter !== meter ||
-			actualTreasury !== treasury ||
-			actualFee !== 500
-		) {
-			throw new Error(
-				"Existing escrow does not match the requested testnet deployment terms.",
-			);
-		}
-		if (
-			(await inspectEscrowOwnerGuard(client, escrow, deployer.address)) ===
-			"legacy"
 		)
-			console.warn(
-				"Saved escrow lacks the session owner guard. New sessions are blocked; existing sessions can still settle, close and withdraw. Use a separate MON2API_DATA_DIR and DATABASE_URL for a guarded deployment.",
+			throw new Error(
+				"Existing deployment differs. Use a separate MON2API_DATA_DIR and DATABASE_URL.",
 			);
+		const escrow = getAddress(existing.escrow);
+		const code = await client.getCode({ address: escrow });
+		if (!code || code === "0x")
+			throw new Error(
+				"Saved escrow is absent; refusing to replace the existing ledger.",
+			);
+		const [actualToken, actualMeter, actualTreasury, fee] = await Promise.all([
+			client.readContract({
+				address: escrow,
+				abi: escrowAbi,
+				functionName: "token",
+			}),
+			client.readContract({
+				address: escrow,
+				abi: escrowAbi,
+				functionName: "meter",
+			}),
+			client.readContract({
+				address: escrow,
+				abi: escrowAbi,
+				functionName: "treasury",
+			}),
+			client.readContract({
+				address: escrow,
+				abi: escrowAbi,
+				functionName: "feeBps",
+			}),
+		]);
+		if (
+			getAddress(actualToken) !== token ||
+			getAddress(actualMeter) !== meter ||
+			getAddress(actualTreasury) !== treasury ||
+			fee !== 500
+		)
+			throw new Error("Saved escrow terms differ from the configuration.");
+		await assertEscrowOwnerGuard(client, escrow, deployer.address);
 		console.log(
-			`Reusing Monad testnet escrow ${escrow}; no transactions sent.`,
+			`Reusing ${chain.name} ${asset} escrow ${escrow}; no transactions sent.`,
 		);
 		return;
 	}
-
 	execFileSync(process.execPath, ["scripts/compile.mjs"], { stdio: "inherit" });
-	const artifact = (name: string) =>
-		JSON.parse(
-			fs.readFileSync(`contracts/artifacts/${name}.json`, "utf8"),
-		) as Artifact;
-	const token = NATIVE_TOKEN;
+	const artifact = z
+		.object({
+			abi: z.custom<Abi>(
+				(value) =>
+					Array.isArray(value) &&
+					value.every(
+						(item: unknown) =>
+							typeof item === "object" && item !== null && "type" in item,
+					),
+			),
+			bytecode: z.custom<Hex>(
+				(value) => typeof value === "string" && /^0x[\da-fA-F]+$/.test(value),
+			),
+		})
+		.parse(
+			JSON.parse(
+				fs.readFileSync(
+					`contracts/artifacts/${isNativeAsset(asset) ? "NativeUsageEscrow" : "UsageEscrow"}.json`,
+					"utf8",
+				),
+			),
+		);
+	const wallet = createWalletClient({
+		account: deployer,
+		chain,
+		transport: http(rpcUrl),
+	});
 	const receipt = await client.waitForTransactionReceipt({
 		hash: await wallet.deployContract({
-			...artifact("NativeUsageEscrow"),
-			args: [meter, treasury, 500],
+			...artifact,
+			args: isNativeAsset(asset)
+				? [meter, treasury, 500]
+				: [token, meter, treasury, 500],
 		}),
-		confirmations: 2,
+		confirmations: 6,
 	});
 	if (receipt.status !== "success" || !receipt.contractAddress)
 		throw new Error("Escrow deployment failed.");
-	const config: ChainConfig = {
-		mode: "monad-testnet",
-		asset: "MON",
-		chainId,
-		rpcUrl,
-		token,
-		escrow: receipt.contractAddress,
-		meter,
-		treasury,
-		deploymentBlock: receipt.blockNumber.toString(),
-	};
+	const config = validateChainConfig(
+		chainConfigSchema.parse({
+			mode: "evm",
+			asset,
+			tokenDecimals,
+			chainId: chain.id,
+			rpcUrl,
+			token,
+			escrow: receipt.contractAddress,
+			meter,
+			treasury,
+			deploymentBlock: receipt.blockNumber.toString(),
+		}),
+	);
 	fs.mkdirSync(directory, { recursive: true });
-	fs.writeFileSync(`${configFile}.tmp`, `${JSON.stringify(config, null, 2)}\n`);
+	fs.writeFileSync(
+		`${configFile}.tmp`,
+		`${JSON.stringify(config, null, 2)}\n`,
+		{ flag: "wx" },
+	);
 	fs.renameSync(`${configFile}.tmp`, configFile);
-	console.log(`Monad testnet deployment saved to ${configFile}`);
-	console.log(`Native MON (wei); escrow ${config.escrow}`);
+	console.log(
+		`${chain.name} ${asset} deployment saved to ${configFile}. Set MON2API_DATA_DIR to this directory before starting the app.`,
+	);
 }
-
 main().catch((error: unknown) => {
 	console.error(
-		error instanceof Error ? error.message : "Monad testnet deployment failed.",
+		error instanceof Error ? error.message : "EVM deployment failed.",
 	);
 	process.exitCode = 1;
 });

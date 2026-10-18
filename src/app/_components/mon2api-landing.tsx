@@ -28,23 +28,25 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { SETTLEMENT_CHAINS } from "~/shared/network";
+import { ChainGlyph, chainColor, chainLabel } from "./chain-glyph";
 import styles from "./mon2api-landing.module.css";
 
-const repository = "https://github.com/OS-Lihua/mon2api";
+const repository = "https://github.com/OS-Lihua/token2api";
 const snippets = {
 	TypeScript: `import OpenAI from "openai";
 import { randomUUID } from "node:crypto";
 
 const client = new OpenAI({
-  apiKey: process.env.MON2API_KEY,
-  baseURL: process.env.MON2API_BASE_URL,
+  apiKey: process.env.TOKEN2API_KEY,
+  baseURL: process.env.TOKEN2API_BASE_URL,
   maxRetries: 0,
 });
 
 const response = await client.chat.completions.create(
   {
-    model: process.env.MON2API_MODEL!,
-    messages: [{ role: "user", content: "Hello, mon2api." }],
+    model: process.env.TOKEN2API_MODEL!,
+    messages: [{ role: "user", content: "Hello, Token2API." }],
     max_tokens: 512,
   },
   { headers: { "Idempotency-Key": randomUUID() } },
@@ -54,14 +56,14 @@ from uuid import uuid4
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ["MON2API_KEY"],
-    base_url=os.environ["MON2API_BASE_URL"],
+    api_key=os.environ["TOKEN2API_KEY"],
+    base_url=os.environ["TOKEN2API_BASE_URL"],
     max_retries=0,
 )
 
 response = client.chat.completions.create(
-    model=os.environ["MON2API_MODEL"],
-    messages=[{"role": "user", "content": "Hello, mon2api."}],
+    model=os.environ["TOKEN2API_MODEL"],
+    messages=[{"role": "user", "content": "Hello, Token2API."}],
     max_tokens=512,
     extra_headers={"Idempotency-Key": str(uuid4())},
 )`,
@@ -99,102 +101,74 @@ function SpotlightCard({
 
 function Brand() {
 	return (
-		<Link aria-label="mon2api 首页" className={styles.brand} href="/">
+		<Link aria-label="Token2API 首页" className={styles.brand} href="/">
 			<span className={styles.brandMark}>
 				<Image alt="" height={38} src="/icon.svg" width={38} />
 			</span>
 			<span>
-				mon2api<span className={styles.brandDot}>.</span>
+				Token2API<span className={styles.brandDot}>.</span>
 			</span>
 		</Link>
 	);
 }
 
-function NetworkSculpture() {
-	const ribbon =
-		"M16.4 4.3c1.3-.8 2.9.2 2.9 1.7v4.5c0 .9-.5 1.8-1.3 2.3l-5.8 3.5c-.6.4-1 1-1 1.7v3.8c0 .7.7 1.1 1.3.8l3.8-2.3c1.3-.8 3 .2 3 1.7v4c0 1-.5 1.8-1.3 2.3l-4.8 2.9c-1.4.9-3.2.9-4.6 0l-3.2-1.9C3.9 28.4 3 26.8 3 25.1V14.8c0-1.8.9-3.4 2.4-4.3l11-6.2Z";
+function NetworkDiagram() {
 	return (
-		<div aria-hidden="true" className={styles.sculpture}>
-			<div className={styles.sculptureGlow} />
+		<div aria-hidden="true" className={styles.networkDiagram}>
+			<div className={styles.diagramHeading}>
+				<span>多链结算网络</span>
+				<span>Token2API</span>
+			</div>
 			<svg
 				aria-hidden="true"
-				className={styles.orbitArt}
+				className={styles.networkRoutes}
 				fill="none"
 				viewBox="0 0 600 540"
 			>
-				<defs>
-					<linearGradient id="ribbon-front" x1="0" x2="1" y1="0" y2="1">
-						<stop stopColor="#eee7ff" />
-						<stop offset=".35" stopColor="#b99bff" />
-						<stop offset=".7" stopColor="#8955f7" />
-						<stop offset="1" stopColor="#5e29db" />
-					</linearGradient>
-					<linearGradient id="ribbon-back" x1="0" x2="1" y1="0" y2=".5">
-						<stop stopColor="#6e38dd" />
-						<stop offset=".5" stopColor="#4f20bc" />
-						<stop offset="1" stopColor="#a27aff" />
-					</linearGradient>
-					<radialGradient id="floor-shadow">
-						<stop stopColor="#6e39c6" stopOpacity=".24" />
-						<stop offset="1" stopColor="#6e39c6" stopOpacity="0" />
-					</radialGradient>
-					<path d={ribbon} id="ribbon-shape" />
-				</defs>
-				<ellipse cx="310" cy="441" fill="url(#floor-shadow)" rx="216" ry="61" />
-				<g stroke="#b8a3df" strokeWidth=".8">
-					<ellipse
-						cx="303"
-						cy="297"
-						rx="278"
-						ry="114"
-						transform="rotate(-27 303 297)"
-					/>
-					<ellipse
-						cx="303"
-						cy="297"
-						opacity=".42"
-						rx="278"
-						ry="160"
-						transform="rotate(-27 303 297)"
-					/>
-					<ellipse
-						cx="303"
-						cy="297"
-						opacity=".4"
-						rx="239"
-						ry="208"
-						strokeDasharray="3 7"
-						transform="rotate(-27 303 297)"
-					/>
-				</g>
-				<g className={styles.floatingMark}>
-					<g transform="translate(130 66) scale(8.5)">
-						<g fill="url(#ribbon-back)" transform="translate(0 1.8)">
-							<use href="#ribbon-shape" />
-							<use href="#ribbon-shape" transform="rotate(180 20 20)" />
-						</g>
-						<g fill="url(#ribbon-front)" stroke="#d9c6ff" strokeWidth=".12">
-							<use href="#ribbon-shape" />
-							<use href="#ribbon-shape" transform="rotate(180 20 20)" />
-						</g>
-					</g>
-				</g>
-				<circle
-					className={styles.orbitDot}
-					cx="82"
-					cy="370"
-					fill="#8761e8"
-					r="7"
-				/>
-				<circle cx="527" cy="219" fill="#b69aed" r="4" />
-				<path d="M475 88v16m-8-8h16M100 149v12m-6-6h12" stroke="#9c7ccf" />
+				{SETTLEMENT_CHAINS.map((chain, index) => {
+					const left = index < 4;
+					const y = 95 + (index % 4) * 110;
+					const target = 225 + (index % 4) * 30;
+					return (
+						<path
+							d={
+								left
+									? `M182 ${y} C220 ${y} 193 ${target} 214 ${target}`
+									: `M418 ${y} C380 ${y} 407 ${target} 386 ${target}`
+							}
+							key={chain.id}
+							stroke={chainColor(chain.id)}
+							strokeOpacity=".75"
+							strokeWidth="1.5"
+						/>
+					);
+				})}
 			</svg>
-			<div className={styles.monadOrbit}>
-				<Image alt="" height={64} src="/brand/monad/mon-token.svg" width={64} />
-				<span className={styles.monadOrbitCopy}>
-					MON
-					<span className={styles.monadOrbitCaption}>原生结算</span>
-				</span>
+			{SETTLEMENT_CHAINS.map((chain, index) => (
+				<div
+					className={styles.chainNode}
+					key={chain.id}
+					style={{
+						left: index < 4 ? "3.3%" : "69.7%",
+						top: `${(95 + (index % 4) * 110) / 5.7}%`,
+					}}
+				>
+					<ChainGlyph className={styles.chainGlyph} id={chain.id} />
+					<span className={styles.chainNodeCopy}>
+						<strong>{chainLabel(chain.id, chain.name)}</strong>
+						<span>{chain.nativeCurrency.symbol}</span>
+					</span>
+				</div>
+			))}
+			<div className={styles.settlementHub}>
+				<Image alt="" height={44} src="/icon.svg" width={44} />
+				<strong>Token2API</strong>
+				<span>预算托管 · 按量结算</span>
+			</div>
+			<div className={styles.settlementAssets}>
+				<span>原生代币</span>
+				<span>USDT</span>
+				<span>USDC</span>
 			</div>
 		</div>
 	);
@@ -202,14 +176,14 @@ function NetworkSculpture() {
 
 const faqs = [
 	{
-		question: "mon2api 是什么？",
+		question: "Token2API 是什么？",
 		answer:
-			"mon2api 是一个 AI 资源租赁市场。资源提供者通过 gateway 或 pool connector 接入上游服务；开发者选择资源、锁定预算，再通过统一 API 调用。平台记录 Token 用量，并通过链上合约完成结算与分账。",
+			"Token2API 是面向 AI 资源交易的多链结算平台。买方锁定预算后，通过统一 API 调用模型；提供者接入自己的网关，按已确认用量收款。平台记录用量、固定报价，并在预算内完成链上结算与分账。",
 	},
 	{
 		question: "可以使用现有的 OpenAI SDK 吗？",
 		answer:
-			"可以。mon2api 提供兼容 OpenAI 的文本 Chat Completions 接口，支持普通响应和流式响应。将 baseURL 改为部署地址的 /v1，并使用会话绑定的平台 API Key。每次新调用需要唯一的 Idempotency-Key；重试同一次调用时复用原键。",
+			"可以。Token2API 提供兼容 OpenAI 的文本 Chat Completions 接口，支持普通响应和流式响应。将 baseURL 改为部署地址的 /v1，并使用会话绑定的平台 API Key。每次新调用需要唯一的 Idempotency-Key；重试同一次调用时复用原键。",
 	},
 	{
 		question: "如何控制调用费用？",
@@ -217,9 +191,19 @@ const faqs = [
 			"创建预算会话时会固定资源、提供者和价格快照。请求先预留费用，再按上游报告的用量核销，收费不会超过会话预算。用量不确定时进入待核对状态，并保留对应预留金额。",
 	},
 	{
-		question: "当前可以在哪个网络使用？",
+		question: "支持哪些链和结算资产？",
 		answer:
-			"默认使用 Monad 测试网，使用测试网原生 MON。连接钱包后按提示切换网络，再锁定 MON 预算，随后直接获取 Base URL、API Key 和模型名。合约资金流程已验证；浏览器钱包与真实网关的完整流程仍待验收。",
+			"支持 Ethereum 主网、Base、Arbitrum、Optimism、BSC、Polygon、Avalanche 和 Robinhood Chain，以及各链原生代币和已开通的 USDT、USDC。进入控制台后，先核对当前市场的网络和结算资产；稳定币的具体版本以代币合约为准。",
+	},
+	{
+		question: "可以在同一笔预算中换币或跨链吗？",
+		answer:
+			"每个市场固定一个结算网络和一种资产。预算、报价、结算收入和退款均使用该资产，不会自动换币或跨链。钱包手续费使用所在链的原生代币，另行支付。",
+	},
+	{
+		question: "提供者如何收款，未用预算如何退回？",
+		answer:
+			"提供者在当前市场按结算资产报价。平台按确认用量累计结算，收入进入提供者的可提现余额。买方申请退款后停止新调用，待结算和用量核对完成，再把未用预算转入买方的可提现余额；双方均使用原钱包提取。",
 	},
 ];
 const languages: (keyof typeof snippets)[] = ["TypeScript", "Python"];
@@ -238,7 +222,7 @@ export function Mon2ApiLanding() {
 			const limit =
 				(headerRef.current?.getBoundingClientRect().height ?? 76) + 40;
 			let current: string | null = null;
-			for (const id of ["network", "how-it-works", "developers"]) {
+			for (const id of ["networks", "network", "how-it-works", "developers"]) {
 				const section = document.getElementById(id);
 				if (section && section.getBoundingClientRect().top <= limit)
 					current = `#${id}`;
@@ -292,7 +276,8 @@ export function Mon2ApiLanding() {
 		return () => window.clearTimeout(timer);
 	}, [copyStatus]);
 	const navigation = [
-		{ label: "网络优势", href: "#network" },
+		{ label: "结算网络", href: "#networks" },
+		{ label: "平台能力", href: "#network" },
 		{ label: "如何使用", href: "#how-it-works" },
 		{ label: "开发者", href: "#developers" },
 	];
@@ -377,45 +362,44 @@ export function Mon2ApiLanding() {
 				<section aria-labelledby="hero-title" className={styles.hero}>
 					<div className={`${styles.container} ${styles.heroGrid}`}>
 						<div className={styles.heroCopy}>
-							<a
-								className={styles.monadBadge}
-								href="https://monad.xyz"
-								rel="noreferrer"
-								target="_blank"
-							>
-								<Image
-									alt=""
-									height={20}
-									src="/brand/monad/logomark.svg"
-									style={{ height: "auto" }}
-									width={20}
-								/>
-								构建于 <strong>Monad</strong>
+							<a className={styles.settlementBadge} href="#networks">
+								结算资产 <strong>原生代币 · USDT · USDC</strong>
 								<ArrowUpRight aria-hidden="true" size={13} />
 							</a>
 							<h1 id="hero-title">
-								让每一份算力
+								AI 资源，
 								<br />
-								<span>自由流动。</span>
-								<span aria-hidden="true" className={styles.headlineSpark}>
-									✳
-								</span>
+								<span>多链结算。</span>
 							</h1>
 							<p className={styles.heroDescription}>
-								连接开放的 AI 资源网络。
+								用熟悉的资产，为 AI 调用结算。
 								<br />
-								一个 API，按量调用，让算力的价值清晰可见。
+								锁定预算、按量计费，收入与退款都有账可查。
 							</p>
 							<div className={styles.heroActions}>
 								<Link className={styles.primaryButton} href="/console">
-									开始探索 <ArrowUpRight size={19} />
+									进入控制台 <ArrowUpRight size={19} />
 								</Link>
-								<a className={styles.textButton} href="#developers">
-									几行代码，即刻接入 <ArrowRight size={17} />
+								<a className={styles.textButton} href="#how-it-works">
+									了解使用流程 <ArrowRight size={17} />
 								</a>
 							</div>
+							<div className={styles.heroBenefits}>
+								<span>
+									<ShieldCheck size={14} />
+									预算可控
+								</span>
+								<span>
+									<GitBranch size={14} />
+									多链支持
+								</span>
+								<span>
+									<Code2 size={14} />
+									统一 API
+								</span>
+							</div>
 						</div>
-						<NetworkSculpture />
+						<NetworkDiagram />
 					</div>
 				</section>
 				<div className={styles.compatibility}>
@@ -435,6 +419,51 @@ export function Mon2ApiLanding() {
 					</div>
 				</div>
 				<section
+					aria-labelledby="settlement-networks-title"
+					className={`${styles.container} ${styles.supportedNetworks}`}
+					id="networks"
+				>
+					<div className={styles.sectionHeading}>
+						<div>
+							<span className={styles.sectionEyebrow}>结算网络</span>
+							<h2 id="settlement-networks-title">支持多链，多元结算。</h2>
+						</div>
+						<p className={styles.sectionDescription}>
+							支持以下 EVM
+							主网及各链原生代币、USDT、USDC。具体开通的网络、资产与代币合约，以当前市场为准。
+						</p>
+					</div>
+					<ul className={styles.networkGrid}>
+						{SETTLEMENT_CHAINS.map((chain) => (
+							<li className={styles.networkCard} key={chain.id}>
+								<ChainGlyph className={styles.chainGlyph} id={chain.id} />
+								<span className={styles.networkName}>
+									{chain.id === 1
+										? "Ethereum 主网"
+										: chain.id === 56
+											? "BSC · BNB Chain"
+											: chain.id === 10
+												? "Optimism"
+												: chain.name}
+								</span>
+								<span className={styles.networkAsset}>
+									<strong style={{ color: chainColor(chain.id) }}>
+										{chain.nativeCurrency.symbol}
+									</strong>
+									<span>原生代币</span>
+								</span>
+							</li>
+						))}
+					</ul>
+					<div className={styles.assetSummary}>
+						<div>
+							<strong>USDT · USDC</strong>
+							<span>稳定币结算按所在链及具体代币合约开通。</span>
+						</div>
+						<p>预算、报价与退款使用同一种资产；网络手续费使用本链原生代币。</p>
+					</div>
+				</section>
+				<section
 					aria-labelledby="network-title"
 					className={`${styles.section} ${styles.container}`}
 					id="network"
@@ -442,15 +471,15 @@ export function Mon2ApiLanding() {
 					<div className={styles.sectionHeading}>
 						<div>
 							<h2 id="network-title">
-								好的算力，
+								从调用到收款，
 								<br />
-								值得更自由的连接。
+								每一步都有依据。
 							</h2>
 						</div>
 						<p className={styles.sectionDescription}>
-							从资源发现到用量结算，
+							统一资源接入、预算托管与用量账单，
 							<br />
-							把复杂的连接留给网络，把创造留给你。
+							让买方控制支出，让提供者核对收入。
 						</p>
 					</div>
 					<div className={styles.featureGrid}>
@@ -488,12 +517,12 @@ export function Mon2ApiLanding() {
 								strokeWidth={1.4}
 							/>
 							<h3>
-								先定预算，
+								先定资产与预算，
 								<br />
-								再放手构建。
+								再开始调用。
 							</h3>
 							<p>
-								固定资源与价格快照。
+								固定结算资产、资源与价格快照。
 								<br />
 								按用量计费，不超过会话预算。
 							</p>
@@ -508,14 +537,14 @@ export function Mon2ApiLanding() {
 								strokeWidth={1.4}
 							/>
 							<h3>
-								每一次调用，
+								按量结算，
 								<br />
-								都有迹可循。
+								原钱包提取。
 							</h3>
 							<p>
-								记录 Token 用量、费用与结算交易。
+								核对用量、费用与链上结算记录。
 								<br />
-								让消费者和提供者看清每一笔流向。
+								提供者提取收入，买方取回未用预算。
 							</p>
 						</SpotlightCard>
 					</div>
@@ -528,7 +557,7 @@ export function Mon2ApiLanding() {
 					<div className={styles.container}>
 						<div className={styles.sectionHeading}>
 							<div>
-								<h2 id="how-title">从连接，到创造。</h2>
+								<h2 id="how-title">先确认资产，再开始调用。</h2>
 							</div>
 							<Link className={styles.textButton} href="/console">
 								打开控制台 <ArrowUpRight size={18} />
@@ -538,23 +567,23 @@ export function Mon2ApiLanding() {
 							{[
 								{
 									icon: Layers3,
-									title: "发现资源",
-									text: "浏览资源市场，选择适合的模型与提供者。",
+									title: "确认网络与资源",
+									text: "核对当前市场的结算网络与资产，再选择模型和提供者。",
 								},
 								{
 									icon: Wallet,
 									title: "锁定预算",
-									text: "连接钱包，确认价格，创建预算会话。",
+									text: "连接钱包，确认报价并锁定预算。稳定币需先授权，手续费另计。",
 								},
 								{
 									icon: Code2,
 									title: "接入应用",
-									text: "创建 API Key，用熟悉的 SDK 开始调用。",
+									text: "预算确认后，保存 Base URL、API Key 和模型名，用 SDK 调用。",
 								},
 								{
 									icon: CheckCheck,
-									title: "按量结算",
-									text: "查看用量账单，追踪链上结算与退款。",
+									title: "结算与提取",
+									text: "查看用量和结算记录。提供者提取收入，买方申请退回未用预算。",
 								},
 							].map((step, index) => (
 								<li key={step.title}>
@@ -576,13 +605,14 @@ export function Mon2ApiLanding() {
 				>
 					<div className={styles.developerCopy}>
 						<h2 id="developer-title">
-							熟悉的代码。
+							一次接入。
 							<br />
-							<span>更开放的算力。</span>
+							<span>调用与结算相连。</span>
 						</h2>
 						<p>
-							保持你的开发习惯。使用 OpenAI SDK，
-							<br />将 AI 资源接入现有应用。
+							使用 OpenAI SDK 接入已开通的预算会话，
+							<br />
+							调用继续用 API，资金操作由钱包确认。
 						</p>
 						<ul>
 							<li>
@@ -687,11 +717,11 @@ export function Mon2ApiLanding() {
 				<section aria-labelledby="cta-title" className={styles.ctaSection}>
 					<div className={`${styles.container} ${styles.ctaInner}`}>
 						<div>
-							<h2 id="cta-title">让灵感，连接算力。</h2>
-							<p>为你的下一个想法，找到它的运行方式。</p>
+							<h2 id="cta-title">为下一次调用，锁定一笔预算。</h2>
+							<p>先核对网络与资产，再选资源、确认报价并开始调用。</p>
 						</div>
 						<Link className={styles.primaryButton} href="/console">
-							开始探索 <MoveUpRight size={21} />
+							进入控制台 <MoveUpRight size={21} />
 						</Link>
 						<span aria-hidden="true" className={styles.ctaDecoration}>
 							✳
@@ -709,7 +739,7 @@ export function Mon2ApiLanding() {
 						</a>
 					</div>
 					<div className={styles.footerBottom}>
-						<span>© {new Date().getFullYear()} mon2api</span>
+						<span>© {new Date().getFullYear()} Token2API</span>
 
 						<a href="#main">回到顶部 ↑</a>
 					</div>

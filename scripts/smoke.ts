@@ -9,7 +9,7 @@ const integer = z.number().int().nonnegative();
 const snapshotSchema = z.object({
 	viewer: z.object({ address: z.string(), demo: z.boolean() }).nullable(),
 	network: z.object({
-		mode: z.enum(["local", "monad-testnet"]),
+		mode: z.enum(["local", "evm"]),
 		chainId: z.number().int(),
 		rpcUrl: z.string().url(),
 		ready: z.boolean(),

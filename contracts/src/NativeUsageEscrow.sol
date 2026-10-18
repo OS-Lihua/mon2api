@@ -4,11 +4,11 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
-/// @notice Native MON escrow. All amounts are wei; billing uses microMON.
+/// @notice Native EVM asset escrow. All amounts are wei; billing uses micro-units.
 /// @dev The meter is trusted. Receipt hashes do not prove AI execution.
-/// Deploy only to local chain 31337 or Monad testnet 10143.
+/// Chain selection is validated by the deployment tooling.
 contract NativeUsageEscrow is ReentrancyGuard {
-    // Zero address identifies native MON. All contract amounts are wei.
+    // Zero address identifies the native asset. All contract amounts are wei.
     address public constant token = address(0);
     uint256 public constant BILLING_UNIT = 1e12;
     address public immutable meter;
@@ -37,7 +37,6 @@ contract NativeUsageEscrow is ReentrancyGuard {
     event Withdrawn(address indexed recipient, uint256 amount);
 
     constructor(address meter_, address treasury_, uint16 feeBps_) {
-        require(block.chainid == 31337 || block.chainid == 10143, "testnet only");
         require(meter_ != address(0) && treasury_ != address(0), "zero address");
         require(feeBps_ <= 2000, "fee too high");
         meter = meter_; treasury = treasury_; feeBps = feeBps_;
@@ -48,7 +47,7 @@ contract NativeUsageEscrow is ReentrancyGuard {
         require(sessions[id].consumer == address(0), "session exists");
         require(provider != address(0) && termsHash != bytes32(0) && budget > 0, "invalid terms");
         require(expiresAt > block.timestamp && expiresAt <= block.timestamp + 7 days, "invalid expiry");
-        require(msg.value == budget && budget % BILLING_UNIT == 0, "invalid MON deposit");
+        require(msg.value == budget && budget % BILLING_UNIT == 0, "invalid native deposit");
         sessions[id] = Session(msg.sender, provider, termsHash, budget, 0, 0, expiresAt, 0, false);
         emit SessionOpened(id, msg.sender, provider, budget, termsHash, expiresAt);
     }
@@ -99,7 +98,7 @@ contract NativeUsageEscrow is ReentrancyGuard {
         require(amount > 0, "nothing to withdraw");
         claimable[msg.sender] = 0;
         (bool sent,) = payable(msg.sender).call{value: amount}("");
-        require(sent, "MON transfer failed");
+        require(sent, "Native transfer failed");
         emit Withdrawn(msg.sender, amount);
     }
 }

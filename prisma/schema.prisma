@@ -152,6 +152,7 @@ model WalletNonce {
 // One deployment and one settlement asset per database. Existing rows stay dUSD.
 model ChainBinding {
   asset   String @default("dUSD")
+  tokenDecimals Int @default(6)
   id      String @id
   chainId Int
   escrow  String

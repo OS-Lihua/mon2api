@@ -61,7 +61,7 @@ export async function buildConnector() {
 		);
 	const archive = path.join(
 		downloads,
-		`mon2api-connector-${manifest.version}.tgz`,
+		`token2api-connector-${manifest.version}.tgz`,
 	);
 	console.log(`Connector package: ${path.relative(root, archive)}`);
 	return archive;

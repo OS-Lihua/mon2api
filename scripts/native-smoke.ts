@@ -14,13 +14,21 @@ import {
 } from "viem";
 import { mnemonicToAccount } from "viem/accounts";
 import { foundry } from "viem/chains";
-import { escrowAbi } from "../src/lib/abi";
-import { NATIVE_TOKEN, toChainAmount } from "../src/shared/settlement-asset";
+import { escrowAbi, tokenAbi } from "../src/lib/abi";
+import {
+	balanceUnit,
+	billingUnit,
+	NATIVE_TOKEN,
+	toChainAmount,
+} from "../src/shared/settlement-asset";
 
 // No external signers, public RPCs or existing ledger rows are used by this test.
 const databaseUrl = new URL(process.env.DATABASE_URL ?? "");
 if (!["127.0.0.1", "localhost", "[::1]"].includes(databaseUrl.hostname))
 	throw new Error("Native smoke requires a local database endpoint.");
+const asset = process.argv.includes("--stable") ? "USDC" : "ETH";
+const tokenDecimals =
+	asset === "USDC" && !process.argv.includes("--18-decimals") ? 6 : 18;
 const namespace = `native_smoke_${randomBytes(8).toString("hex")}`;
 const admin = new PrismaClient();
 databaseUrl.searchParams.set("schema", namespace);
@@ -45,11 +53,15 @@ try {
 		["node_modules/prisma/build/index.js", "migrate", "deploy"],
 		{ env: process.env, encoding: "utf8" },
 	);
-	assert.equal(migration.status, 0, "Isolated MON migration failed");
-	const compile = spawnSync(process.execPath, ["scripts/compile.mjs"], {
-		encoding: "utf8",
-	});
-	assert.equal(compile.status, 0, "MON contract compile failed");
+	assert.equal(migration.status, 0, "Isolated native asset migration failed");
+	const compile = spawnSync(
+		process.execPath,
+		["scripts/compile.mjs", "--test-tokens"],
+		{
+			encoding: "utf8",
+		},
+	);
+	assert.equal(compile.status, 0, "Native contract compile failed");
 	await server.listen(0, "127.0.0.1");
 	const address = server.address();
 	if (!address || typeof address === "string")
@@ -66,24 +78,52 @@ try {
 		transport: http(rpcUrl),
 		account: account(0),
 	});
-	const artifact = JSON.parse(
-		readFileSync("contracts/artifacts/NativeUsageEscrow.json", "utf8"),
-	) as { abi: Abi; bytecode: Hex };
+	const artifact = (name: string) =>
+		JSON.parse(readFileSync(`contracts/artifacts/${name}.json`, "utf8")) as {
+			abi: Abi;
+			bytecode: Hex;
+		};
+	let token: Hex = NATIVE_TOKEN;
+	if (asset === "USDC") {
+		const deployed = await client.waitForTransactionReceipt({
+			hash: await wallet.deployContract({
+				...artifact("SettlementTestToken"),
+				args: [tokenDecimals],
+			}),
+		});
+		assert.ok(deployed.contractAddress);
+		token = deployed.contractAddress;
+		await client.waitForTransactionReceipt({
+			hash: await wallet.writeContract({
+				address: token,
+				abi: tokenAbi,
+				functionName: "mint",
+				args: [
+					account(0).address,
+					toChainAmount(100_000_000, asset, tokenDecimals),
+				],
+			}),
+		});
+	}
 	const deployment = await client.waitForTransactionReceipt({
 		hash: await wallet.deployContract({
-			...artifact,
-			args: [account(4).address, account(5).address, 500],
+			...artifact(asset === "ETH" ? "NativeUsageEscrow" : "UsageEscrow"),
+			args:
+				asset === "ETH"
+					? [account(4).address, account(5).address, 500]
+					: [token, account(4).address, account(5).address, 500],
 		}),
 	});
 	assert.ok(deployment.contractAddress);
 	const escrow = deployment.contractAddress;
 	process.env.CHAIN_CONFIG_JSON = JSON.stringify({
 		mode: "local",
-		asset: "MON",
+		asset,
+		tokenDecimals,
 		chainId: 31337,
 		rpcUrl,
 		escrow,
-		token: NATIVE_TOKEN,
+		token,
 		meter: account(4).address,
 		treasury: account(5).address,
 		deploymentBlock: deployment.blockNumber.toString(),
@@ -109,7 +149,7 @@ try {
 		demo: true,
 	};
 	const listing = await market.createListing(seller, {
-		name: "Native MON fixture",
+		name: "Native token fixture",
 		description: "Isolated simulated text resource",
 		model: "mon2api-demo",
 		kind: "demo",
@@ -156,14 +196,16 @@ try {
 			},
 			body: JSON.stringify({
 				model: opened.connection?.model,
-				messages: [{ role: "user", content: "Explain MON settlement" }],
+				messages: [
+					{ role: "user", content: "Explain native asset settlement" },
+				],
 				max_tokens: 128,
 			}),
 		});
 	const response = await routes.chatPost(request());
 	assert.equal(response.status, 200);
 	const body = await response.json();
-	assert.equal(body.mon2api.unit, "micro_MON");
+	assert.equal(body.mon2api.unit, billingUnit(asset));
 	assert.ok(body.mon2api.cost > 0);
 	const replay = await routes.chatPost(request());
 	assert.equal(replay.status, 409);
@@ -175,7 +217,7 @@ try {
 	assert.equal(billed.reserved, 0);
 	assert.equal(billed.spent, body.mon2api.cost);
 	console.log(
-		"PASS REST inference with returned Key/model, microMON bill and duplicate protection",
+		"PASS REST inference with returned Key/model, micro-units bill and duplicate protection",
 	);
 	// Force an unknown-usage request through REVIEW and verify the reservation survives.
 	await db.$transaction(async (tx) => {
@@ -227,7 +269,7 @@ try {
 	const closed = await db.lease.findUniqueOrThrow({ where: { id: opened.id } });
 	assert.equal(closed.status, "CLOSED");
 	assert.equal(closed.settled, closed.spent);
-	const gross = toChainAmount(closed.spent, "MON");
+	const gross = toChainAmount(closed.spent, asset, tokenDecimals);
 	const balance = (owner: Hex) =>
 		client.readContract({
 			address: escrow,
@@ -242,13 +284,16 @@ try {
 	assert.equal(await balance(account(5).address), (gross * 500n) / 10_000n);
 	assert.equal(
 		await balance(account(0).address),
-		toChainAmount(closed.budget - closed.spent, "MON"),
+		toChainAmount(closed.budget - closed.spent, asset, tokenDecimals),
 	);
 	const snapshot = await market.snapshot(buyer);
-	assert.equal(snapshot.network.asset, "MON");
-	assert.equal(snapshot.network.ledgerUnit, "micro_MON");
-	assert.equal(snapshot.network.balanceUnit, "wei");
-	assert.equal((await commerce.accountBalances(buyer)).unit, "wei");
+	assert.equal(snapshot.network.asset, asset);
+	assert.equal(snapshot.network.ledgerUnit, billingUnit(asset));
+	assert.equal(snapshot.network.balanceUnit, balanceUnit(asset));
+	assert.equal(
+		(await commerce.accountBalances(buyer)).unit,
+		balanceUnit(asset),
+	);
 	assert.equal((await routes.chatPost(request())).status, 401);
 	await market.withdraw(buyer);
 	await market.withdraw(seller);
@@ -264,7 +309,20 @@ try {
 			functionName: "withdraw",
 		}),
 	});
-	assert.equal(await client.getBalance({ address: escrow }), 0n);
+	assert.equal(
+		asset === "ETH"
+			? await client.getBalance({ address: escrow })
+			: await client.readContract({
+					address: token,
+					abi: tokenAbi,
+					functionName: "balanceOf",
+					args: [escrow],
+				}),
+		0n,
+	);
+	console.log(
+		`PASS ${asset} (${tokenDecimals} decimals): settlement, refund, withdrawals conserve all funds`,
+	);
 	assert.equal(
 		await db.ledgerEntry.count({
 			where: { sessionId: opened.id, kind: "SETTLE" },
