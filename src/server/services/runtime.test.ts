@@ -33,14 +33,14 @@ afterEach(() => {
 });
 
 describe("demo identity chain boundary", () => {
-	it("defaults to Ethereum mainnet and rejects implicit local deployments", () => {
+	it("defaults the data directory to Base USDC and rejects implicit local deployments", () => {
 		vi.stubEnv("TOKEN2API_MODE", "");
 		vi.stubEnv("TOKEN2API_DATA_DIR", "");
 		vi.stubEnv("SETTLEMENT_CHAIN_ID", "");
 		vi.stubEnv("SETTLEMENT_ASSET", "");
 		vi.stubEnv("CHAIN_CONFIG_JSON", config("evm"));
 		expect(chainConfig().chainId).toBe(1);
-		expect(runtimeDirectory()).toMatch(/\.runtime\/evm\/1-eth$/);
+		expect(runtimeDirectory()).toMatch(/\.runtime\/evm\/8453-usdc$/);
 		vi.stubEnv("CHAIN_CONFIG_JSON", config("local"));
 		expect(() => chainConfig()).toThrow("TOKEN2API_MODE does not match");
 	});

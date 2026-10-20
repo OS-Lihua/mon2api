@@ -54,7 +54,14 @@ export const listingInput = z.discriminatedUnion("kind", [
 export const openSessionInput = z
 	.object({
 		listingId: z.string().cuid(),
-		budget: z.number().int().min(1_000_000).max(100_000_000),
+		budget: z
+			.number()
+			.int()
+			.positive()
+			.safe()
+			.describe(
+				"User-selected locked amount in integer micro-units. No business amount cap; must fit the exact JSON safe-integer range.",
+			),
 	})
 	.strict();
 export const messagesSchema = z

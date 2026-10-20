@@ -28,14 +28,23 @@ describe("settlement network and asset boundaries", () => {
 		expect(() => parse({ ...metadata, asset: "dUSD" })).toThrow();
 	});
 	it("uses the configured default network consistently for the market and wallet", () => {
-		expect(DEFAULT_NETWORK).toMatchObject({ mode: "evm", chainId: 1 });
-		expect(previewSnapshot.network).toMatchObject({ chainId: 1, asset: "ETH" });
-		const config = parse({ ...metadata, chainId: DEFAULT_NETWORK.chainId });
+		expect(DEFAULT_NETWORK).toMatchObject({
+			mode: "evm",
+			chainId: 8453,
+			asset: "USDC",
+			tokenDecimals: 6,
+		});
+		expect(previewSnapshot.network).toMatchObject({
+			chainId: 8453,
+			asset: "USDC",
+			balanceUnit: "atomic",
+		});
+		const config = parse({ ...metadata, ...DEFAULT_NETWORK });
 		const wallet = defineWalletChain({
 			...previewSnapshot.network,
 			...networkMetadata(config),
 		});
-		expect(wallet.id).toBe(1);
+		expect(wallet.id).toBe(8453);
 		expect(wallet.nativeCurrency.symbol).toBe("ETH");
 	});
 	it.each(["USDT", "USDC"] satisfies SettlementAsset[])(

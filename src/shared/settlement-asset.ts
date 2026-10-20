@@ -30,11 +30,14 @@ function scaleOf(asset: SettlementAsset, decimals?: number) {
 	return 10n ** BigInt(precision - 6);
 }
 export function toChainAmount(
-	amount: number,
+	amount: number | bigint,
 	asset: SettlementAsset,
 	decimals?: number,
 ): bigint {
-	if (!Number.isSafeInteger(amount) || amount < 0)
+	if (
+		(typeof amount === "number" && !Number.isSafeInteger(amount)) ||
+		amount < 0
+	)
 		throw new Error("Billing amount must be a nonnegative safe integer.");
 	return BigInt(amount) * scaleOf(asset, decimals);
 }
@@ -44,7 +47,11 @@ export function fromChainAmount(
 	decimals?: number,
 ): number {
 	const scale = scaleOf(asset, decimals);
-	if (amount < 0n || amount % scale !== 0n || amount / scale > 2_147_483_647n)
+	if (
+		amount < 0n ||
+		amount % scale !== 0n ||
+		amount / scale > BigInt(Number.MAX_SAFE_INTEGER)
+	)
 		throw new Error(
 			"Chain amount is outside the supported billing precision/range.",
 		);

@@ -19,6 +19,7 @@ import type {
 	resourceQuery,
 } from "./commerce.schema";
 import { connectorOnline } from "./connector-availability";
+import { ledgerAmount } from "./ledger";
 import { chainConfig } from "./runtime";
 
 type Page = z.infer<typeof pageQuery>;
@@ -129,7 +130,12 @@ function sessionDto(
 ) {
 	return {
 		...row,
-		availableBudget: row.budget - row.spent - row.reserved,
+		availableBudget: ledgerAmount(row.budget - row.spent - row.reserved),
+		budget: ledgerAmount(row.budget),
+		spent: ledgerAmount(row.spent),
+		reserved: ledgerAmount(row.reserved),
+		settled: ledgerAmount(row.settled),
+		writtenOff: ledgerAmount(row.writtenOff),
 		createdAt: row.createdAt.toISOString(),
 		expiresAt: row.expiresAt.toISOString(),
 	};
@@ -140,6 +146,8 @@ function requestDto(
 	const { upstreamId, createdAt, ...rest } = row;
 	return {
 		...rest,
+		cost: ledgerAmount(row.cost),
+		reservation: ledgerAmount(row.reservation),
 		upstreamRequestId: upstreamId,
 		createdAt: createdAt.toISOString(),
 	};
@@ -253,7 +261,12 @@ export async function listSettlements(
 		...pagination(query),
 	});
 	return page(
-		rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() })),
+		rows.map((row) => ({
+			...row,
+			amount: ledgerAmount(row.amount),
+			cumulative: ledgerAmount(row.cumulative),
+			createdAt: row.createdAt.toISOString(),
+		})),
 		query.limit,
 	);
 }

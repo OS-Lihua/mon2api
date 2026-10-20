@@ -21,7 +21,7 @@ Token2API 是 AI 资源市场和多链结算平台。支持以下 EVM 主网，�
 
 USDT、USDC 在不同链上可能是发行方原生版本、桥接版本或其他发行方包装版本，不能按名称认定它们相同。部署者必须核对合约地址、发行方或桥、赎回方式与实际可用性。本项目不自动选择稳定币合约，也不把桥接币标为发行方原生币。没有核验合约时，仅部署原生代币；Robinhood 稳定币也适用此规则。核对来源：[Circle 合约目录](https://developers.circle.com/stablecoins/usdc-contract-addresses)、[Tether 支持协议](https://tether.to/en/supported-protocols/)。
 
-所有账本金额和报价使用资产的整数百万分之一，价格按百万 Token 计。`1_000_000` 表示一单位结算资产，ETH、BNB、POL、AVAX 与美元稳定币不做汇率换算。当前单次预算范围为 1–100 单位，商家必须按部署资产重新设价，不能复制另一资产的报价。
+所有账本金额和报价使用资产的整数百万分之一，价格按百万 Token 计。`1_000_000` 表示一单位结算资产，ETH、BNB、POL、AVAX 与美元稳定币不做汇率换算。用户自行填写正数锁定金额，不设置按资产划分的业务上下限；小数最多六位。接口金额仍为可精确表示的安全整数微单位（1 至 9,007,199,254,740,991），账本使用 64 位整数存储，超出表示范围会明确拒绝，不能四舍五入。商家必须按部署资产重新设价，不能复制另一资产的报价。
 
 链上预算 = 账本预算 × `10 ** (tokenDecimals - 6)`。原生代币为 18 位精度；稳定币部署脚本从选定合约读取 `decimals()`，支持 6–18 位。BSC 上部分包装稳定币是 18 位，不能统一按 6 位处理。钱包原始余额保持完整精度；`ledgerUnit` 是 `micro_<asset>`，`balanceUnit` 为原生 `wei` 或 ERC20 `atomic`。精度信息来自 `/api/v1/network` 的 `tokenDecimals`。
 
@@ -33,17 +33,18 @@ USDT、USDC 在不同链上可能是发行方原生版本、桥接版本或其�
 4. 执行 `pnpm deploy:evm`。脚本先核对 RPC chain ID、资产、合约代码和精度，再部署 `NativeUsageEscrow` 或 `UsageEscrow`。已有目录只允许复用完全匹配的部署，不自动覆盖。此命令会发送目标链部署交易。
 5. Web 和 worker 使用相同 `chain.json`；只读文件系统可设置完整 `CHAIN_CONFIG_JSON`。设置 `APP_ORIGIN`、随机 `SESSION_PASSWORD` 和上游允许来源，然后启动服务。
 
-以下以 Ethereum 主网 ETH 结算为配置示例（不含签名密钥）：
+新部署默认使用 Base + Circle 原生 USDC（不含签名密钥）。报价、预算、分账和退款使用 USDC；网络手续费使用 Base 上的 ETH：
 
 ```dotenv
 TOKEN2API_MODE=evm
-SETTLEMENT_CHAIN_ID=1
-SETTLEMENT_ASSET=ETH
-TOKEN2API_DATA_DIR=.runtime/evm/1-eth
+SETTLEMENT_CHAIN_ID=8453
+SETTLEMENT_ASSET=USDC
+SETTLEMENT_TOKEN_ADDRESS=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+TOKEN2API_DATA_DIR=.runtime/evm/8453-usdc
 ALLOW_DEMO=false
 ```
 
-Ethereum 主网 USDT、USDC 分别使用新的数据库与数据目录，将 `SETTLEMENT_ASSET` 设为对应资产并配置已核验的 `SETTLEMENT_TOKEN_ADDRESS`。切换 BSC 等其他网络时，需显式设置对应链 ID 和资产。
+USDT 仍可配置；需要选择支持的链并核验该链上的代币合约。使用 Ethereum 主网或其他结算资产时，分别使用新的数据库与数据目录，将 `SETTLEMENT_ASSET` 设为对应资产并配置已核验的 `SETTLEMENT_TOKEN_ADDRESS`。切换 BSC 等其他网络时，需显式设置对应链 ID 和资产。
 
 原生资产通过交易 `value` 锁定预算。USDT、USDC 先将授权重置为零，再精确授权本次预算，确认后调用 ERC20 托管合约。钱包在各签名步骤检查账号和网络；Gas 始终使用本链原生代币。
 
@@ -76,7 +77,7 @@ pnpm escrow:admin withdraw 0x收款地址
 
 配置必须明确声明结算资产，不接受旧测试币、缺少资产的配置或旧协议凭证。部署只支持当前合约。数据库迁移记录保留以保证迁移可追踪，但运行时不维护旧部署兼容路径；迁移不会转换已有余额或资产名称。
 
-升级前运行 `pnpm db:migrate`，创建签名交易 outbox 并删除 ChainBinding 的隐式元数据默认值。已有旧资产账本不会被改名或换算；新部署须使用隔离账本。消费者密钥、连接器凭证和启动码分别使用 `t2a_`、`t2c_`、`t2l_`；升级后重新创建密钥并重新连接本机资源。连接器安装包为 0.1.5。
+升级前运行 `pnpm db:migrate`，创建签名交易 outbox、删除 ChainBinding 的隐式元数据默认值，并将账本金额从 32 位整数扩为 64 位整数。整数单位与已有数值保持不变。已有旧资产账本不会被改名或换算；新部署须使用隔离账本。消费者密钥、连接器凭证和启动码分别使用 `t2a_`、`t2c_`、`t2l_`；升级后重新创建密钥并重新连接本机资源。连接器安装包为 0.1.5。
 
 结算先保存业务任务，再在短签名锁内分配钱包 nonce、签名并保存交易原文和哈希。发送和区块确认在数据库事务外执行。多个进程共用数据库中的 nonce 上限，重试复用已保存的交易；后续发送也会补发尚未确认的较小 nonce，避免进程在发送前退出留下空档。worker 最多并发处理 4 个不同会话，确认慢的会话不会占用全局签名锁。
 

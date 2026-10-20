@@ -120,7 +120,7 @@ describe("market and chat validation", () => {
 		).toBe(false);
 	});
 
-	it("bounds session budgets and rejects non-integer amounts or extra terms", () => {
+	it("accepts user-selected positive budgets without business caps and rejects inexact amounts", () => {
 		const input = {
 			listingId: "cmabcdefg00000000000000000",
 			budget: 1_000_000,
@@ -129,7 +129,24 @@ describe("market and chat validation", () => {
 		expect(
 			openSessionInput.safeParse({ ...input, budget: 100_000_000 }).success,
 		).toBe(true);
-		for (const budget of [999_999, 100_000_001, 1_000_000.5, "1000000"]) {
+		for (const budget of [
+			1,
+			999_999,
+			100_000_001,
+			5_000_000_000,
+			Number.MAX_SAFE_INTEGER,
+		]) {
+			expect(openSessionInput.parse({ ...input, budget }).budget).toBe(budget);
+		}
+		for (const budget of [
+			0,
+			-1,
+			Number.MAX_SAFE_INTEGER + 1,
+			Number.NaN,
+			Number.POSITIVE_INFINITY,
+			1_000_000.5,
+			"1000000",
+		]) {
 			expect(openSessionInput.safeParse({ ...input, budget }).success).toBe(
 				false,
 			);

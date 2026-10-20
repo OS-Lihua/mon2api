@@ -168,8 +168,8 @@ async function scenario(withLaterUsage: boolean) {
 	);
 	check(
 		session.consumer === user.address &&
-			session.budget === 1_000_000 &&
-			session.reserved === 0 &&
+			session.budget === 1_000_000n &&
+			session.reserved === 0n &&
 			session.spent === job.cumulative &&
 			session.settled === job.cumulative,
 		"The isolated test session did not reconcile before fault injection.",
@@ -211,7 +211,7 @@ async function scenario(withLaterUsage: boolean) {
 				usageSource: z.literal("demo"),
 			}),
 		);
-		expectedSpent += later.cost;
+		expectedSpent += BigInt(later.cost);
 	}
 
 	step = "inject loss of the database confirmation transaction";
@@ -313,7 +313,7 @@ async function scenario(withLaterUsage: boolean) {
 				batches.every((batch) => batch.status === "CONFIRMED") &&
 				batches[1]?.nonce === 1 &&
 				batches[1].cumulative === expectedSpent &&
-				batches.reduce((total, batch) => total + batch.amount, 0) ===
+				batches.reduce((total, batch) => total + batch.amount, 0n) ===
 					expectedSpent,
 			"Close did not confirm both the recovered batch and the later usage batch.",
 		);

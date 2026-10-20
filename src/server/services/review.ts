@@ -69,7 +69,7 @@ export async function resolveReview(
 					sessionId: request.sessionId,
 					requestId: id,
 					kind: "RELEASE",
-					amount: request.reservation - cost,
+					amount: request.reservation - BigInt(cost),
 				},
 			],
 		});

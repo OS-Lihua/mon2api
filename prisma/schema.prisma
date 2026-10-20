@@ -48,12 +48,12 @@ model Lease {
   inputRate   Int
   outputRate  Int
   termsHash   String
-  budget      Int
-  spent       Int            @default(0)
-  reserved    Int            @default(0)
-  settled     Int            @default(0)
+  budget      BigInt
+  spent       BigInt            @default(0)
+  reserved    BigInt            @default(0)
+  settled     BigInt            @default(0)
   // Earned usage that cannot be collected after a confirmed chain close.
-  writtenOff  Int            @default(0)
+  writtenOff  BigInt            @default(0)
   status      String         @default("DRAFT")
   expiresAt   DateTime
   openTx      String?
@@ -74,8 +74,8 @@ model MeterRequest {
   sessionId      String
   session        Lease       @relation(fields: [sessionId], references: [id])
   idempotencyKey String
-  reservation    Int
-  cost           Int         @default(0)
+  reservation    BigInt
+  cost           BigInt         @default(0)
   inputTokens    Int?
   outputTokens   Int?
   status         String      @default("RUNNING")
@@ -112,8 +112,8 @@ model Settlement {
   sessionId    String
   session      Lease          @relation(fields: [sessionId], references: [id])
   nonce        Int
-  amount       Int
-  cumulative   Int
+  amount       BigInt
+  cumulative   BigInt
   receiptsHash String
   status       String         @default("READY")
   txHash       String?
@@ -128,7 +128,7 @@ model LedgerEntry {
   sessionId String
   requestId String?
   kind      String
-  amount    Int
+  amount    BigInt
   createdAt DateTime @default(now())
 
   @@index([sessionId, createdAt])

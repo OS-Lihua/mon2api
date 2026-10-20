@@ -174,7 +174,7 @@ export async function runChat(
 		});
 		if (active >= listing.concurrency)
 			throw new AppError("capacity", "资源并发已满，请稍后重试。", 429);
-		if (current.budget - current.spent - current.reserved < reservation)
+		if (current.budget - current.spent - current.reserved < BigInt(reservation))
 			throw new AppError(
 				"insufficient_budget",
 				"可用预算不足以预留本次最大费用。",

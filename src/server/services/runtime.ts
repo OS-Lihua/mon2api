@@ -19,7 +19,7 @@ export const runtimeDirectory = () =>
 		/* turbopackIgnore: true */ process.env.TOKEN2API_DATA_DIR ||
 			(process.env.TOKEN2API_MODE === "local"
 				? ".runtime"
-				: `.runtime/evm/${process.env.SETTLEMENT_CHAIN_ID || DEFAULT_NETWORK.chainId}-${(process.env.SETTLEMENT_ASSET || "ETH").toLowerCase()}`),
+				: `.runtime/evm/${process.env.SETTLEMENT_CHAIN_ID || DEFAULT_NETWORK.chainId}-${(process.env.SETTLEMENT_ASSET || DEFAULT_NETWORK.asset).toLowerCase()}`),
 	);
 let configCache: { source: string; value: ChainConfig } | undefined;
 /** Parsed once per source. A rewritten chain.json is detected by its mtime. */

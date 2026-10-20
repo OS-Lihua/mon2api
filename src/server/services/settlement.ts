@@ -11,6 +11,7 @@ import {
 	sendClose,
 	sendSettlement,
 } from "./chain";
+import { ledgerAmount } from "./ledger";
 import { lock } from "./market";
 export async function settleSession(
 	sessionId: string,
@@ -48,7 +49,7 @@ export async function settleSession(
 				},
 				orderBy: { id: "asc" },
 			});
-			const amount = requests.reduce((n, r) => n + r.cost, 0);
+			const amount = requests.reduce((n, r) => n + r.cost, 0n);
 			if (!amount) return null;
 			const previous = await tx.settlement.findFirst({
 				where: { sessionId },
@@ -59,7 +60,7 @@ export async function settleSession(
 					JSON.stringify(
 						requests.map((r) => ({
 							id: r.id,
-							cost: r.cost,
+							cost: ledgerAmount(r.cost),
 							input: r.inputTokens,
 							output: r.outputTokens,
 							source: r.usageSource,
@@ -89,7 +90,7 @@ export async function settleSession(
 				sessionId,
 				job.nonce,
 				job.receiptsHash,
-				job.cumulative,
+				ledgerAmount(job.cumulative),
 			);
 			if (!txHash || state.spent < job.cumulative)
 				throw new AppError(
@@ -114,7 +115,7 @@ export async function settleSession(
 				const current = await tx.lease.findUniqueOrThrow({
 					where: { id: sessionId },
 				});
-				if (closure.state.spent !== current.settled)
+				if (BigInt(closure.state.spent) !== current.settled)
 					throw new AppError(
 						"settlement_conflict",
 						"关闭前的链上结算尚未全部恢复。",
@@ -170,7 +171,7 @@ export async function settleSession(
 		try {
 			txHash = await sendSettlement(
 				sessionId,
-				job.cumulative,
+				ledgerAmount(job.cumulative),
 				job.nonce,
 				job.receiptsHash,
 			);
@@ -179,7 +180,7 @@ export async function settleSession(
 				sessionId,
 				job.nonce,
 				job.receiptsHash,
-				job.cumulative,
+				ledgerAmount(job.cumulative),
 			);
 			if (!txHash)
 				throw new AppError(
@@ -201,8 +202,8 @@ async function confirmJob(
 	job: {
 		id: string;
 		sessionId: string;
-		cumulative: number;
-		amount: number;
+		cumulative: bigint;
+		amount: bigint;
 	},
 	txHash: string,
 ) {
@@ -279,9 +280,9 @@ export async function closeSession(sessionId: string, caller?: string) {
 		return { txHash: closed.closeTx };
 	}
 	if (
-		reconciled.reserved !== 0 ||
+		reconciled.reserved !== 0n ||
 		reconciled.spent !== reconciled.settled ||
-		chain.spent !== reconciled.spent
+		BigInt(chain.spent) !== reconciled.spent
 	)
 		throw new AppError(
 			"unsettled_usage",

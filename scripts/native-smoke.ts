@@ -101,7 +101,7 @@ try {
 				functionName: "mint",
 				args: [
 					account(0).address,
-					toChainAmount(100_000_000, asset, tokenDecimals),
+					toChainAmount(6_000_000_000, asset, tokenDecimals),
 				],
 			}),
 		});
@@ -158,8 +158,17 @@ try {
 	});
 	const opened = await market.openSession(buyer, {
 		listingId: listing.id,
-		budget: 1_000_000,
+		budget: asset === "USDC" ? 5_000_000_000 : 10_000,
 	});
+	const budget = opened.transaction.budget;
+	assert.equal(
+		(await db.lease.findUniqueOrThrow({ where: { id: opened.id } })).budget,
+		BigInt(budget),
+	);
+	assert.equal(
+		(await commerce.getConsumerSession(buyer, opened.id)).budget,
+		budget,
+	);
 	assert.ok(
 		opened.connection,
 		"Funded budget must return connection credentials",
@@ -212,8 +221,8 @@ try {
 		1,
 	);
 	const billed = await db.lease.findUniqueOrThrow({ where: { id: opened.id } });
-	assert.equal(billed.reserved, 0);
-	assert.equal(billed.spent, body.token2api.cost);
+	assert.equal(billed.reserved, 0n);
+	assert.equal(billed.spent, BigInt(body.token2api.cost));
 	console.log(
 		"PASS REST inference with returned Key/model, micro-units bill and duplicate protection",
 	);
@@ -246,7 +255,7 @@ try {
 
 	assert.equal(
 		(await db.lease.findUniqueOrThrow({ where: { id: opened.id } })).reserved,
-		1000,
+		1000n,
 	);
 	const review = await db.meterRequest.findUniqueOrThrow({
 		where: {
@@ -263,7 +272,7 @@ try {
 	);
 	const refunded = await refund.requestRefund(buyer, opened.id);
 	assert.equal(refunded.status, "AVAILABLE");
-	assert.equal(refunded.amount, 1_000_000 - body.token2api.cost);
+	assert.equal(refunded.amount, budget - body.token2api.cost);
 	const closed = await db.lease.findUniqueOrThrow({ where: { id: opened.id } });
 	assert.equal(closed.status, "CLOSED");
 	assert.equal(closed.settled, closed.spent);

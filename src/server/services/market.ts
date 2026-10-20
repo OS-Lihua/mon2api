@@ -32,6 +32,7 @@ import {
 } from "./chain";
 import { connectorOnline, resourceAvailable } from "./connector-availability";
 import { assertEscrowOwnerGuard } from "./escrow-version";
+import { ledgerAmount } from "./ledger";
 import { discoverModels } from "./model-discovery";
 import {
 	chainConfig,
@@ -268,7 +269,7 @@ export async function confirmSession(
 		onchain.consumer.toLowerCase() !== user.address.toLowerCase() ||
 		onchain.provider.toLowerCase() !== lease.provider.toLowerCase() ||
 		onchain.termsHash.toLowerCase() !== lease.termsHash.toLowerCase() ||
-		onchain.budget !== lease.budget ||
+		BigInt(onchain.budget) !== lease.budget ||
 		onchain.expiresAt !== Math.floor(lease.expiresAt.getTime() / 1000)
 	)
 		throw new AppError(
@@ -455,10 +456,8 @@ export async function snapshot(
 	]);
 	let network: Snapshot["network"] = {
 		...DEFAULT_NETWORK,
-		asset: "ETH",
-		tokenDecimals: 18,
-		ledgerUnit: "micro_ETH",
-		balanceUnit: "wei",
+		ledgerUnit: "micro_USDC",
+		balanceUnit: "atomic",
 		escrow: "",
 		token: "",
 		feeBps: 500,
@@ -510,13 +509,12 @@ export async function snapshot(
 			requests: requests.length,
 			inputTokens: requests.reduce((n, r) => n + (r.inputTokens || 0), 0),
 			outputTokens: requests.reduce((n, r) => n + (r.outputTokens || 0), 0),
-			spent: leases.reduce((n, s) => n + s.spent, 0),
-			pending: leases.reduce(
-				(n, s) => n + s.spent - s.settled - s.writtenOff,
-				0,
+			spent: ledgerAmount(leases.reduce((n, s) => n + s.spent, 0n)),
+			pending: ledgerAmount(
+				leases.reduce((n, s) => n + s.spent - s.settled - s.writtenOff, 0n),
 			),
-			settled: leases.reduce((n, s) => n + s.settled, 0),
-			writtenOff: leases.reduce((n, s) => n + s.writtenOff, 0),
+			settled: ledgerAmount(leases.reduce((n, s) => n + s.settled, 0n)),
+			writtenOff: ledgerAmount(leases.reduce((n, s) => n + s.writtenOff, 0n)),
 			...balances,
 		},
 		listings: listingRows.map((l) => ({
@@ -548,11 +546,11 @@ export async function snapshot(
 			model: s.model,
 			consumer: s.consumer,
 			provider: s.provider,
-			budget: s.budget,
-			spent: s.spent,
-			reserved: s.reserved,
-			settled: s.settled,
-			writtenOff: s.writtenOff,
+			budget: ledgerAmount(s.budget),
+			spent: ledgerAmount(s.spent),
+			reserved: ledgerAmount(s.reserved),
+			settled: ledgerAmount(s.settled),
+			writtenOff: ledgerAmount(s.writtenOff),
 			status: s.status,
 			expiresAt: s.expiresAt.toISOString(),
 			openTx: s.openTx,
@@ -566,7 +564,7 @@ export async function snapshot(
 			status: r.status,
 			inputTokens: r.inputTokens,
 			outputTokens: r.outputTokens,
-			cost: r.cost,
+			cost: ledgerAmount(r.cost),
 			usageSource: r.usageSource,
 			upstreamRequestId: r.upstreamId,
 			createdAt: r.createdAt.toISOString(),
@@ -583,7 +581,7 @@ export async function snapshot(
 		settlements: settlements.map((s) => ({
 			id: s.id,
 			sessionId: s.sessionId,
-			amount: s.amount,
+			amount: ledgerAmount(s.amount),
 			status: s.status,
 			txHash: s.txHash,
 			createdAt: s.createdAt.toISOString(),

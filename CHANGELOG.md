@@ -9,6 +9,8 @@ Tag format:
 
 ## Unreleased
 
+- Default new deployment examples and the unconfigured console to Base with Circle-issued USDC; keep USDT and other explicitly configured settlement assets available. Remove the 1–100 budget cap and the prefilled amount, accept positive exact micro-unit budgets, and widen ledger amount columns to BIGINT without changing existing units or values. Keep numeric REST amounts within the exact JSON safe-integer range.
+
 - Discard late budget-confirmation credentials after a wallet identity change. Persist signed escrow transactions and nonce assignments before broadcast, wait for confirmations outside the signer lock, replay saved transactions after failures, and process up to four settlement sessions concurrently.
 
 - Remove legacy settlement-asset fallbacks, dUSD runtime support and older escrow reuse paths. Require explicit asset metadata, move the faucet token into test fixtures, and use only t2a_, t2c_ and t2l_ credentials. Publish connector 0.1.5; existing credentials must be regenerated. Add a database migration for the signed transaction outbox without converting existing balances.

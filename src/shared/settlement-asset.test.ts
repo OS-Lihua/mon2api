@@ -18,7 +18,15 @@ describe("Native asset denomination boundaries", () => {
 	});
 	it("refuses fractional billing units, database overflow and unsafe numbers", () => {
 		expect(() => fromChainAmount(1n, "ETH")).toThrow();
-		expect(() => fromChainAmount(2_147_483_648n * 10n ** 12n, "ETH")).toThrow();
+		expect(fromChainAmount(2_147_483_648n * 10n ** 12n, "ETH")).toBe(
+			2_147_483_648,
+		);
+		expect(() =>
+			fromChainAmount(
+				(BigInt(Number.MAX_SAFE_INTEGER) + 1n) * 10n ** 12n,
+				"ETH",
+			),
+		).toThrow();
 		expect(() => toChainAmount(Number.MAX_SAFE_INTEGER + 1, "ETH")).toThrow();
 		expect(() => parseMicroAmount("0.0000001")).toThrow();
 	});

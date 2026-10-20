@@ -115,11 +115,11 @@ function lease(overrides: Partial<LeaseRow> = {}): LeaseRow {
 		inputRate: listing.inputRate,
 		outputRate: listing.outputRate,
 		termsHash: "terms",
-		budget: 100,
-		spent: 50,
-		reserved: 7,
-		settled: 20,
-		writtenOff: 30,
+		budget: 100n,
+		spent: 50n,
+		reserved: 7n,
+		settled: 20n,
+		writtenOff: 30n,
 		status: "CLOSED",
 		expiresAt: createdAt,
 		openTx: "open-tx",
@@ -184,17 +184,17 @@ describe("direct gateway discovery boundaries", () => {
 	});
 });
 describe("market snapshot accounting", () => {
-	it("shows Ethereum mainnet as unavailable when no deployment is configured", async () => {
+	it("shows Base USDC as unavailable when no deployment is configured", async () => {
 		mocks.chainConfig.mockImplementationOnce(() => {
 			throw new Error("Missing deployment");
 		});
 		const result = await snapshot(null);
 		expect(result.network).toMatchObject({
 			mode: "evm",
-			chainId: 1,
-			name: "Ethereum",
-			asset: "ETH",
-			rpcUrl: "https://ethereum.reth.rs/rpc",
+			chainId: 8453,
+			name: "Base",
+			asset: "USDC",
+			rpcUrl: "https://mainnet.base.org",
 			ready: false,
 		});
 	});
@@ -364,9 +364,9 @@ describe("market snapshot accounting", () => {
 			lease(),
 			lease({
 				id: "active-session",
-				spent: 80,
-				settled: 20,
-				writtenOff: 0,
+				spent: 80n,
+				settled: 20n,
+				writtenOff: 0n,
 				status: "ACTIVE",
 			}),
 		]);
@@ -534,7 +534,7 @@ describe("contract wallet lease activation", () => {
 			consumer: wallet,
 			provider,
 			termsHash,
-			budget: 1_000_000,
+			budget: 1_000_000n,
 			expiresAt,
 		});
 		mocks.findSessionOpen.mockResolvedValue({
@@ -589,7 +589,7 @@ describe("native token activation credentials", () => {
 			consumer: buyer.address,
 			provider,
 			termsHash,
-			budget: 1_000_000,
+			budget: 1_000_000n,
 			model: "seller/model",
 			expiresAt,
 		});

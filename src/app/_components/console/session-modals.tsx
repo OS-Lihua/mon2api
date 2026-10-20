@@ -84,9 +84,9 @@ export function RentModal({
 					<label htmlFor="rent-budget">锁定预算（{asset}）</label>
 					<input
 						id="rent-budget"
-						max="100"
-						min="1"
+						min="0.000001"
 						onChange={(event) => onBudgetChange(event.target.value)}
+						placeholder="输入要锁定的金额"
 						required
 						step="0.000001"
 						type="number"

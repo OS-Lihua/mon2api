@@ -50,7 +50,11 @@ import { Badge } from "~/app/_components/console/ui";
 import { useToken2ApiWallet } from "~/app/_components/wallet-provider";
 import { connectorStartCommand } from "~/shared/connector-distribution";
 import { parseMicroAmount, formatAmount as usd } from "~/shared/money";
-import { networkMetadata, SETTLEMENT_CHAINS } from "~/shared/network";
+import {
+	DEFAULT_NETWORK,
+	networkMetadata,
+	SETTLEMENT_CHAINS,
+} from "~/shared/network";
 import { isNativeAsset } from "~/shared/settlement-asset";
 import type {
 	BuyerConnection,
@@ -164,7 +168,7 @@ export function Token2ApiConsole() {
 	const [notice, setNotice] = useState<string | null>(null);
 	const [listingModal, setListingModal] = useState(false);
 	const [rentListing, setRentListing] = useState<ListingView | null>(null);
-	const [budget, setBudget] = useState("5");
+	const [budget, setBudget] = useState("");
 	const [keyModal, setKeyModal] = useState(false);
 	const [refundSession, setRefundSession] = useState<SessionView | null>(null);
 	const [refundInfo, setRefundInfo] = useState<RefundView | null>(null);
@@ -208,7 +212,7 @@ export function Token2ApiConsole() {
 	const requestRefund = api.token2api.requestRefund.useMutation();
 	const withdraw = api.token2api.withdraw.useMutation();
 	const data = uiPreview ? previewSnapshot : snapshot.data;
-	const asset = data?.network.asset ?? "ETH";
+	const asset = data?.network.asset ?? DEFAULT_NETWORK.asset;
 	const nativeSymbol = data ? networkMetadata(data.network).nativeSymbol : "";
 	const viewer = data?.viewer;
 	const refundQuery = api.token2api.refundStatus.useQuery(
@@ -358,8 +362,7 @@ export function Token2ApiConsole() {
 			const context = chainContext(isCurrent);
 			if (!rentListing || !context || !viewer) return;
 			const amount = parseMicroAmount(budget);
-			if (amount < 1_000_000 || amount > 100_000_000)
-				throw new Error(`预算应在 1 至 100 ${asset} 之间。`);
+			if (amount <= 0) throw new Error("锁定金额必须大于零。");
 			if (!viewer.demo) await getWallet(context.network, viewer.address);
 			if (!isCurrent()) return;
 			const result = await openSession.mutateAsync({

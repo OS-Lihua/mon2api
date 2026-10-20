@@ -40,10 +40,14 @@ export function settlementChain(chainId: number) {
 }
 export const DEFAULT_NETWORK = {
 	mode: "evm",
-	name: mainnet.name,
-	chainId: mainnet.id,
-	rpcUrl: mainnet.rpcUrls.default.http[0],
-	explorer: mainnet.blockExplorers.default.url,
+	name: base.name,
+	chainId: base.id,
+	rpcUrl: base.rpcUrls.default.http[0],
+	explorer: base.blockExplorers.default.url,
+	asset: "USDC",
+	// Circle-issued Base USDC: developers.circle.com/stablecoins/usdc-contract-addresses
+	token: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+	tokenDecimals: 6,
 } as const;
 
 export function networkMetadata(config: {

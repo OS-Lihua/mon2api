@@ -3,6 +3,7 @@ import { db } from "~/server/db";
 import { assetOf, billingUnit } from "~/shared/settlement-asset";
 import type { RefundView, Viewer } from "~/shared/token2api";
 import { AppError } from "./auth";
+import { ledgerAmount } from "./ledger";
 import { lock } from "./market";
 import { chainConfig, ensureChainBinding } from "./runtime";
 import { closeSession } from "./settlement";
@@ -30,10 +31,12 @@ export async function refundStatus(
 		status: closed ? "AVAILABLE" : review ? "PENDING_REVIEW" : "PROCESSING",
 		// A confirmed forced close can include operating losses: refund follows paid
 		// chain usage, never the larger off-chain earned/spent amount.
-		amount: closed
-			? lease.budget - lease.settled
-			: lease.budget - lease.spent - lease.reserved,
-		reserved: lease.reserved,
+		amount: ledgerAmount(
+			closed
+				? lease.budget - lease.settled
+				: lease.budget - lease.spent - lease.reserved,
+		),
+		reserved: ledgerAmount(lease.reserved),
 		unit: billingUnit(assetOf(chainConfig())),
 		requestedAt: application.createdAt.toISOString(),
 		txHash: lease.closeTx,

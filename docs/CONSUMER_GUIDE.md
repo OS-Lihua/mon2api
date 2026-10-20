@@ -39,7 +39,7 @@ curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/sessions" \
   -d '{"listingId":"YOUR_RESOURCE_ID","budget":5000000}'
 ```
 
-`5000000` 表示 5 单位当前结算资产；预算范围为 1–100 单位。不同资产不做汇率换算。
+`5000000` 表示 5 单位当前结算资产；锁定金额由用户自行填写，支持小于 1 或大于 100 单位的金额。金额必须大于零，最多六位小数；REST 使用安全整数微单位。不同资产不做汇率换算。
 
 钱包模式返回 `mode: "wallet"`、会话 `id` 和 `transaction` 条款，此时是 **DRAFT，不是已付款或已激活**。不要自动重复创建会话。
 
