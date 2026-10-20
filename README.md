@@ -4,7 +4,7 @@ AI 资源市场 · 多链结算平台。支持 Ethereum 主网、Base、Arbitrum
 
 每套运行实例固定一条链、一种资产和一个托管合约，并使用独立数据库。当前不在同一实例内切换多个资金账本，不自动换币或跨链。链、稳定币版本及合约精度的配置见[多链结算](docs/MULTICHAIN.md)。加入支持列表不代表已经部署或完成真实资金验收。
 
-买方锁定预算并确认后，直接获得 `connection: {base_url, key, model}`。账本和报价按结算资产的整数百万分之一计量；链上转账按 `tokenDecimals` 换算。旧账本保持原资产与金额，不能更名或直接复用。为兼容现有客户端，保留 `MON2API_*` 环境变量及 `mon2api` 协议字段；产品名称为 Token2API。
+买方锁定预算并确认后，直接获得 `connection: {base_url, key, model}`。账本和报价按结算资产的整数百万分之一计量；链上转账按 `tokenDecimals` 换算。旧账本保持原资产与金额，不能更名或直接复用。产品展示名称统一为 Token2API，文件、目录和包名使用 `token2api`，代码标识使用 `Token2Api`，环境变量使用 `TOKEN2API_*`。旧部署兼容规则见[命名与兼容](docs/NAMING.md)。
 
 商家可通过[本机连接器](docs/LOCAL_CONNECTOR.md)保留上游 Key，并让持续运行的 CLI 服务接收平台任务。安装 Node.js 24 或更高版本后，在“接入资源”中选择本机模式，复制凭证及网页提供的 `npx` 启动命令，可在任意目录运行，无需下载项目或配置数据库。独立安装包由当前平台提供，不依赖 npm 注册表发布。连接器自动读取网关模型列表，再在网页选择模型和报价上架，无需手填模型 ID。Magpie 默认地址为 `http://127.0.0.1:3425/v1`。离线后停止接单，已执行但用量不确定的请求保留预算等待核对。
 
@@ -22,7 +22,7 @@ pnpm dev
 
 用户端仅展示数据库中的网关资源及其关联会话、请求、密钥和结算。没有网关资源或业务记录时显示空状态。使用者需连接钱包并签名登录；接入本机资源时，先在网页创建连接草稿，在本机 CLI 指定上游地址并输入 Key，自动读取模型后再选择模型与报价上架；选择平台直连时，在网页提交上游地址和 Key。演示资源不显示在用户端，本地演示测试需单独显式初始化。旧的演示登录在用户端按未登录处理。
 
-打开[本地首页](http://localhost:3000)或[业务控制台](http://localhost:3000/console)。`setup` 创建 `.env`、启动 PostgreSQL 并执行迁移。配置 `MON2API_MODE=evm`、`SETTLEMENT_CHAIN_ID`、`SETTLEMENT_ASSET` 和独立运行目录后，`deploy:evm` 写入公开部署信息。`dev` 启动 Web 和结算 worker。实际可用的链和资产以 `/api/v1/network` 为准。
+打开[本地首页](http://localhost:3000)或[业务控制台](http://localhost:3000/console)。`setup` 创建 `.env`、启动 PostgreSQL 并执行迁移。配置 `TOKEN2API_MODE=evm`、`SETTLEMENT_CHAIN_ID`、`SETTLEMENT_ASSET` 和独立运行目录后，`deploy:evm` 写入公开部署信息。`dev` 启动 Web 和结算 worker。实际可用的链和资产以 `/api/v1/network` 为准。
 
 控制台概览以“资源 → 预算 → 用量 → 结算”展示使用路径，并根据活跃预算会话引导前往市场或继续调用。市场卡片并列显示提供者挂牌的输入和输出单价（当前结算资产 / 百万 Token），创建预算时再次展示价格快照；模型 ID 由提供者声明。调用后可直接跳转调用账单，账单页可快速定位会话、请求与链上结算。模拟资源无官方同款；连接器模型身份未核验，均无可比官方参考价。本地 dUSD 无兑付价值，不与美元价格比较。连接钱包后，可创建预算会话并调用网关资源，也可管理自己的资源和提现。概览和账单中的统计基于当前已加载的最近 200 条相关请求和最近 100 个相关会话，并非完整历史总账。桌面账单默认展示最近 5 个会话、8 条请求和 8 笔结算；API 密钥页默认展示最近 8 个密钥，点击“查看全部”可分别展开当前已加载的记录。待核对用量与无法收回的结算会分别标记，未知 Token 用量不会显示为零。演示签名仅允许回环 chain 31337。真实钱包使用 RainbowKit 钱包选择与签名登录；登录签名不授权代币转账，代币授权和预算锁定需分别确认交易。
 
@@ -55,7 +55,7 @@ REST 创建资源沿用 `kind: "gateway"`，新增 `connectionMode: "api" | "oau
 
 - 不配置服务账号即可连接已安装的 MetaMask、Rabby 等 EIP-6963 浏览器钱包；另有 Rabby 安装入口和通用注入连接器。
 - 在 `.env` 配置 `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` 后重新构建，可增加 MetaMask、Rainbow 与通用 WalletConnect 扫码入口。ID 从 [WalletConnect Dashboard](https://dashboard.walletconnect.com) 获取；仓库不包含任何人的项目 ID。
-- 钱包按当前部署切换网络，Gas 使用本链原生代币。仅显式设置 `MON2API_MODE=local` 时使用本地链 31337。
+- 钱包按当前部署切换网络，Gas 使用本链原生代币。仅显式设置 `TOKEN2API_MODE=local` 时使用本地链 31337。
 - 切换账户或断开钱包会使旧的钱包登录失效，并清理界面中的私密状态；演示身份保持独立。授权、锁定预算等多步操作在每一步前重新核实当前账户与网络。
 
 浏览器选择弹窗和模拟连接器的账号/网络边界已验证。真实扩展钱包签名、手机扫码和测试网资金操作需对应钱包、Project ID 与测试网部署再验收。
@@ -68,7 +68,7 @@ REST 创建资源沿用 `kind: "gateway"`，新增 `connectionMode: "api" | "oau
 | 部署信息 | `.runtime/evm/<chainId>-<asset>/chain.json`，仅公开字段 |
 | API 规范 | `/api/v1/openapi.json` |
 
-数据库和链必须成对保留。每套部署使用独立 `DATABASE_URL` 和 `MON2API_DATA_DIR`，后端固定绑定链 ID、资产、代币精度与托管合约。切换这些字段时使用新账本。本地演示与故障注入仅接受显式选择的回环链 31337。
+数据库和链必须成对保留。每套部署使用独立 `DATABASE_URL` 和 `TOKEN2API_DATA_DIR`，后端固定绑定链 ID、资产、代币精度与托管合约。切换这些字段时使用新账本。本地演示与故障注入仅接受显式选择的回环链 31337。
 
 ## API 调用
 
@@ -81,7 +81,7 @@ curl http://localhost:3000/v1/chat/completions \
   -H "Authorization: Bearer $TOKEN2API_KEY" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: example-request-0001" \
-  -d '{"model":"mon2api-demo","messages":[{"role":"user","content":"Explain settlement"}],"max_tokens":512,"stream":true,"stream_options":{"include_usage":true}}'
+  -d '{"model":"token2api-demo","messages":[{"role":"user","content":"Explain settlement"}],"max_tokens":512,"stream":true,"stream_options":{"include_usage":true}}'
 ```
 
 官方 OpenAI SDK 可直接调用兼容接口。下面的示例为每次新调用生成一个请求键；重试同一次调用时须复用原键。服务端会拒绝重复键（409），不会再次调用或扣款。响应丢失后，用原 Key 查询 `GET /api/v1/requests/lookup?idempotency_key=原请求键`，核对请求和费用状态；不要用新键重复付费调用。查询不返回生成文本，404 也不能证明在途调用从未受理。
@@ -99,7 +99,7 @@ const client = new OpenAI({
 const requestKey = randomUUID();
 const completion = await client.chat.completions.create(
   {
-    model: "mon2api-demo",
+    model: "token2api-demo",
     messages: [{ role: "user", content: "Explain settlement" }],
     max_tokens: 512,
   },

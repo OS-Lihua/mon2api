@@ -33,19 +33,35 @@ afterEach(() => {
 });
 
 describe("demo identity chain boundary", () => {
+	it("reads legacy deployment settings and gives canonical settings priority", () => {
+		vi.stubEnv("TOKEN2API_MODE", undefined);
+		vi.stubEnv("TOKEN2API_DATA_DIR", undefined);
+		vi.stubEnv("MON2API_MODE", "local");
+		vi.stubEnv("MON2API_DATA_DIR", ".runtime/legacy");
+		vi.stubEnv("ALLOW_DEMO", "true");
+		vi.stubEnv("CHAIN_CONFIG_JSON", config("local"));
+		expect(demoEnabled()).toBe(true);
+		expect(runtimeDirectory()).toMatch(/\.runtime\/legacy$/);
+		vi.stubEnv("TOKEN2API_MODE", "evm");
+		vi.stubEnv("TOKEN2API_DATA_DIR", ".runtime/current");
+		vi.stubEnv("CHAIN_CONFIG_JSON", config("evm"));
+		expect(chainConfig().chainId).toBe(1);
+		expect(demoEnabled()).toBe(false);
+		expect(runtimeDirectory()).toMatch(/\.runtime\/current$/);
+	});
 	it("defaults to Ethereum mainnet and rejects implicit local deployments", () => {
-		vi.stubEnv("MON2API_MODE", "");
-		vi.stubEnv("MON2API_DATA_DIR", "");
+		vi.stubEnv("TOKEN2API_MODE", "");
+		vi.stubEnv("TOKEN2API_DATA_DIR", "");
 		vi.stubEnv("SETTLEMENT_CHAIN_ID", "");
 		vi.stubEnv("SETTLEMENT_ASSET", "");
 		vi.stubEnv("CHAIN_CONFIG_JSON", config("evm"));
 		expect(chainConfig().chainId).toBe(1);
 		expect(runtimeDirectory()).toMatch(/\.runtime\/evm\/1-eth$/);
 		vi.stubEnv("CHAIN_CONFIG_JSON", config("local"));
-		expect(() => chainConfig()).toThrow("MON2API_MODE does not match");
+		expect(() => chainConfig()).toThrow("TOKEN2API_MODE does not match");
 	});
 	it("rejects an unlisted settlement chain", () => {
-		vi.stubEnv("MON2API_MODE", "evm");
+		vi.stubEnv("TOKEN2API_MODE", "evm");
 		vi.stubEnv(
 			"CHAIN_CONFIG_JSON",
 			JSON.stringify({ ...JSON.parse(config("evm")), chainId: 143 }),
@@ -54,29 +70,29 @@ describe("demo identity chain boundary", () => {
 	});
 	it("enables the public demo only for a matching loopback deployment", () => {
 		vi.stubEnv("ALLOW_DEMO", "true");
-		vi.stubEnv("MON2API_MODE", "local");
+		vi.stubEnv("TOKEN2API_MODE", "local");
 		vi.stubEnv("CHAIN_CONFIG_JSON", config("local"));
 		expect(demoEnabled()).toBe(true);
 	});
 
 	it("rejects an environment mode that disagrees with the deployed network", () => {
 		vi.stubEnv("ALLOW_DEMO", "true");
-		vi.stubEnv("MON2API_MODE", "local");
+		vi.stubEnv("TOKEN2API_MODE", "local");
 		vi.stubEnv("CHAIN_CONFIG_JSON", config("evm"));
-		expect(() => chainConfig()).toThrow("MON2API_MODE does not match");
-		expect(() => demoEnabled()).toThrow("MON2API_MODE does not match");
+		expect(() => chainConfig()).toThrow("TOKEN2API_MODE does not match");
+		expect(() => demoEnabled()).toThrow("TOKEN2API_MODE does not match");
 	});
 
 	it("never enables demo identities on remote networks even when ALLOW_DEMO is true", () => {
 		vi.stubEnv("ALLOW_DEMO", "true");
-		vi.stubEnv("MON2API_MODE", "evm");
+		vi.stubEnv("TOKEN2API_MODE", "evm");
 		vi.stubEnv("CHAIN_CONFIG_JSON", config("evm"));
 		expect(demoEnabled()).toBe(false);
 	});
 });
 
 it("requires explicit native token metadata without reinterpreting old configs", () => {
-	vi.stubEnv("MON2API_MODE", "evm");
+	vi.stubEnv("TOKEN2API_MODE", "evm");
 	const original = JSON.parse(config("evm"));
 	vi.stubEnv("CHAIN_CONFIG_JSON", JSON.stringify(original));
 	expect(chainConfig().asset).toBe("dUSD");
@@ -98,7 +114,7 @@ it("requires explicit native token metadata without reinterpreting old configs",
 
 describe("persistent settlement binding", () => {
 	it("stores stablecoin precision with the deployment identity", async () => {
-		vi.stubEnv("MON2API_MODE", "evm");
+		vi.stubEnv("TOKEN2API_MODE", "evm");
 		const configured = {
 			...JSON.parse(config("evm")),
 			chainId: 56,
@@ -124,7 +140,7 @@ describe("persistent settlement binding", () => {
 		);
 	});
 	it("verifies the binding once per process and retries after a failure", async () => {
-		vi.stubEnv("MON2API_MODE", "evm");
+		vi.stubEnv("TOKEN2API_MODE", "evm");
 		const configured = JSON.parse(config("evm"));
 		vi.stubEnv("CHAIN_CONFIG_JSON", JSON.stringify(configured));
 		bindingStore.upsert.mockReset();
@@ -140,7 +156,7 @@ describe("persistent settlement binding", () => {
 	it.each(["chainId", "asset", "tokenDecimals", "token", "escrow"])(
 		"refuses to reinterpret an existing ledger with different %s",
 		async (field) => {
-			vi.stubEnv("MON2API_MODE", "evm");
+			vi.stubEnv("TOKEN2API_MODE", "evm");
 			const configured = {
 				...JSON.parse(config("evm")),
 				chainId: 56,

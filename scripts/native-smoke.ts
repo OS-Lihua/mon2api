@@ -33,7 +33,7 @@ const namespace = `native_smoke_${randomBytes(8).toString("hex")}`;
 const admin = new PrismaClient();
 databaseUrl.searchParams.set("schema", namespace);
 process.env.DATABASE_URL = databaseUrl.toString();
-process.env.MON2API_MODE = "local";
+process.env.TOKEN2API_MODE = "local";
 process.env.ALLOW_DEMO = "true";
 process.env.APP_ORIGIN = "http://localhost:3000";
 process.env.RATE_LIMIT_ENABLED = "false";
@@ -151,7 +151,7 @@ try {
 	const listing = await market.createListing(seller, {
 		name: "Native token fixture",
 		description: "Isolated simulated text resource",
-		model: "mon2api-demo",
+		model: "token2api-demo",
 		kind: "demo",
 		connectionMode: "api",
 		inputRate: 1_000_000,
@@ -167,7 +167,7 @@ try {
 		"Funded budget must return connection credentials",
 	);
 	assert.equal(opened.connection.base_url, "http://localhost:3000/v1");
-	assert.equal(opened.connection.model, "mon2api-demo");
+	assert.equal(opened.connection.model, "token2api-demo");
 	assert.equal(
 		await db.accessKey.count({ where: { sessionId: opened.id } }),
 		1,
@@ -205,8 +205,8 @@ try {
 	const response = await routes.chatPost(request());
 	assert.equal(response.status, 200);
 	const body = await response.json();
-	assert.equal(body.mon2api.unit, billingUnit(asset));
-	assert.ok(body.mon2api.cost > 0);
+	assert.equal(body.token2api.unit, billingUnit(asset));
+	assert.ok(body.token2api.cost > 0);
 	const replay = await routes.chatPost(request());
 	assert.equal(replay.status, 409);
 	assert.equal(
@@ -215,7 +215,7 @@ try {
 	);
 	const billed = await db.lease.findUniqueOrThrow({ where: { id: opened.id } });
 	assert.equal(billed.reserved, 0);
-	assert.equal(billed.spent, body.mon2api.cost);
+	assert.equal(billed.spent, body.token2api.cost);
 	console.log(
 		"PASS REST inference with returned Key/model, micro-units bill and duplicate protection",
 	);
@@ -265,7 +265,7 @@ try {
 	);
 	const refunded = await refund.requestRefund(buyer, opened.id);
 	assert.equal(refunded.status, "AVAILABLE");
-	assert.equal(refunded.amount, 1_000_000 - body.mon2api.cost);
+	assert.equal(refunded.amount, 1_000_000 - body.token2api.cost);
 	const closed = await db.lease.findUniqueOrThrow({ where: { id: opened.id } });
 	assert.equal(closed.status, "CLOSED");
 	assert.equal(closed.settled, closed.spent);

@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "~/server/db";
-import type { RefundView, Viewer } from "~/shared/mon2api";
 import { assetOf, billingUnit } from "~/shared/settlement-asset";
+import type { RefundView, Viewer } from "~/shared/token2api";
 import { AppError } from "./auth";
 import { lock } from "./market";
 import { chainConfig, ensureChainBinding } from "./runtime";

@@ -12,7 +12,7 @@ import { AppError } from "~/server/services/auth";
 import {
 	BODY_READ_TIMEOUT_MS,
 	MAX_RAW_BODY_BYTES,
-} from "~/server/services/mon2api.contract";
+} from "~/server/services/token2api.contract";
 
 type RestHandlerResult<TBody> =
 	| Response

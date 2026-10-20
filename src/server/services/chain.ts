@@ -88,10 +88,12 @@ function meterWallet() {
 		throw new Error("Meter signer mismatch.");
 	return createWalletClient({ account, chain, transport: http(config.rpcUrl) });
 }
-type ChainGlobal = typeof globalThis & { mon2apiChainQueue?: Promise<unknown> };
+type ChainGlobal = typeof globalThis & {
+	token2apiChainQueue?: Promise<unknown>;
+};
 async function serializedChain<T>(action: () => Promise<T>): Promise<T> {
 	const global = globalThis as ChainGlobal;
-	const previous = global.mon2apiChainQueue || Promise.resolve();
+	const previous = global.token2apiChainQueue || Promise.resolve();
 	const result = previous
 		.catch(() => undefined)
 		.then(() =>
@@ -103,7 +105,7 @@ async function serializedChain<T>(action: () => Promise<T>): Promise<T> {
 				{ timeout: 120_000, maxWait: 30_000 },
 			),
 		);
-	global.mon2apiChainQueue = result.catch(() => undefined);
+	global.token2apiChainQueue = result.catch(() => undefined);
 	return result;
 }
 export async function readSession(id: string, blockNumber?: bigint) {

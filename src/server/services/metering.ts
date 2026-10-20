@@ -4,15 +4,15 @@ import { createHash } from "node:crypto";
 import { unsealData } from "iron-session";
 import type { z } from "zod";
 import { db } from "~/server/db";
-import type { ChatResult } from "~/shared/mon2api";
+import type { ChatResult } from "~/shared/token2api";
 import { AppError } from "./auth";
 import { readSession } from "./chain";
 import { resourceAvailable } from "./connector-availability";
 import { runLocalConnector } from "./local-connector";
 import { lock } from "./market";
-import type { chatInput } from "./mon2api.schema";
 import { EngineFailure, runEngine } from "./pool-engine";
 import { demoEnabled, sessionPassword, validateConnectorUrl } from "./runtime";
+import type { chatInput } from "./token2api.schema";
 
 export function calculateCost(
 	input: number,

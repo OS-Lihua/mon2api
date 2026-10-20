@@ -10,7 +10,7 @@ import { escrowAbi } from "../src/lib/abi";
 /**
  * Explicit local fault injection, never part of the ordinary unit test suite.
  * Run against an already running local app, database and persistent local EVM:
- * MON2API_RECOVERY_TEST=true ALLOW_DEMO=true MON2API_MODE=local \
+ * TOKEN2API_RECOVERY_TEST=true ALLOW_DEMO=true TOKEN2API_MODE=local \
  *   node --import tsx scripts/recovery-smoke.ts
  * Only the newly created test session and its own settlement ledger are changed.
  */
@@ -51,7 +51,7 @@ async function trpc<T extends z.ZodTypeAny>(
 	schema: T,
 	mutation = true,
 ): Promise<z.infer<T>> {
-	const url = new URL(`/api/trpc/mon2api.${name}`, origin);
+	const url = new URL(`/api/trpc/token2api.${name}`, origin);
 	if (!mutation) url.searchParams.set("input", JSON.stringify({ json: input }));
 	const response = await fetch(url, {
 		method: mutation ? "POST" : "GET",
@@ -66,7 +66,7 @@ async function trpc<T extends z.ZodTypeAny>(
 	});
 	for (const value of response.headers.getSetCookie()) {
 		const pair = value.split(";", 1)[0];
-		if (pair?.startsWith("mon2api_session=")) cookie = pair;
+		if (pair?.startsWith("token2api_session=")) cookie = pair;
 	}
 	check(response.ok, `Local HTTP ${name} returned status ${response.status}.`);
 	const payload: unknown = await response.json();
@@ -78,18 +78,23 @@ async function trpc<T extends z.ZodTypeAny>(
 
 async function scenario(withLaterUsage: boolean) {
 	check(
-		process.env.MON2API_RECOVERY_TEST === "true",
-		"Set MON2API_RECOVERY_TEST=true to explicitly authorize local fault injection.",
+		(process.env.TOKEN2API_RECOVERY_TEST ??
+			process.env.MON2API_RECOVERY_TEST) === "true",
+		"Set TOKEN2API_RECOVERY_TEST=true to explicitly authorize local fault injection.",
 	);
 	check(
-		process.env.ALLOW_DEMO === "true" && process.env.MON2API_MODE === "local",
-		"Fault injection requires ALLOW_DEMO=true and MON2API_MODE=local.",
+		process.env.ALLOW_DEMO === "true" &&
+			(process.env.TOKEN2API_MODE ?? process.env.MON2API_MODE) === "local",
+		"Fault injection requires ALLOW_DEMO=true and TOKEN2API_MODE=local.",
 	);
 	check(
 		!process.env.CHAIN_CONFIG_JSON,
 		"Use the local chain.json file rather than CHAIN_CONFIG_JSON for this test.",
 	);
-	const directory = path.resolve(process.env.MON2API_DATA_DIR || ".runtime");
+	const directory = path.resolve(
+		(process.env.TOKEN2API_DATA_DIR ?? process.env.MON2API_DATA_DIR) ||
+			".runtime",
+	);
 	const config = configSchema.parse(
 		JSON.parse(fs.readFileSync(path.join(directory, "chain.json"), "utf8")),
 	);

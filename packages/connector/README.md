@@ -1,6 +1,6 @@
 # Token2API 本机连接器
 
-新版命令为 `token2api-connector`；`mon2api-connector` 仍作为兼容别名。凭证环境变量保持原名。
+命令为 `token2api-connector`，凭证环境变量使用 `TOKEN2API_CONNECTOR_TOKEN` 和 `TOKEN2API_UPSTREAM_KEY`。旧命令和旧环境变量仍可读取。
 
 需要 Node.js 24 或更高版本（包含 npm / npx）。无需下载 Token2API 源码、安装数据库或进入项目目录。
 
@@ -24,7 +24,7 @@ token2api-connector --version
 
 旧的固定模型资源可增加 `--model <模型 ID>`。其他 OpenAI 兼容网关可替换 `--upstream`；必须为 HTTPS，只有回环地址允许 HTTP。
 
-无人值守时，通过进程管理器的凭据存储提供 `MON2API_CONNECTOR_TOKEN` 和 `MON2API_UPSTREAM_KEY`，或用 `--credentials-stdin` 从标准输入读取 `{"token":"...","apiKey":"..."}`。连接器不自动保存凭证，也不安装开机启动项。上游 Key 只发送给本机配置的上游，平台只收到模型 ID、任务响应和用量。
+无人值守时，通过进程管理器的凭据存储提供 `TOKEN2API_CONNECTOR_TOKEN` 和 `TOKEN2API_UPSTREAM_KEY`，或用 `--credentials-stdin` 从标准输入读取 `{"token":"...","apiKey":"..."}`。连接器不自动保存凭证，也不安装开机启动项。上游 Key 只发送给本机配置的上游，平台只收到模型 ID、任务响应和用量。
 
 支持文本 Chat Completions 和流式响应。上游调用不会自动重试；用量不确定时由平台保留预算并进入 REVIEW，等待核对。
 

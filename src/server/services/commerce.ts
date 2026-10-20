@@ -2,7 +2,6 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 import type { z } from "zod";
 import { db } from "~/server/db";
-import type { Viewer } from "~/shared/mon2api";
 import { networkMetadata } from "~/shared/network";
 import {
 	assetOf,
@@ -10,6 +9,7 @@ import {
 	billingUnit,
 	decimalsOf,
 } from "~/shared/settlement-asset";
+import type { Viewer } from "~/shared/token2api";
 import { AppError } from "./auth";
 import { chainBalances, clients } from "./chain";
 import type {

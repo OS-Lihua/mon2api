@@ -1,6 +1,6 @@
 # 商家本机连接器
 
-产品已更名为 Token2API。新版使用 `token2api-connector`，同时保留 `mon2api-connector` 命令别名。凭证环境变量继续使用 `MON2API_CONNECTOR_TOKEN` 和 `MON2API_UPSTREAM_KEY`，已有配置无需修改。
+命令使用 `token2api-connector`，凭证环境变量使用 `TOKEN2API_CONNECTOR_TOKEN` 和 `TOKEN2API_UPSTREAM_KEY`。旧配置的兼容规则见[命名与兼容](./NAMING.md)。
 
 商家可以保留本机 API Key，并出售该 Key 对应的模型调用能力。连接器主动访问 Token2API，不需要开放本机端口。买家通过 Token2API 调用，无法取得商家的上游 Key。
 
@@ -47,7 +47,7 @@ token2api-connector --version
 
 这是一个持续运行的 CLI 服务。可交由 systemd、launchd、容器或已有进程管理器管理。建议后台服务全局安装后使用 `token2api-connector`，并固定安装包版本。服务重新启动后只领取新任务，不重复执行之前领取的请求。不自动安装开机启动项。
 
-无人值守时，进程管理器可以从其凭据存储提供 `MON2API_CONNECTOR_TOKEN` 和 `MON2API_UPSTREAM_KEY`。也可使用 `--credentials-stdin`，从标准输入读取下面形状的 JSON。示例中的值均为占位符；不要把真实值写进 shell 历史、仓库、日志或公共部署变量。
+无人值守时，进程管理器可以从其凭据存储提供 `TOKEN2API_CONNECTOR_TOKEN` 和 `TOKEN2API_UPSTREAM_KEY`。也可使用 `--credentials-stdin`，从标准输入读取下面形状的 JSON。示例中的值均为占位符；不要把真实值写进 shell 历史、仓库、日志或公共部署变量。
 
 ```json
 {"token":"<平台连接器凭证>","apiKey":"<本机上游 Key>"}

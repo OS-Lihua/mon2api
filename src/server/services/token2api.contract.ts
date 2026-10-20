@@ -66,6 +66,21 @@ export const modelListResponseSchema = z.object({
 	),
 });
 
+const billingMetadataSchema = z.object({
+	request_id: z.string(),
+	cost: z.number().int().nonnegative(),
+	unit: z.enum([
+		"micro_ETH",
+		"micro_BNB",
+		"micro_POL",
+		"micro_AVAX",
+		"micro_USDT",
+		"micro_USDC",
+		"micro_dUSD",
+	]),
+	usage_source: z.enum(["demo", "upstream_reported"]),
+});
+
 export const completionResponseSchema = z.object({
 	id: z.string(),
 	object: z.literal("chat.completion"),
@@ -82,20 +97,10 @@ export const completionResponseSchema = z.object({
 		}),
 	),
 	usage: usageResponseSchema,
-	mon2api: z.object({
-		request_id: z.string(),
-		cost: z.number().int().nonnegative(),
-		unit: z.enum([
-			"micro_ETH",
-			"micro_BNB",
-			"micro_POL",
-			"micro_AVAX",
-			"micro_USDT",
-			"micro_USDC",
-			"micro_dUSD",
-		]),
-		usage_source: z.enum(["demo", "upstream_reported"]),
-	}),
+	token2api: billingMetadataSchema,
+	mon2api: billingMetadataSchema
+		.optional()
+		.describe("Deprecated compatibility alias for token2api."),
 });
 
 export const streamChunkResponseSchema = z.object({

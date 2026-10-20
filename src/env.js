@@ -8,7 +8,7 @@ export const env = createEnv({
 	 */
 	server: {
 		DATABASE_URL: z.string().url(),
-		MON2API_MODE: z.enum(["local", "evm"]).default("evm"),
+		TOKEN2API_MODE: z.enum(["local", "evm"]).default("evm"),
 		EVM_RPC_URL: z.string().url().optional(),
 		SETTLEMENT_CHAIN_ID: z.coerce.number().int().positive().optional(),
 		SETTLEMENT_ASSET: z
@@ -25,7 +25,7 @@ export const env = createEnv({
 		METER_PRIVATE_KEY: z.string().optional(),
 		DEPLOYER_PRIVATE_KEY: z.string().optional(),
 		TREASURY_ADDRESS: z.string().optional(),
-		MON2API_DATA_DIR: z.string().optional(),
+		TOKEN2API_DATA_DIR: z.string().optional(),
 		CHAIN_CONFIG_JSON: z.string().optional(),
 		APP_ENV: z.string().optional(),
 		ALLOWED_ORIGINS: z.string().default(""),
@@ -91,7 +91,7 @@ export const env = createEnv({
 		NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID:
 			process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID,
 		DATABASE_URL: process.env.DATABASE_URL,
-		MON2API_MODE: process.env.MON2API_MODE,
+		TOKEN2API_MODE: process.env.TOKEN2API_MODE ?? process.env.MON2API_MODE,
 		EVM_RPC_URL: process.env.EVM_RPC_URL,
 		SETTLEMENT_CHAIN_ID: process.env.SETTLEMENT_CHAIN_ID,
 		SETTLEMENT_ASSET: process.env.SETTLEMENT_ASSET,
@@ -103,7 +103,8 @@ export const env = createEnv({
 		METER_PRIVATE_KEY: process.env.METER_PRIVATE_KEY,
 		DEPLOYER_PRIVATE_KEY: process.env.DEPLOYER_PRIVATE_KEY,
 		TREASURY_ADDRESS: process.env.TREASURY_ADDRESS,
-		MON2API_DATA_DIR: process.env.MON2API_DATA_DIR,
+		TOKEN2API_DATA_DIR:
+			process.env.TOKEN2API_DATA_DIR ?? process.env.MON2API_DATA_DIR,
 		CHAIN_CONFIG_JSON: process.env.CHAIN_CONFIG_JSON,
 		APP_ENV: process.env.APP_ENV,
 		ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS,

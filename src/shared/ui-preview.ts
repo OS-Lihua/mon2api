@@ -1,5 +1,5 @@
-import type { Snapshot } from "./mon2api";
 import { DEFAULT_NETWORK } from "./network";
+import type { Snapshot } from "./token2api";
 
 export const uiPreview =
 	process.env.NODE_ENV === "development" &&
@@ -35,7 +35,7 @@ export const previewSnapshot: Snapshot = {
 			id: `ui-preview-${index}`,
 			name,
 			description: "UI 预览模拟资源 · 未连接真实服务",
-			model: "mon2api-demo",
+			model: "token2api-demo",
 			owner,
 			kind: "demo",
 			connectionMode: "api",

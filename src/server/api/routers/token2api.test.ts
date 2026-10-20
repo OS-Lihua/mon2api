@@ -1,7 +1,7 @@
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTRPCContext, createTRPCRouter } from "../trpc";
-import { mon2apiRouter } from "./mon2api";
+import { token2apiRouter } from "./token2api";
 
 const mocks = vi.hoisted(() => ({
 	walletLogin: vi.fn(),
@@ -46,14 +46,17 @@ vi.mock("~/server/services/settlement", () => ({
 	settleSession: vi.fn(),
 }));
 
-const router = createTRPCRouter({ mon2api: mon2apiRouter });
+const router = createTRPCRouter({
+	token2api: token2apiRouter,
+	mon2api: token2apiRouter,
+});
 const address = `0x${"11".repeat(20)}`;
 function request(
 	path: string,
 	input: unknown,
 	origin = "http://localhost:3000",
 ) {
-	const req = new Request(`http://localhost:3000/api/trpc/mon2api.${path}`, {
+	const req = new Request(`http://localhost:3000/api/trpc/token2api.${path}`, {
 		method: "POST",
 		headers: { origin, "content-type": "application/json" },
 		body: JSON.stringify({ json: input }),
@@ -66,7 +69,7 @@ function request(
 	});
 }
 
-describe("mon2api HTTP router authentication boundaries", () => {
+describe("Token2API HTTP router authentication boundaries", () => {
 	beforeEach(() => {
 		vi.stubEnv("APP_ORIGIN", "http://localhost:3000");
 		vi.resetAllMocks();
@@ -104,7 +107,7 @@ describe("mon2api HTTP router authentication boundaries", () => {
 
 	it("rejects every cross-origin operation in a batch", async () => {
 		const req = new Request(
-			"http://localhost:3000/api/trpc/mon2api.walletChallenge,mon2api.logout?batch=1",
+			"http://localhost:3000/api/trpc/token2api.walletChallenge,token2api.logout?batch=1",
 			{
 				method: "POST",
 				headers: {

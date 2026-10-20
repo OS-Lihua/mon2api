@@ -12,9 +12,9 @@ const server = spawn(process.execPath, [path.join(runtime, "server.js")], {
 		...process.env,
 		HOSTNAME: "127.0.0.1",
 		PORT: process.env.PORT || "3000",
-		MON2API_DATA_DIR: path.resolve(
-			process.env.MON2API_DATA_DIR ||
-				(process.env.MON2API_MODE === "local"
+		TOKEN2API_DATA_DIR: path.resolve(
+			(process.env.TOKEN2API_DATA_DIR ?? process.env.MON2API_DATA_DIR) ||
+				((process.env.TOKEN2API_MODE ?? process.env.MON2API_MODE) === "local"
 					? ".runtime"
 					: `.runtime/evm/${process.env.SETTLEMENT_CHAIN_ID || "1"}-${(process.env.SETTLEMENT_ASSET || "ETH").toLowerCase()}`),
 		),

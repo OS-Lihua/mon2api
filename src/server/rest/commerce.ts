@@ -20,15 +20,15 @@ import {
 	toggleListing,
 	updateListing,
 } from "~/server/services/market";
+import { refundStatus, requestRefund } from "~/server/services/refund";
+import { closeSession, settleSession } from "~/server/services/settlement";
 import {
 	listingInput,
 	listingUpdateInput,
 	openSessionInput,
 	sessionIdSchema,
-} from "~/server/services/mon2api.schema";
-import { refundStatus, requestRefund } from "~/server/services/refund";
-import { closeSession, settleSession } from "~/server/services/settlement";
-import type { Viewer } from "~/shared/mon2api";
+} from "~/server/services/token2api.schema";
+import type { Viewer } from "~/shared/token2api";
 import { createRestMutation, createRestQuery } from "./endpoint";
 
 // Apply even to rate-limit, JSON parsing and validation errors from the shared wrapper.

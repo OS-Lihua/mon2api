@@ -1,4 +1,4 @@
-import { mon2apiRouter } from "~/server/api/routers/mon2api";
+import { token2apiRouter } from "~/server/api/routers/token2api";
 import { createTRPCRouter } from "~/server/api/trpc";
 
 /**
@@ -7,7 +7,9 @@ import { createTRPCRouter } from "~/server/api/trpc";
  * All routers added in /api/routers should be manually added here.
  */
 export const appRouter = createTRPCRouter({
-	mon2api: mon2apiRouter,
+	token2api: token2apiRouter,
+	// Compatibility for existing web clients.
+	mon2api: token2apiRouter,
 });
 
 // export type definition of API

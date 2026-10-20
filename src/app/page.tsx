@@ -1,5 +1,5 @@
-import { Mon2ApiLanding } from "~/app/_components/mon2api-landing";
+import { Token2ApiLanding } from "~/app/_components/token2api-landing";
 
 export default function Home() {
-	return <Mon2ApiLanding />;
+	return <Token2ApiLanding />;
 }

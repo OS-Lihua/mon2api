@@ -28,18 +28,18 @@ USDT、USDC 在不同链上可能是发行方原生版本、桥接版本或其�
 ## 配置和部署
 
 1. 为每个链和资产准备独立 PostgreSQL 数据库或 schema，设置 `DATABASE_URL`，执行 `pnpm db:migrate`。
-2. 设置 `MON2API_MODE=evm`、`SETTLEMENT_CHAIN_ID`、`SETTLEMENT_ASSET`。原生资产必须与该链匹配；稳定币另设 `SETTLEMENT_TOKEN_ADDRESS`。可用资产为 `ETH`、`BNB`、`POL`、`AVAX`、`USDT`、`USDC`。
-3. 设置 `MON2API_DATA_DIR`，默认为 `.runtime/evm/<chainId>-<asset小写>`。设置部署者、计量者私钥和 `TREASURY_ADDRESS`；私钥只放服务器环境。可通过 `EVM_RPC_URL` 指定 HTTPS RPC。
+2. 设置 `TOKEN2API_MODE=evm`、`SETTLEMENT_CHAIN_ID`、`SETTLEMENT_ASSET`。原生资产必须与该链匹配；稳定币另设 `SETTLEMENT_TOKEN_ADDRESS`。可用资产为 `ETH`、`BNB`、`POL`、`AVAX`、`USDT`、`USDC`。
+3. 设置 `TOKEN2API_DATA_DIR`，默认为 `.runtime/evm/<chainId>-<asset小写>`。设置部署者、计量者私钥和 `TREASURY_ADDRESS`；私钥只放服务器环境。可通过 `EVM_RPC_URL` 指定 HTTPS RPC。
 4. 执行 `pnpm deploy:evm`。脚本先核对 RPC chain ID、资产、合约代码和精度，再部署 `NativeUsageEscrow` 或 `UsageEscrow`。已有目录只允许复用完全匹配的部署，不自动覆盖。此命令会发送目标链部署交易。
 5. Web 和 worker 使用相同 `chain.json`；只读文件系统可设置完整 `CHAIN_CONFIG_JSON`。设置 `APP_ORIGIN`、随机 `SESSION_PASSWORD` 和上游允许来源，然后启动服务。
 
 以下以 Ethereum 主网 ETH 结算为配置示例（不含签名密钥）：
 
 ```dotenv
-MON2API_MODE=evm
+TOKEN2API_MODE=evm
 SETTLEMENT_CHAIN_ID=1
 SETTLEMENT_ASSET=ETH
-MON2API_DATA_DIR=.runtime/evm/1-eth
+TOKEN2API_DATA_DIR=.runtime/evm/1-eth
 ALLOW_DEMO=false
 ```
 

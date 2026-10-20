@@ -5,7 +5,7 @@ import {
 	listingUpdateInput,
 	messagesSchema,
 	publicChatInput,
-} from "./mon2api.schema";
+} from "./token2api.schema";
 
 const messages = [{ role: "user", content: "hello" }];
 
@@ -49,7 +49,7 @@ describe("resource connection modes", () => {
 	});
 });
 
-describe("mon2api Unicode input limits", () => {
+describe("Token2API Unicode input limits", () => {
 	it("applies code-point limits to internal conversation and idempotency fields", () => {
 		const input = {
 			sessionId: `0x${"a".repeat(64)}`,

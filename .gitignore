@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+/.pnpm-store/
 /.pnp
 .pnp.js
 
@@ -50,7 +51,7 @@ yarn-error.log*
 # idea files
 .idea
 
-# mon2api local EVM and generated artifacts
+# Token2API local EVM and generated artifacts
 .runtime/
 contracts/artifacts/
 work/

@@ -6,12 +6,6 @@ import { sealData } from "iron-session";
 import { getAddress, keccak256, stringToHex } from "viem";
 import type { z } from "zod";
 import { db } from "~/server/db";
-import type {
-	BuyerConnection,
-	OpenSessionResult,
-	Snapshot,
-	Viewer,
-} from "~/shared/mon2api";
 import { DEFAULT_NETWORK, networkMetadata } from "~/shared/network";
 import {
 	assetOf,
@@ -20,6 +14,12 @@ import {
 	decimalsOf,
 	toChainAmount,
 } from "~/shared/settlement-asset";
+import type {
+	BuyerConnection,
+	OpenSessionResult,
+	Snapshot,
+	Viewer,
+} from "~/shared/token2api";
 import { AppError } from "./auth";
 import {
 	chainBalances,
@@ -32,17 +32,17 @@ import {
 import { connectorOnline, resourceAvailable } from "./connector-availability";
 import { inspectEscrowOwnerGuard } from "./escrow-version";
 import { discoverModels } from "./model-discovery";
-import type {
-	listingInput,
-	listingUpdateInput,
-	openSessionInput,
-} from "./mon2api.schema";
 import {
 	chainConfig,
 	demoEnabled,
 	sessionPassword,
 	validateConnectorUrl,
 } from "./runtime";
+import type {
+	listingInput,
+	listingUpdateInput,
+	openSessionInput,
+} from "./token2api.schema";
 
 type Tx = Prisma.TransactionClient;
 export async function lock(tx: Tx, id: string) {

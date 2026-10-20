@@ -31,7 +31,7 @@ import {
 import { SETTLEMENT_CHAINS } from "~/shared/network";
 import { AssetGlyph } from "./asset-glyph";
 import { ChainGlyph, chainColor, chainLabel } from "./chain-glyph";
-import styles from "./mon2api-landing.module.css";
+import styles from "./token2api-landing.module.css";
 
 const repository = "https://github.com/OS-Lihua/token2api";
 const snippets = {
@@ -218,7 +218,7 @@ const faqs = [
 ];
 const languages: (keyof typeof snippets)[] = ["TypeScript", "Python"];
 
-export function Mon2ApiLanding() {
+export function Token2ApiLanding() {
 	const [menuOpen, setMenuOpen] = useState(false);
 	const [language, setLanguage] = useState<keyof typeof snippets>("TypeScript");
 	const [copyStatus, setCopyStatus] = useState("");

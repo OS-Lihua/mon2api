@@ -155,7 +155,7 @@ async function listen() {
 }
 
 beforeAll(async () => {
-	emptyDir = await fs.mkdtemp(path.join(os.tmpdir(), "mon2api-package-"));
+	emptyDir = await fs.mkdtemp(path.join(os.tmpdir(), "token2api-package-"));
 	archive = await buildConnector();
 	complete = new Promise<void>((resolve) => {
 		receivedComplete = resolve;
@@ -276,7 +276,7 @@ describe("standalone connector distribution", () => {
 			[bin, "status", "--platform", platform],
 			{
 				cwd: emptyDir,
-				env: { ...process.env, MON2API_CONNECTOR_TOKEN: token },
+				env: { ...process.env, TOKEN2API_CONNECTOR_TOKEN: token },
 			},
 		);
 		expect(JSON.parse(status)).toMatchObject({
@@ -301,8 +301,8 @@ describe("standalone connector distribution", () => {
 				stdio: "pipe",
 				env: {
 					...process.env,
-					MON2API_CONNECTOR_TOKEN: "",
-					MON2API_UPSTREAM_KEY: apiKey,
+					TOKEN2API_CONNECTOR_TOKEN: "",
+					TOKEN2API_UPSTREAM_KEY: apiKey,
 				},
 			},
 		);

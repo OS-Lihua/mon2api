@@ -36,7 +36,7 @@ import {
 import { getAccount } from "wagmi/actions";
 import { env } from "~/env";
 import { defineWalletChain, getConnectedWallet } from "~/lib/wallet";
-import type { NetworkInfo } from "~/shared/mon2api";
+import type { NetworkInfo } from "~/shared/token2api";
 import { uiPreview } from "~/shared/ui-preview";
 import { api } from "~/trpc/react";
 
@@ -51,7 +51,7 @@ type WalletContextValue = {
 };
 const WalletContext = createContext<WalletContextValue | null>(null);
 
-export function useMon2ApiWallet() {
+export function useToken2ApiWallet() {
 	const context = useContext(WalletContext);
 	if (!context) throw new Error("钱包连接服务尚未就绪。");
 	return context;
@@ -82,7 +82,7 @@ function configureWallet(network: NetworkInfo) {
 }
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
-	const snapshot = api.mon2api.snapshot.useQuery(
+	const snapshot = api.token2api.snapshot.useQuery(
 		{ gatewayOnly: true },
 		{ retry: 1 },
 	);
@@ -161,10 +161,10 @@ function WalletSessionProvider({ children }: { children: React.ReactNode }) {
 	const account = useAccount();
 	const config = useConfig();
 	const { disconnectAsync } = useDisconnect();
-	const snapshot = api.mon2api.snapshot.useQuery({ gatewayOnly: true });
-	const challenge = api.mon2api.walletChallenge.useMutation();
-	const login = api.mon2api.walletLogin.useMutation();
-	const { mutateAsync: logout } = api.mon2api.logout.useMutation();
+	const snapshot = api.token2api.snapshot.useQuery({ gatewayOnly: true });
+	const challenge = api.token2api.walletChallenge.useMutation();
+	const login = api.token2api.walletLogin.useMutation();
+	const { mutateAsync: logout } = api.token2api.logout.useMutation();
 	const clearing = useRef<Promise<void> | null>(null);
 	const [sessionError, setSessionError] = useState(false);
 	const viewer = snapshot.data?.viewer;

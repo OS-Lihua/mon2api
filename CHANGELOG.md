@@ -9,9 +9,13 @@ Tag format:
 
 ## Unreleased
 
+- Standardize Token2API branding, token2api source filenames and internal API calls, Token2Api code identifiers and TOKEN2API_* environment variables; retain explicit compatibility for existing sessions, clients, deployment settings and ledger identifiers.
+
+- Split the console into focused sections, dialogs, shared UI and wallet transaction helpers; load secondary sections and dialogs on demand and warm their chunks after the initial render.
+
 - Harden the backend for high concurrency: rate-limit verified API keys, connectors and signed-in wallets per credential (`RATE_LIMIT_CREDENTIAL_REQUESTS`) while failed credentials still spend the per-IP quota; cache the parsed chain config, the deployment binding check and the RPC client; share admission chain reads per session; wake local-connector waiters in process instead of polling every 250 ms; cache the dashboard RPC health check; add indexes for per-listing admission counts, provider dashboards and key revocation.
 
-- Remove dead code: the unmounted template post example (router, service, schema, tests, Prisma `Post` model and its table via migration), the unused server analytics helper and `posthog-node`, the unused RSC tRPC caller and router inference types, the `parseMicroDUSD` and `keyCreatedResponse` aliases, the unused legacy `mon2api-mark.svg`, unused global CSS rules, and exports only used inside their own module.
+- Remove dead code: the unmounted template post example (router, service, schema, tests, Prisma `Post` model and its table via migration), the unused server analytics helper and `posthog-node`, the unused RSC tRPC caller and router inference types, the `parseMicroDUSD` and `keyCreatedResponse` aliases, the unused legacy brand SVG, unused global CSS rules, and exports only used inside their own module.
 
 - Add brand icons: SVG marks for every settlement chain, USDT, USDC and native-coin asset icons, an Apple touch icon, a web app manifest with 192/512 and maskable icons, and an Open Graph share image. Metadata URLs resolve from `APP_ORIGIN`.
 
@@ -31,7 +35,7 @@ Tag format:
 - Bind each isolated ledger to its chain, asset, token precision and escrow; preserve migration history and historical denominations. A running instance still serves one chain and asset.
 - Add `deploy:evm`, refresh REST/OpenAPI units and document stablecoin provenance and per-chain acceptance requirements.
 
-- Rename the product to Token2API and the repository/package identifiers to token2api. Update page metadata, wallet sign-in text, OpenAPI titles, artwork labels, SDK examples and docs. Package the platform-hosted connector as `@token2api/connector` 0.1.2 with the `token2api-connector` command and a legacy `mon2api-connector` alias; preserve deployment settings, database names and protocol identifiers.
+- Rename the product to Token2API and the repository/package identifiers to token2api. Update page metadata, wallet sign-in text, OpenAPI titles, artwork labels, SDK examples and docs. Package the platform-hosted connector as `@token2api/connector` 0.1.2 with the `token2api-connector` command and a legacy command alias; preserve deployment settings, database names and protocol identifiers.
 
 
 
@@ -56,7 +60,7 @@ Tag format:
 - Add wallet-authenticated versioned REST APIs for merchant resource management, consumer budget sessions, API keys, request ledgers and settlements; add key-scoped usage lookup, strict OpenAPI contracts, local HTTP smoke coverage, and Chinese merchant/consumer integration guides.
 
 - Remove decorative homepage microcopy and rounded logo tiles, keeping the transparent connector mark.
-- Refine the mon2api connector icon with symmetric, stroke-free ribbons; synchronize the homepage, console, hero artwork and SVG/ICO favicons.
+- Refine the Token2API connector icon with symmetric, stroke-free ribbons; synchronize the homepage, console, hero artwork and SVG/ICO favicons.
 
 - Simplify overview helper text, duplicate network status and empty-state captions; move metric scope to a tooltip and screen-reader text, and show metric breakdowns only when nonzero.
 
@@ -65,11 +69,11 @@ Tag format:
 
 - Replace native budget-session dropdowns with styled, keyboard-accessible selectors, with option descriptions, selected indicators, and dialog-aware menus.
 - Remove repeated console headings, workspace placeholders, promotional copy and implementation notes; keep concise pricing, data scope and action-specific guidance.
-- Add a custom two-ribbon mon2api mark and matching SVG/ICO browser icons; simplify overview flow decoration and improve explanatory text and charge detail readability after visual review.
+- Add a custom two-ribbon Token2API mark and matching SVG/ICO browser icons; simplify overview flow decoration and improve explanatory text and charge detail readability after visual review.
 - Refine console contrast with a light overview and compact settlement flow; improve resource price hierarchy, searchable result counts, keyboard focus, and mobile touch targets.
 - Guide first-time use from resource pricing and budget creation to calling and billing; align market actions, clarify the budget price snapshot, expose billing shortcuts, and improve narrow-screen tables and metrics.
 - Bind escrow session IDs to the consumer wallet, preventing another wallet from occupying a pending ID; generate matching random IDs for new leases and cover the attack on a local EVM.
-- Refresh the mon2api console with a mineral palette, a resource-to-settlement flow, clearer prices and states, accessible activity data, and responsive navigation. Label provider-listed prices and declared model IDs; show demo resources and the absence of comparable official prices without implying a discount. Keep desktop cards spacious and let users expand recent billing and API key records on demand.
+- Refresh the Token2API console with a mineral palette, a resource-to-settlement flow, clearer prices and states, accessible activity data, and responsive navigation. Label provider-listed prices and declared model IDs; show demo resources and the absence of comparable official prices without implying a discount. Keep desktop cards spacious and let users expand recent billing and API key records on demand.
 - Accept verified escrow opening events routed through contract wallets; bound worker scans and add an indexed active-lease audit.
 - Retain late upstream usage evidence when the worker moves an interrupted request to review; keep its reservation until manual resolution.
 - Preserve exact micro dUSD amounts in budget and price inputs; show small charges and large chain balances without floating-point rounding, and mark unavailable RPC balances clearly.
@@ -82,7 +86,7 @@ Tag format:
 
 - Replace the single injected wallet button with RainbowKit/wagmi wallet selection, Chinese sign-in guidance, account/network menus and optional WalletConnect support; clear stale wallet sessions on account changes.
 - Refresh the console with a graphite sidebar, purple actions and more readable content.
-- Add mon2api resource marketplace, consumer/provider console and standard gateway connector.
+- Add Token2API resource marketplace, consumer/provider console and standard gateway connector.
 - Add PostgreSQL metering ledger, atomic reservations, session API keys and idempotent settlement outbox.
 - Add wallet signature sessions, encrypted connector credentials, background settlement and review resolution.
 - Add local end-to-end smoke coverage and deployment/task documentation.

@@ -10,12 +10,12 @@ import {
 	completionResponseSchema,
 	modelListResponseSchema,
 	streamChunkResponseSchema,
-} from "~/server/services/mon2api.contract";
+} from "~/server/services/token2api.contract";
 import {
 	listingInput,
 	listingUpdateInput,
 	publicChatInput,
-} from "~/server/services/mon2api.schema";
+} from "~/server/services/token2api.schema";
 import { openApiDocument } from "./document";
 
 // OpenAPI stores reusable schemas in components instead of $defs. Ajv resolves
@@ -51,7 +51,7 @@ function expectInputAgreement(input: unknown, valid: boolean) {
 	);
 }
 
-describe("mon2api OpenAPI", () => {
+describe("Token2API OpenAPI", () => {
 	it("uses wallet cookies for management, bearer keys for usage lookup and no credentials for discovery", () => {
 		for (const path of [
 			"/merchant/resources",
@@ -72,7 +72,11 @@ describe("mon2api OpenAPI", () => {
 		expect(openApiDocument.paths?.["/auth/login"]?.post?.security).toEqual([]);
 		expect(
 			openApiDocument.components?.securitySchemes?.walletSession,
-		).toMatchObject({ type: "apiKey", in: "cookie", name: "mon2api_session" });
+		).toMatchObject({
+			type: "apiKey",
+			in: "cookie",
+			name: "token2api_session",
+		});
 	});
 	it("rejects empty edits, fractional prices and connector replacement in runtime and OpenAPI", () => {
 		const validate = contract("UpdateResource");
@@ -387,7 +391,7 @@ describe("mon2api OpenAPI", () => {
 				},
 			],
 			usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 },
-			mon2api: {
+			token2api: {
 				request_id: "request-test",
 				cost: 1,
 				unit: "micro_dUSD",

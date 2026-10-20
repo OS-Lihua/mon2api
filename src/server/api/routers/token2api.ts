@@ -40,6 +40,8 @@ import {
 	withdraw,
 } from "~/server/services/market";
 import { runChat } from "~/server/services/metering";
+import { refundStatus, requestRefund } from "~/server/services/refund";
+import { closeSession, settleSession } from "~/server/services/settlement";
 import {
 	addressSchema,
 	chatInput,
@@ -47,9 +49,7 @@ import {
 	listingUpdateInput,
 	openSessionInput,
 	sessionIdSchema,
-} from "~/server/services/mon2api.schema";
-import { refundStatus, requestRefund } from "~/server/services/refund";
-import { closeSession, settleSession } from "~/server/services/settlement";
+} from "~/server/services/token2api.schema";
 
 async function call<T>(action: () => Promise<T>): Promise<T> {
 	try {
@@ -82,7 +82,7 @@ const mutation = publicProcedure.use(async ({ ctx, next }) => {
 	await call(async () => assertSameOrigin(ctx.headers));
 	return next();
 });
-export const mon2apiRouter = createTRPCRouter({
+export const token2apiRouter = createTRPCRouter({
 	createConnectorLaunch: mutation
 		.input(connectorListingId)
 		.mutation(({ input }) =>

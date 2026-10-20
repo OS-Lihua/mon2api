@@ -1,7 +1,7 @@
 name: token2api-evm
 x-runtime: &runtime
   DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/mon2api
-  MON2API_MODE: evm
+  TOKEN2API_MODE: evm
   ALLOW_DEMO: "false"
   APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN}
   SESSION_PASSWORD: ${SESSION_PASSWORD:?Set SESSION_PASSWORD}

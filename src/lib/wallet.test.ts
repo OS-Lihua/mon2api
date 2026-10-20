@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createConfig, http } from "wagmi";
 import { connect, disconnect, getAccount } from "wagmi/actions";
 import { mock } from "wagmi/connectors";
-import type { NetworkInfo } from "~/shared/mon2api";
+import type { NetworkInfo } from "~/shared/token2api";
 import { defineWalletChain, getConnectedWallet } from "./wallet";
 
 const first = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";

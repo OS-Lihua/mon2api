@@ -11,8 +11,8 @@ import {
 	modelListResponseSchema,
 	streamChunkResponseSchema,
 	usageResponseSchema,
-} from "~/server/services/mon2api.contract";
-import { publicChatInput } from "~/server/services/mon2api.schema";
+} from "~/server/services/token2api.contract";
+import { publicChatInput } from "~/server/services/token2api.schema";
 import { registerCommerce } from "./commerce";
 import { registerLocalConnector } from "./local-connector";
 

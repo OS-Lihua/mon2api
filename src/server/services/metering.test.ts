@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { calculateCost } from "./metering";
+import { validateConnectorUrl } from "./runtime";
 import {
 	chatInput,
 	listingInput,
 	messagesSchema,
 	openSessionInput,
 	publicChatInput,
-} from "./mon2api.schema";
-import { validateConnectorUrl } from "./runtime";
+} from "./token2api.schema";
 
 // Cost/schema tests must not create a Prisma connection or require PostgreSQL.
 vi.mock("~/server/db", () => ({ db: {} }));

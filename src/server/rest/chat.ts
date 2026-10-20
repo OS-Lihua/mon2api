@@ -6,7 +6,7 @@ import { db } from "~/server/db";
 import { AppError } from "~/server/services/auth";
 import { authenticateKey } from "~/server/services/market";
 import { runChat } from "~/server/services/metering";
-import { publicChatInput } from "~/server/services/mon2api.schema";
+import { publicChatInput } from "~/server/services/token2api.schema";
 import { createRestMutation, createRestQuery } from "./endpoint";
 
 const headers = {
@@ -38,7 +38,7 @@ function requestKey(request: Request) {
 const keySubject = async (request: Request) =>
 	`key:${(await requestKey(request)).id}`;
 export const chatPost = createRestMutation({
-	route: "mon2api:chat",
+	route: "token2api:chat",
 	credential: keySubject,
 	input: publicChatInput,
 	handler: async ({ input, request }) => {
@@ -78,6 +78,12 @@ export const chatPost = createRestMutation({
 					request.signal,
 					key.id,
 				);
+				const billingMetadata = {
+					request_id: result.id,
+					cost: result.cost,
+					unit: billingUnit(assetOf(chainConfig())),
+					usage_source: result.usageSource,
+				};
 				return Response.json(
 					{
 						id,
@@ -96,12 +102,8 @@ export const chatPost = createRestMutation({
 							completion_tokens: result.outputTokens,
 							total_tokens: result.inputTokens + result.outputTokens,
 						},
-						mon2api: {
-							request_id: result.id,
-							cost: result.cost,
-							unit: billingUnit(assetOf(chainConfig())),
-							usage_source: result.usageSource,
-						},
+						token2api: billingMetadata,
+						mon2api: billingMetadata,
 					},
 					{ headers: { ...headers, "x-idempotency-key": idempotencyKey } },
 				);
@@ -187,7 +189,7 @@ export const chatPost = createRestMutation({
 	},
 });
 export const modelsGet = createRestQuery({
-	route: "mon2api:models",
+	route: "token2api:models",
 	credential: keySubject,
 	handler: async ({ request }) => {
 		try {

@@ -7,7 +7,7 @@ import { prepareWebRuntime } from "../scripts/web-runtime.mjs";
 const roots: string[] = [];
 
 function fixture() {
-	const root = fs.mkdtempSync(path.join(os.tmpdir(), "mon2api-web-"));
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "token2api-web-"));
 	roots.push(root);
 	const standalone = path.join(root, ".next", "standalone");
 	fs.mkdirSync(path.join(standalone, "node_modules", ".pnpm", "dependency"), {

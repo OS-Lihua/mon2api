@@ -20,7 +20,10 @@ import { assetOf, NATIVE_TOKEN } from "../src/shared/settlement-asset";
 
 // Public development mnemonic, identical to the application's demo wallets.
 const mnemonic = "test test test test test test test test test test test junk";
-const directory = path.resolve(process.env.MON2API_DATA_DIR || ".runtime");
+const directory = path.resolve(
+	(process.env.TOKEN2API_DATA_DIR ?? process.env.MON2API_DATA_DIR) ||
+		".runtime",
+);
 const configFile = path.join(directory, "chain.json");
 const rpcUrl = "http://127.0.0.1:8545";
 const account = (index: number) =>
@@ -29,9 +32,9 @@ const meter = account(4).address;
 const treasury = account(5).address;
 type Artifact = { abi: Abi; bytecode: Hex };
 
-if (process.env.MON2API_MODE !== "local") {
+if ((process.env.TOKEN2API_MODE ?? process.env.MON2API_MODE) !== "local") {
 	throw new Error(
-		"Local chain requires MON2API_MODE=local. Use deploy:evm for EVM network.",
+		"Local chain requires TOKEN2API_MODE=local. Use deploy:evm for EVM network.",
 	);
 }
 fs.mkdirSync(directory, { recursive: true });
@@ -80,7 +83,7 @@ async function main() {
 			existing.rpcUrl !== rpcUrl
 		) {
 			throw new Error(
-				"Existing chain configuration belongs to another network. Set a separate MON2API_DATA_DIR.",
+				"Existing chain configuration belongs to another network. Set a separate TOKEN2API_DATA_DIR.",
 			);
 		}
 		const token = getAddress(existing.token);
@@ -141,10 +144,10 @@ async function main() {
 			"legacy"
 		)
 			console.warn(
-				"Saved escrow lacks the session owner guard. New sessions are blocked; existing sessions can still settle, close and withdraw. Use a separate MON2API_DATA_DIR and DATABASE_URL for a guarded deployment.",
+				"Saved escrow lacks the session owner guard. New sessions are blocked; existing sessions can still settle, close and withdraw. Use a separate TOKEN2API_DATA_DIR and DATABASE_URL for a guarded deployment.",
 			);
 		console.log(`Reusing local escrow ${escrow}`);
-		console.log("MON2API_CHAIN_READY");
+		console.log("TOKEN2API_CHAIN_READY");
 		return;
 	}
 
@@ -176,7 +179,7 @@ async function main() {
 	fs.writeFileSync(`${configFile}.tmp`, `${JSON.stringify(config, null, 2)}\n`);
 	fs.renameSync(`${configFile}.tmp`, configFile);
 	console.log(`Local native token; escrow ${config.escrow}`);
-	console.log("MON2API_CHAIN_READY");
+	console.log("TOKEN2API_CHAIN_READY");
 }
 
 main().catch(async (error: unknown) => {

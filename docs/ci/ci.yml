@@ -13,17 +13,17 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_DB: mon2api_ci
+          POSTGRES_DB: token2api_ci
           POSTGRES_PASSWORD: local_ci_only
           POSTGRES_USER: postgres
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U postgres -d mon2api_ci"
+          --health-cmd "pg_isready -U postgres -d token2api_ci"
           --health-interval 10s --health-timeout 5s --health-retries 5
     env:
-      DATABASE_URL: postgresql://postgres:local_ci_only@localhost:5432/mon2api_ci
+      DATABASE_URL: postgresql://postgres:local_ci_only@localhost:5432/token2api_ci
       APP_ENV: test
-      MON2API_MODE: local
+      TOKEN2API_MODE: local
       ALLOW_DEMO: "true"
       APP_ORIGIN: http://localhost:3000
       SESSION_PASSWORD: local-ci-only-not-a-deployment-secret-000000000000
@@ -52,19 +52,19 @@ jobs:
         run: pnpm verify
       - name: Test production HTTP and ledger recovery on local EVM
         run: |
-          pnpm preview:local > /tmp/mon2api-preview.log 2>&1 &
+          pnpm preview:local > /tmp/token2api-preview.log 2>&1 &
           preview_pid=$!
-          trap 'kill "$preview_pid"; cat /tmp/mon2api-preview.log' EXIT
+          trap 'kill "$preview_pid"; cat /tmp/token2api-preview.log' EXIT
           for attempt in $(seq 1 60); do
             if curl -fsS http://localhost:3000/api/v1/openapi.json > /dev/null; then break; fi
             sleep 1
           done
           pnpm test:e2e
-          MON2API_RECOVERY_TEST=true pnpm test:recovery
+          TOKEN2API_RECOVERY_TEST=true pnpm test:recovery
   docker-build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Build standalone web image without deployment credentials
-        run: docker build --target runner -t mon2api-ci .
+        run: docker build --target runner -t token2api-ci .

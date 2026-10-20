@@ -20,7 +20,7 @@ function setup(production = false) {
 		>();
 	for (const child of children) spawnChild.mockReturnValueOnce(child);
 	const environment: NodeJS.ProcessEnv = {
-		MON2API_MODE: "local",
+		TOKEN2API_MODE: "local",
 		NODE_ENV: "test",
 	};
 	const runtime = Object.assign(new EventEmitter(), {
@@ -37,7 +37,7 @@ function setup(production = false) {
 	});
 	const start = () => startDev({ spawnChild, runtime });
 	const ready = () =>
-		chain.stdout?.emit("data", Buffer.from("MON2API_CHAIN_READY\n"));
+		chain.stdout?.emit("data", Buffer.from("TOKEN2API_CHAIN_READY\n"));
 	return { children, chain, web, worker, spawnChild, runtime, start, ready };
 }
 
@@ -46,7 +46,7 @@ describe("dev process supervision with isolated fake children", () => {
 		"starts web and worker without a local chain when mode is %s",
 		(mode) => {
 			const { start, spawnChild, runtime, children } = setup();
-			runtime.env.MON2API_MODE = mode;
+			runtime.env.TOKEN2API_MODE = mode;
 			start();
 			expect(spawnChild.mock.calls.map((call) => call[1])).toEqual([
 				["node_modules/next/dist/bin/next", "dev", "--hostname", "127.0.0.1"],
@@ -59,15 +59,15 @@ describe("dev process supervision with isolated fake children", () => {
 	);
 	it("rejects an unsupported network before starting processes", () => {
 		const { start, spawnChild, runtime } = setup();
-		runtime.env.MON2API_MODE = "mainnet";
-		expect(start).toThrow("MON2API_MODE must be");
+		runtime.env.TOKEN2API_MODE = "mainnet";
+		expect(start).toThrow("TOKEN2API_MODE must be");
 		expect(spawnChild).not.toHaveBeenCalled();
 	});
 	it("waits for readiness across arbitrary stdout chunks and starts dependents once", () => {
 		const { chain, spawnChild, runtime, start, ready } = setup();
 		start();
 		expect(spawnChild).toHaveBeenCalledTimes(1);
-		const chunks = ["booting\nMON2", "API_CHAIN_", "REA", "DY\n"];
+		const chunks = ["booting\nTOKEN2", "API_CHAIN_", "REA", "DY\n"];
 		for (const text of chunks) chain.stdout?.emit("data", Buffer.from(text));
 		expect(spawnChild).toHaveBeenCalledTimes(3);
 		expect(spawnChild.mock.calls[1]?.[1]).toEqual([

@@ -16,12 +16,12 @@ import {
 } from "viem/siwe";
 import { z } from "zod";
 import { db } from "~/server/db";
-import type { Viewer } from "~/shared/mon2api";
+import type { Viewer } from "~/shared/token2api";
 import { demoAccount, clients as publicChain } from "./chain";
-import { walletSignatureSchema } from "./mon2api.schema";
 import { chainConfig, demoEnabled, sessionPassword } from "./runtime";
+import { walletSignatureSchema } from "./token2api.schema";
 
-export { walletSignatureSchema } from "./mon2api.schema";
+export { walletSignatureSchema } from "./token2api.schema";
 
 const challengeLifetimeMs = 300_000;
 const signInStatement =
@@ -52,9 +52,9 @@ const viewerSchema = z.object({
 	name: z.string().max(100),
 	demo: z.boolean(),
 });
-async function authSession() {
+async function authSession(cookieName = "token2api_session") {
 	return getIronSession<{ viewer?: Viewer }>(await cookies(), {
-		cookieName: "mon2api_session",
+		cookieName,
 		password: sessionPassword(),
 		ttl: 8 * 3600,
 		cookieOptions: {
@@ -66,7 +66,12 @@ async function authSession() {
 	});
 }
 export async function viewer(): Promise<Viewer | null> {
-	const session = await authSession();
+	const store = await cookies();
+	const session = await authSession(
+		!store.has("token2api_session") && store.has("mon2api_session")
+			? "mon2api_session"
+			: "token2api_session",
+	);
 	const parsed = viewerSchema.safeParse(session.viewer);
 	if (!parsed.success || (parsed.data.demo && !demoEnabled())) return null;
 	return parsed.data;
@@ -92,6 +97,7 @@ export async function demoLogin(role: "consumer" | "provider") {
 }
 export async function logout() {
 	(await authSession()).destroy();
+	(await authSession("mon2api_session")).destroy();
 }
 export async function walletChallenge(address: string) {
 	const signer = walletAddress(address);

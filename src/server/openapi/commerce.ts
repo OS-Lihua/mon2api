@@ -6,7 +6,7 @@ import {
 	listingUpdateInput,
 	openSessionInput,
 	sessionIdSchema,
-} from "~/server/services/mon2api.schema";
+} from "~/server/services/token2api.schema";
 
 type Operation = {
 	method: "get" | "post";
@@ -29,7 +29,7 @@ export function registerCommerce(
 	registry.registerComponent("securitySchemes", "walletSession", {
 		type: "apiKey",
 		in: "cookie",
-		name: "mon2api_session",
+		name: "token2api_session",
 		description:
 			"Eight-hour wallet sign-in session. Never use an inference API key for management. Browser POST origins must match APP_ORIGIN; CLI clients may omit Origin.",
 	});

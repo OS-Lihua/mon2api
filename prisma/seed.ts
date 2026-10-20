@@ -7,7 +7,7 @@ const mnemonic = "test test test test test test test test test test test junk";
 async function main() {
 	if (
 		process.env.ALLOW_DEMO !== "true" ||
-		process.env.MON2API_MODE !== "local"
+		(process.env.TOKEN2API_MODE ?? process.env.MON2API_MODE) !== "local"
 	) {
 		console.log("Demo seed disabled.");
 		return;
@@ -32,7 +32,7 @@ async function main() {
 						"小型资源池 · 按用量计费演示",
 						"社区供应者 · 完整结算演示",
 					][i] || "Demo resource",
-				model: "mon2api-demo",
+				model: "token2api-demo",
 				kind: "demo",
 				inputRate: [3000000, 2000000, 1500000][i] || 3000000,
 				outputRate: [15000000, 10000000, 8000000][i] || 15000000,

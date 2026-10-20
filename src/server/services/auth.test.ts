@@ -1,4 +1,5 @@
 import ganache from "ganache";
+import { getIronSession } from "iron-session";
 import { createPublicClient, custom, type Hex, hashMessage } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { foundry } from "viem/chains";
@@ -13,7 +14,7 @@ import {
 	it,
 	vi,
 } from "vitest";
-import { walletChallenge, walletLogin } from "./auth";
+import { logout, viewer, walletChallenge, walletLogin } from "./auth";
 
 type Challenge = {
 	id: string;
@@ -28,6 +29,7 @@ const mocks = vi.hoisted(() => ({
 	findUnique: vi.fn(),
 	updateMany: vi.fn(),
 	publicChain: vi.fn(),
+	cookieNames: new Set<string>(),
 	session: { viewer: undefined as unknown, save: vi.fn(), destroy: vi.fn() },
 }));
 vi.mock("~/server/db", () => ({
@@ -39,7 +41,11 @@ vi.mock("~/server/db", () => ({
 		},
 	},
 }));
-vi.mock("next/headers", () => ({ cookies: vi.fn(async () => ({})) }));
+vi.mock("next/headers", () => ({
+	cookies: vi.fn(async () => ({
+		has: (name: string) => mocks.cookieNames.has(name),
+	})),
+}));
 vi.mock("iron-session", () => ({
 	getIronSession: vi.fn(async () => mocks.session),
 }));
@@ -90,6 +96,7 @@ describe("wallet SIWE authentication", () => {
 		vi.setSystemTime(new Date("2026-10-17T12:00:00.000Z"));
 		vi.stubEnv("APP_ORIGIN", "http://localhost:3000");
 		mocks.rows.clear();
+		mocks.cookieNames.clear();
 		vi.clearAllMocks();
 		mocks.session.viewer = undefined;
 		mocks.session.save.mockResolvedValue(undefined);
@@ -136,6 +143,41 @@ describe("wallet SIWE authentication", () => {
 				transport: custom(provider, { retryCount: 0 }),
 			}),
 		});
+	});
+
+	it.each([
+		[["mon2api_session"], "mon2api_session"],
+		[["token2api_session", "mon2api_session"], "token2api_session"],
+	] as const)(
+		"reads existing cookies with canonical-cookie priority: %j",
+		async (names, expected) => {
+			for (const name of names) mocks.cookieNames.add(name);
+			mocks.session.viewer = {
+				address: signer.address.toLowerCase(),
+				name: "Test wallet",
+				demo: false,
+			};
+			expect(await viewer()).toEqual(mocks.session.viewer);
+			expect(getIronSession).toHaveBeenLastCalledWith(
+				expect.anything(),
+				expect.objectContaining({ cookieName: expected }),
+			);
+		},
+	);
+
+	it("clears both session cookie names on logout", async () => {
+		await logout();
+		expect(mocks.session.destroy).toHaveBeenCalledTimes(2);
+		expect(getIronSession).toHaveBeenNthCalledWith(
+			1,
+			expect.anything(),
+			expect.objectContaining({ cookieName: "token2api_session" }),
+		);
+		expect(getIronSession).toHaveBeenNthCalledWith(
+			2,
+			expect.anything(),
+			expect.objectContaining({ cookieName: "mon2api_session" }),
+		);
 	});
 	afterEach(() => {
 		vi.useRealTimers();

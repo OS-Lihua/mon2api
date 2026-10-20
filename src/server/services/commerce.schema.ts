@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { SETTLEMENT_ASSETS } from "~/shared/settlement-asset";
-import { codePointString } from "./mon2api.contract";
+import { codePointString } from "./token2api.contract";
 import {
 	addressSchema,
 	connectionModeSchema,
 	sessionIdSchema,
 	walletSignatureSchema,
-} from "./mon2api.schema";
+} from "./token2api.schema";
 
 export const pageQuery = z
 	.object({

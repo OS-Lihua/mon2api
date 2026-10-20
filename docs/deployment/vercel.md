@@ -2,7 +2,7 @@
 
 先按[多链结算](../MULTICHAIN.md)配置目标链、资产、独立数据库和运行目录。`pnpm deploy:evm` 部署原生资产或 ERC20 托管合约，并从目标代币合约读取精度。
 
-运行服务设置 `MON2API_MODE=evm`、`ALLOW_DEMO=false`、`DATABASE_URL`、`MON2API_DATA_DIR`、`APP_ORIGIN`、`SESSION_PASSWORD`、`METER_PRIVATE_KEY` 与上游允许来源。应用和 worker 必须读取相同公开链配置。外部资金交易等待 6 个区块确认；确认数不代表所有链均具有相同终局保证，实际环境需逐链验收。
+运行服务设置 `TOKEN2API_MODE=evm`、`ALLOW_DEMO=false`、`DATABASE_URL`、`TOKEN2API_DATA_DIR`、`APP_ORIGIN`、`SESSION_PASSWORD`、`METER_PRIVATE_KEY` 与上游允许来源。应用和 worker 必须读取相同公开链配置。外部资金交易等待 6 个区块确认；确认数不代表所有链均具有相同终局保证，实际环境需逐链验收。
 
 ## Web和worker
 
@@ -31,4 +31,4 @@ Vercel可以承载Web，不能承载本常驻worker。需要独立worker、数�
 
 ## 发布验收
 
-先运行 `pnpm verify`；本地 `pnpm test:e2e` 必须在显式设置 `MON2API_MODE=local`、`ALLOW_DEMO=true` 的隔离数据库与数据目录中运行。再在目标环境以两个真实钱包验证登录、授权、锁预算、真实网关调用、计费、分账、退款和提现。模拟响应和演示身份不能替代真实钱包与上游验收。当前代码支持目标链部署，但本次改动不自动发布或发送真实资金交易。
+先运行 `pnpm verify`；本地 `pnpm test:e2e` 必须在显式设置 `TOKEN2API_MODE=local`、`ALLOW_DEMO=true` 的隔离数据库与数据目录中运行。再在目标环境以两个真实钱包验证登录、授权、锁预算、真实网关调用、计费、分账、退款和提现。模拟响应和演示身份不能替代真实钱包与上游验收。当前代码支持目标链部署，但本次改动不自动发布或发送真实资金交易。

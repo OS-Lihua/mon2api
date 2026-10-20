@@ -10,7 +10,7 @@
 
 | 凭证 | 用途 | 获取方式 |
 | --- | --- | --- |
-| `mon2api_session` Cookie | 商家、消费者管理操作与私有账单 | 钱包签署 SIWE 登录消息；8 小时有效 |
+| `token2api_session` Cookie | 商家、消费者管理操作与私有账单 | 钱包签署 SIWE 登录消息；8 小时有效 |
 | `Authorization: Bearer m2a_…` | 模型查询、推理、按幂等键查询该会话的用量 | 为自己的活跃预算会话创建 Key；完整值仅返回一次 |
 
 管理接口拒绝 `Authorization` 头，即使同时携带有效 Cookie。推理 Key 不能上架资源、创建预算、创建其他 Key 或读取其他会话。
@@ -147,6 +147,6 @@ pnpm verify
 pnpm test:api
 ```
 
-`test:api` 需要本地服务、数据库与链已启动，服务端显式设置 `MON2API_MODE=local` 和 `ALLOW_DEMO=true`。默认访问 `http://localhost:3000`；测试其他本地端口可用 `pnpm test:api --origin http://localhost:3001`，对应服务端的 `APP_ORIGIN` 必须一致。脚本只允许 HTTP 回环地址和链 31337。
+`test:api` 需要本地服务、数据库与链已启动，服务端显式设置 `TOKEN2API_MODE=local` 和 `ALLOW_DEMO=true`。默认访问 `http://localhost:3000`；测试其他本地端口可用 `pnpm test:api --origin http://localhost:3001`，对应服务端的 `APP_ORIGIN` 必须一致。脚本只允许 HTTP 回环地址和链 31337。
 
 测试使用两位公开测试钱包做真实 REST 登录、商家资源读写、越权拒绝、分页、账单契约和 OpenAPI 检查。测试资源结束时被暂停并保留记录；不会调用真实模型或发送资金交易。链上资金闭环另用 `pnpm test:e2e`，故障恢复用 `pnpm test:recovery`。这些本地检查不代替外部网关或测试网钱包验收。
