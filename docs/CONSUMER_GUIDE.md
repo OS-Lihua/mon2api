@@ -66,7 +66,7 @@ curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/keys" \
   -d '{"sessionId":"YOUR_SESSION_ID","name":"My application"}'
 ```
 
-成功为 HTTP 201，返回 `{ "base_url": "https://your-platform.example/v1", "key": "m2a_…", "model": "YOUR_SESSION_MODEL" }`。完整 Key 仅此一次返回，保存在应用服务端。它只能使用该会话的模型和预算。用 `GET /consumer/keys` 查询元数据，用 `POST /consumer/keys/{id}/revoke` 和 `{}` 撤销。
+成功为 HTTP 201，返回 `{ "base_url": "https://your-platform.example/v1", "key": "t2a_…", "model": "YOUR_SESSION_MODEL" }`。完整 Key 仅此一次返回，保存在应用服务端。它只能使用该会话的模型和预算。用 `GET /consumer/keys` 查询元数据，用 `POST /consumer/keys/{id}/revoke` 和 `{}` 撤销。
 
 ## 4. 调用模型
 
@@ -148,6 +148,10 @@ curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/sessions/$SESSION_ID/close" \
 worker 会自动处理结算；手工触发仍复用持久化结算任务。会话 `availableBudget = budget - spent - reserved`；先预留，再按 usage 核销，不会因为用量未知而显示成全部预算可用。
 
 关闭遇到 `409 pending_requests` 时，服务端已停止新接单；须等待执行中请求或人工核对完成后重试。关闭后未用预算进入链上 **可提现余额**，不会由此 REST 自动转入钱包。网页提取余额或由自己的钱包调用 escrow 的 `withdraw()`。
+
+原生币市场的网页提现可以填写收款地址，默认使用当前钱包地址。不能直接接收原生币转账的合约钱包，可由该钱包调用 `withdrawTo(recipient)`，将自己的全部可提现余额转入同一网络上可收款的地址。只有原钱包可以发起提现；收款地址不会获得代提现权限。收款地址不能为零地址，转账失败会回滚，原可提现余额保持不变。ERC20 市场仍提取到当前钱包。
+
+`withdrawTo` 需要部署包含此入口的新版原生币托管合约。已经部署的合约不会因源码更新而改变。按部署规则，新合约使用独立账本；原合约中的余额和会话须在原合约处理，不能直接改绑数据库。
 
 长期平台故障时，消费者可直接在合约 `requestClose(id)`，等待 120 秒退出窗口后 `closeSession(id)`，再 `withdraw()`。请按部署 ABI 与当前链上状态操作。链上正常退出不能代替对未核对用量的运营处理。
 

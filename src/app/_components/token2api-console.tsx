@@ -40,7 +40,6 @@ import {
 import type { ConnectorDraft } from "~/app/_components/console/connector-modals";
 import {
 	activeSession,
-	assetFormatter,
 	onlineListings,
 	type Section,
 	sameAddress,
@@ -50,8 +49,9 @@ import { OverviewSection } from "~/app/_components/console/overview-section";
 import { Badge } from "~/app/_components/console/ui";
 import { useToken2ApiWallet } from "~/app/_components/wallet-provider";
 import { connectorStartCommand } from "~/shared/connector-distribution";
-import { parseMicroAmount } from "~/shared/money";
+import { parseMicroAmount, formatAmount as usd } from "~/shared/money";
 import { networkMetadata, SETTLEMENT_CHAINS } from "~/shared/network";
+import { isNativeAsset } from "~/shared/settlement-asset";
 import type {
 	BuyerConnection,
 	ListingView,
@@ -96,6 +96,9 @@ const RentModal = dynamic(() =>
 );
 const RefundModal = dynamic(() =>
 	loadSessionModals().then((module) => module.RefundModal),
+);
+const WithdrawModal = dynamic(() =>
+	loadSessionModals().then((module) => module.WithdrawModal),
 );
 const KeyModal = dynamic(() =>
 	loadSessionModals().then((module) => module.KeyModal),
@@ -165,6 +168,7 @@ export function Token2ApiConsole() {
 	const [keyModal, setKeyModal] = useState(false);
 	const [refundSession, setRefundSession] = useState<SessionView | null>(null);
 	const [refundInfo, setRefundInfo] = useState<RefundView | null>(null);
+	const [withdrawModal, setWithdrawModal] = useState(false);
 	const [keyName, setKeyName] = useState("My application");
 	const [selectedSession, setSelectedSession] = useState("");
 	const [newConnector, setNewConnector] = useState<ConnectorDraft | null>(null);
@@ -206,7 +210,6 @@ export function Token2ApiConsole() {
 	const data = uiPreview ? previewSnapshot : snapshot.data;
 	const asset = data?.network.asset ?? "ETH";
 	const nativeSymbol = data ? networkMetadata(data.network).nativeSymbol : "";
-	const usd = assetFormatter(asset);
 	const viewer = data?.viewer;
 	const refundQuery = api.token2api.refundStatus.useQuery(
 		{ sessionId: refundSession?.id ?? `0x${"00".repeat(32)}` },
@@ -233,6 +236,7 @@ export function Token2ApiConsole() {
 		setNewKey(null);
 		setRefundSession(null);
 		setRefundInfo(null);
+		setWithdrawModal(false);
 		setNewConnector(null);
 		setLaunch(null);
 		setMessages([]);
@@ -356,10 +360,6 @@ export function Token2ApiConsole() {
 			const amount = parseMicroAmount(budget);
 			if (amount < 1_000_000 || amount > 100_000_000)
 				throw new Error(`预算应在 1 至 100 ${asset} 之间。`);
-			if (asset === "dUSD")
-				throw new Error(
-					"此市场仅支持已有预算，请在已开通的结算市场创建新预算。",
-				);
 			if (!viewer.demo) await getWallet(context.network, viewer.address);
 			if (!isCurrent()) return;
 			const result = await openSession.mutateAsync({
@@ -482,16 +482,28 @@ export function Token2ApiConsole() {
 			);
 		});
 	};
-	const doWithdraw = () =>
+	const doWithdraw = (recipient?: string) =>
 		void run("withdraw", async (isCurrent) => {
 			const context = chainContext(isCurrent);
 			if (!context) return;
 			const result = await withdraw.mutateAsync();
 			if (!isCurrent()) return;
-			if (result.mode === "wallet") await withdrawBalance(context);
+			if (result.mode === "wallet") await withdrawBalance(context, recipient);
 			if (!isCurrent()) return;
+			setWithdrawModal(false);
 			setNotice("提现交易已确认，余额已转入收款钱包。");
 		});
+	const openWithdraw = () => {
+		if (busy) return;
+		if (isNativeAsset(asset) && !viewer?.demo) {
+			setRefundSession(null);
+			setRefundInfo(null);
+			setError(null);
+			setWithdrawModal(true);
+		} else {
+			doWithdraw();
+		}
+	};
 	const selfClose = (session: SessionView) =>
 		void run("self-close", async (isCurrent) => {
 			const context = chainContext(isCurrent);
@@ -955,10 +967,11 @@ export function Token2ApiConsole() {
 									data={data}
 									focusRequests={billingTarget}
 									onConfirm={(id) =>
-										void run("confirm", async () => {
+										void run("confirm", async (isCurrent) => {
 											const confirmed = await confirmSession.mutateAsync({
 												id,
 											});
+											if (!isCurrent()) return;
 											if (confirmed.connection) {
 												setNewKey(confirmed.connection);
 												navigate("keys");
@@ -980,7 +993,7 @@ export function Token2ApiConsole() {
 											setNotice("该会话的待结算费用已提交链上。");
 										})
 									}
-									onWithdraw={doWithdraw}
+									onWithdraw={openWithdraw}
 								/>
 							)}
 							{section === "keys" && (
@@ -1030,9 +1043,20 @@ export function Token2ApiConsole() {
 							}
 						})
 					}
-					onWithdraw={doWithdraw}
+					onWithdraw={openWithdraw}
 					refund={currentRefund}
 					session={refundSession}
+				/>
+			)}
+			{withdrawModal && data && viewer && !walletMismatch && (
+				<WithdrawModal
+					address={viewer.address}
+					busy={busy}
+					claimable={data.metrics.claimable}
+					error={error}
+					network={data.network}
+					onClose={() => setWithdrawModal(false)}
+					onSubmit={doWithdraw}
 				/>
 			)}
 			{rentListing && data && !walletMismatch && (

@@ -519,7 +519,7 @@ describe("REST endpoint execution", () => {
 		const credentialRequest = (body = "{}") =>
 			new Request("https://example.com/api/v1/chat/completions", {
 				method: "POST",
-				headers: { authorization: "Bearer m2a_test" },
+				headers: { authorization: "Bearer t2a_test" },
 				body,
 			});
 

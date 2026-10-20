@@ -6,22 +6,21 @@ export const SETTLEMENT_ASSETS = [
 	"AVAX",
 	"USDT",
 	"USDC",
-	"dUSD",
 ] as const;
 export type SettlementAsset = (typeof SETTLEMENT_ASSETS)[number];
 export type BillingUnit = `micro_${SettlementAsset}`;
-export type BalanceUnit = "wei" | "atomic" | "micro_dUSD";
+export type BalanceUnit = "wei" | "atomic";
 export const NATIVE_TOKEN = "0x0000000000000000000000000000000000000000";
 export const isNativeAsset = (asset: SettlementAsset) =>
-	!["USDT", "USDC", "dUSD"].includes(asset);
-export const assetOf = (config: { asset?: SettlementAsset }): SettlementAsset =>
-	config.asset ?? "dUSD";
+	!["USDT", "USDC"].includes(asset);
+export const assetOf = (config: { asset: SettlementAsset }): SettlementAsset =>
+	config.asset;
 export const billingUnit = (asset: SettlementAsset): BillingUnit =>
 	`micro_${asset}`;
 export const balanceUnit = (asset: SettlementAsset): BalanceUnit =>
-	isNativeAsset(asset) ? "wei" : asset === "dUSD" ? "micro_dUSD" : "atomic";
+	isNativeAsset(asset) ? "wei" : "atomic";
 export const decimalsOf = (config: {
-	asset?: SettlementAsset;
+	asset: SettlementAsset;
 	tokenDecimals?: number;
 }) => config.tokenDecimals ?? (isNativeAsset(assetOf(config)) ? 18 : 6);
 function scaleOf(asset: SettlementAsset, decimals?: number) {

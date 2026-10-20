@@ -14,7 +14,7 @@ import {
 import { mnemonicToAccount } from "viem/accounts";
 import { foundry } from "viem/chains";
 import { escrowAbi } from "../src/lib/abi";
-import { inspectEscrowOwnerGuard } from "../src/server/services/escrow-version";
+import { assertEscrowOwnerGuard } from "../src/server/services/escrow-version";
 import type { ChainConfig } from "../src/server/services/runtime";
 import { assetOf, NATIVE_TOKEN } from "../src/shared/settlement-asset";
 
@@ -25,8 +25,7 @@ const configFile = path.join(directory, "chain.json");
 const rpcUrl = "http://127.0.0.1:8545";
 const account = (index: number) =>
 	mnemonicToAccount(mnemonic, { addressIndex: index });
-const meter = account(4).address;
-const treasury = account(5).address;
+const owner = account(4).address;
 type Artifact = { abi: Abi; bytecode: Hex };
 
 if (process.env.TOKEN2API_MODE !== "local") {
@@ -101,48 +100,33 @@ async function main() {
 				"Saved deployment is missing from the persistent chain; refusing to replace an existing ledger.",
 			);
 		}
-		const [actualToken, actualMeter, actualTreasury, actualFee] =
-			await Promise.all([
-				client.readContract({
-					address: escrow,
-					abi: escrowAbi,
-					functionName: "token",
-				}),
-				client.readContract({
-					address: escrow,
-					abi: escrowAbi,
-					functionName: "meter",
-				}),
-				client.readContract({
-					address: escrow,
-					abi: escrowAbi,
-					functionName: "treasury",
-				}),
-				client.readContract({
-					address: escrow,
-					abi: escrowAbi,
-					functionName: "feeBps",
-				}),
-			]);
+		const [actualToken, actualOwner, actualFee] = await Promise.all([
+			client.readContract({
+				address: escrow,
+				abi: escrowAbi,
+				functionName: "token",
+			}),
+			client.readContract({
+				address: escrow,
+				abi: escrowAbi,
+				functionName: "owner",
+			}),
+			client.readContract({
+				address: escrow,
+				abi: escrowAbi,
+				functionName: "feeBps",
+			}),
+		]);
 		if (
-			getAddress(existing.meter) !== meter ||
-			getAddress(existing.treasury) !== treasury ||
 			actualToken !== token ||
-			actualMeter !== meter ||
-			actualTreasury !== treasury ||
+			actualOwner === NATIVE_TOKEN ||
 			actualFee !== 500
 		) {
 			throw new Error(
 				"Saved escrow terms do not match the local demo configuration.",
 			);
 		}
-		if (
-			(await inspectEscrowOwnerGuard(client, escrow, account(0).address)) ===
-			"legacy"
-		)
-			console.warn(
-				"Saved escrow lacks the session owner guard. New sessions are blocked; existing sessions can still settle, close and withdraw. Use a separate TOKEN2API_DATA_DIR and DATABASE_URL for a guarded deployment.",
-			);
+		await assertEscrowOwnerGuard(client, escrow, account(0).address);
 		console.log(`Reusing local escrow ${escrow}`);
 		console.log("TOKEN2API_CHAIN_READY");
 		return;
@@ -156,7 +140,7 @@ async function main() {
 	const escrowReceipt = await client.waitForTransactionReceipt({
 		hash: await wallet.deployContract({
 			...artifact("NativeUsageEscrow"),
-			args: [meter, treasury, 500],
+			args: [owner, 500],
 		}),
 	});
 	if (escrowReceipt.status !== "success" || !escrowReceipt.contractAddress)
@@ -169,8 +153,6 @@ async function main() {
 		rpcUrl,
 		token,
 		escrow: escrowReceipt.contractAddress,
-		meter,
-		treasury,
 		deploymentBlock: escrowReceipt.blockNumber.toString(),
 	};
 	fs.writeFileSync(`${configFile}.tmp`, `${JSON.stringify(config, null, 2)}\n`);

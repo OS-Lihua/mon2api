@@ -14,8 +14,8 @@ import {
 } from "../src/shared/connector-distribution";
 
 const exec = promisify(execFile);
-const token = `m2c_${"a".repeat(43)}`;
-const launchCode = `m2l_${"b".repeat(43)}`;
+const token = `t2c_${"a".repeat(43)}`;
+const launchCode = `t2l_${"b".repeat(43)}`;
 let launchUsed = false;
 const apiKey = "test-only-private-upstream-key";
 let emptyDir: string;

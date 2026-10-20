@@ -2,7 +2,7 @@
 
 先按[多链结算](../MULTICHAIN.md)配置目标链、资产、独立数据库和运行目录。`pnpm deploy:evm` 部署原生资产或 ERC20 托管合约，并从目标代币合约读取精度。
 
-运行服务设置 `TOKEN2API_MODE=evm`、`ALLOW_DEMO=false`、`DATABASE_URL`、`TOKEN2API_DATA_DIR`、`APP_ORIGIN`、`SESSION_PASSWORD`、`METER_PRIVATE_KEY` 与上游允许来源。应用和 worker 必须读取相同公开链配置。外部资金交易等待 6 个区块确认；确认数不代表所有链均具有相同终局保证，实际环境需逐链验收。
+运行服务设置 `TOKEN2API_MODE=evm`、`ALLOW_DEMO=false`、`DATABASE_URL`、`TOKEN2API_DATA_DIR`、`APP_ORIGIN`、`SESSION_PASSWORD`、`ESCROW_OWNER_PRIVATE_KEY` 与上游允许来源。应用和 worker 必须读取相同公开链配置。外部资金交易等待 6 个区块确认；确认数不代表所有链均具有相同终局保证，实际环境需逐链验收。
 
 ## Web和worker
 
@@ -27,7 +27,7 @@ Vercel可以承载Web，不能承载本常驻worker。需要独立worker、数�
 
 ## Docker
 
-`docker-compose.yml`只启动本地数据库。`docker-compose.app.yml`用于 EVM 常驻部署，包含迁移、Web和worker。需配置 `POSTGRES_PASSWORD`、`SESSION_PASSWORD`、`METER_PRIVATE_KEY`、`CHAIN_CONFIG_JSON` 与 `APP_ORIGIN`；可选钱包 Project ID 通过同名 build arg 注入。容器镜像和目标主机部署尚未验收。
+`docker-compose.yml`只启动本地数据库。`docker-compose.app.yml`用于 EVM 常驻部署，包含迁移、Web和worker。需配置 `POSTGRES_PASSWORD`、`SESSION_PASSWORD`、`ESCROW_OWNER_PRIVATE_KEY`、`CHAIN_CONFIG_JSON` 与 `APP_ORIGIN`；可选钱包 Project ID 通过同名 build arg 注入。容器镜像和目标主机部署尚未验收。
 
 ## 发布验收
 

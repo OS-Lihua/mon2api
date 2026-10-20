@@ -25,6 +25,8 @@ const fixture = vi.hoisted(() => ({
 		| undefined,
 	config: {
 		mode: "evm",
+		asset: "USDC",
+		tokenDecimals: 6,
 		chainId: 8453,
 		rpcUrl: "http://127.0.0.1:1",
 		escrow: "",
@@ -82,7 +84,7 @@ it("uses real viem receipts, six blocks and a consumer force-close in an isolate
 	try {
 		const tokenArtifact = JSON.parse(
 			readFileSync(
-				new URL("../../../contracts/artifacts/DemoUSD.json", import.meta.url),
+				new URL("../../../contracts/artifacts/DemoUSDC.json", import.meta.url),
 				"utf8",
 			),
 		) as Artifact;
@@ -101,7 +103,7 @@ it("uses real viem receipts, six blocks and a consumer force-close in an isolate
 		if (!token) throw new Error("Missing token deployment");
 		const escrowTx = await consumer.deployContract({
 			...escrowArtifact,
-			args: [token, meter.account.address, supplier.account.address, 500],
+			args: [token, meter.account.address, 500],
 		});
 		const escrow = (await client.waitForTransactionReceipt({ hash: escrowTx }))
 			.contractAddress;
@@ -237,7 +239,7 @@ it("prevents a funded wallet from claiming another consumer's session ID", async
 	try {
 		const tokenArtifact = JSON.parse(
 			readFileSync(
-				new URL("../../../contracts/artifacts/DemoUSD.json", import.meta.url),
+				new URL("../../../contracts/artifacts/DemoUSDC.json", import.meta.url),
 				"utf8",
 			),
 		) as Artifact;
@@ -256,7 +258,7 @@ it("prevents a funded wallet from claiming another consumer's session ID", async
 		if (!token) throw new Error("Missing token deployment");
 		const escrowTx = await consumer.deployContract({
 			...escrowArtifact,
-			args: [token, consumer.account.address, attacker.account.address, 500],
+			args: [token, consumer.account.address, 500],
 		});
 		const escrow = (await client.waitForTransactionReceipt({ hash: escrowTx }))
 			.contractAddress;

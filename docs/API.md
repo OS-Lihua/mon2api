@@ -11,7 +11,7 @@
 | 凭证 | 用途 | 获取方式 |
 | --- | --- | --- |
 | `token2api_session` Cookie | 商家、消费者管理操作与私有账单 | 钱包签署 SIWE 登录消息；8 小时有效 |
-| `Authorization: Bearer m2a_…` | 模型查询、推理、按幂等键查询该会话的用量 | 为自己的活跃预算会话创建 Key；完整值仅返回一次 |
+| `Authorization: Bearer t2a_…` | 模型查询、推理、按幂等键查询该会话的用量 | 为自己的活跃预算会话创建 Key；完整值仅返回一次 |
 
 管理接口拒绝 `Authorization` 头，即使同时携带有效 Cookie。推理 Key 不能上架资源、创建预算、创建其他 Key 或读取其他会话。
 
@@ -91,7 +91,7 @@ CLI/服务端客户端用自己的钱包签名器完成同一流程，并保存 
 
 金额、预算和报价都是当前结算资产的整数百万分之一。`inputRate: 2000000` 表示输入每百万 Token 为 2 单位该资产。账本单位为 `micro_<asset>`，不可传小数或未经换算的其他资产价格。
 
-`GET /network` 返回 `chainId`、`asset`、`tokenDecimals` 和单位。链上金额等于账本金额乘以 `10 ** (tokenDecimals - 6)`。`GET /account/balances` 返回原始整数余额字符串，原生资产的 `unit` 为 `wei`，USDT、USDC 为 `atomic`，旧 dUSD 为 `micro_dUSD`。RPC 失败返回 503，不返回零余额。各实例账本独立，部署细节见[多链结算](./MULTICHAIN.md)。
+`GET /network` 返回 `chainId`、`asset`、`tokenDecimals` 和单位。链上金额等于账本金额乘以 `10 ** (tokenDecimals - 6)`。`GET /account/balances` 返回原始整数余额字符串，原生资产的 `unit` 为 `wei`，USDT、USDC 为 `atomic`。RPC 失败返回 503，不返回零余额。各实例账本独立，部署细节见[多链结算](./MULTICHAIN.md)。
 
 | 对象 | 关键状态 |
 | --- | --- |

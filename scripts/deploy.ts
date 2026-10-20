@@ -26,7 +26,8 @@ import {
 	validateChainConfig,
 } from "../src/shared/settlement-config";
 
-function requiredKey(name: "DEPLOYER_PRIVATE_KEY" | "METER_PRIVATE_KEY"): Hex {
+function requiredKey(): Hex {
+	const name = "ESCROW_OWNER_PRIVATE_KEY";
 	const value = process.env[name];
 	if (!value || !/^0x[\da-fA-F]{64}$/.test(value) || !value.startsWith("0x"))
 		throw new Error(`${name} must be explicitly configured.`);
@@ -41,13 +42,7 @@ async function main() {
 	const chain = settlementChain(
 		z.coerce.number().int().positive().parse(process.env.SETTLEMENT_CHAIN_ID),
 	);
-	const asset = z
-		.enum(SETTLEMENT_ASSETS)
-		.refine(
-			(value) => value !== "dUSD",
-			"New deployments require a native asset, USDT or USDC.",
-		)
-		.parse(process.env.SETTLEMENT_ASSET);
+	const asset = z.enum(SETTLEMENT_ASSETS).parse(process.env.SETTLEMENT_ASSET);
 	const rpcUrl = z
 		.string()
 		.url()
@@ -71,26 +66,17 @@ async function main() {
 			`.runtime/evm/${chain.id}-${asset.toLowerCase()}`,
 	);
 	const configFile = path.join(directory, "chain.json");
-	const deployer = privateKeyToAccount(requiredKey("DEPLOYER_PRIVATE_KEY"));
-	const meter = privateKeyToAccount(requiredKey("METER_PRIVATE_KEY")).address;
+	const owner = privateKeyToAccount(requiredKey());
 	for (let index = 0; index < 10; index++) {
 		const demo = mnemonicToAccount(
 			"test test test test test test test test test test test junk",
 			{ addressIndex: index },
 		).address;
-		if ([deployer.address, meter].includes(demo))
+		if (owner.address === demo)
 			throw new Error(
 				"Public demo accounts are restricted to loopback chain 31337.",
 			);
 	}
-	const treasury = getAddress(
-		z
-			.string()
-			.regex(/^0x[\da-fA-F]{40}$/)
-			.parse(process.env.TREASURY_ADDRESS),
-	);
-	if (treasury === NATIVE_TOKEN)
-		throw new Error("TREASURY_ADDRESS cannot be zero.");
 	const client = createPublicClient({ chain, transport: http(rpcUrl) });
 	if ((await client.getChainId()) !== chain.id)
 		throw new Error("RPC chain ID does not match the requested deployment.");
@@ -117,9 +103,7 @@ async function main() {
 			existing.chainId !== chain.id ||
 			existing.asset !== asset ||
 			decimalsOf(existing) !== tokenDecimals ||
-			getAddress(existing.token) !== token ||
-			getAddress(existing.meter) !== meter ||
-			getAddress(existing.treasury) !== treasury
+			getAddress(existing.token) !== token
 		)
 			throw new Error(
 				"Existing deployment differs. Use a separate TOKEN2API_DATA_DIR and DATABASE_URL.",
@@ -130,7 +114,7 @@ async function main() {
 			throw new Error(
 				"Saved escrow is absent; refusing to replace the existing ledger.",
 			);
-		const [actualToken, actualMeter, actualTreasury, fee] = await Promise.all([
+		const [actualToken, actualOwner, fee] = await Promise.all([
 			client.readContract({
 				address: escrow,
 				abi: escrowAbi,
@@ -139,12 +123,7 @@ async function main() {
 			client.readContract({
 				address: escrow,
 				abi: escrowAbi,
-				functionName: "meter",
-			}),
-			client.readContract({
-				address: escrow,
-				abi: escrowAbi,
-				functionName: "treasury",
+				functionName: "owner",
 			}),
 			client.readContract({
 				address: escrow,
@@ -154,12 +133,11 @@ async function main() {
 		]);
 		if (
 			getAddress(actualToken) !== token ||
-			getAddress(actualMeter) !== meter ||
-			getAddress(actualTreasury) !== treasury ||
+			getAddress(actualOwner) !== owner.address ||
 			fee !== 500
 		)
 			throw new Error("Saved escrow terms differ from the configuration.");
-		await assertEscrowOwnerGuard(client, escrow, deployer.address);
+		await assertEscrowOwnerGuard(client, escrow, owner.address);
 		console.log(
 			`Reusing ${chain.name} ${asset} escrow ${escrow}; no transactions sent.`,
 		);
@@ -189,7 +167,7 @@ async function main() {
 			),
 		);
 	const wallet = createWalletClient({
-		account: deployer,
+		account: owner,
 		chain,
 		transport: http(rpcUrl),
 	});
@@ -197,8 +175,8 @@ async function main() {
 		hash: await wallet.deployContract({
 			...artifact,
 			args: isNativeAsset(asset)
-				? [meter, treasury, 500]
-				: [token, meter, treasury, 500],
+				? [owner.address, 500]
+				: [token, owner.address, 500],
 		}),
 		confirmations: 6,
 	});
@@ -213,8 +191,6 @@ async function main() {
 			rpcUrl,
 			token,
 			escrow: receipt.contractAddress,
-			meter,
-			treasury,
 			deploymentBlock: receipt.blockNumber.toString(),
 		}),
 	);

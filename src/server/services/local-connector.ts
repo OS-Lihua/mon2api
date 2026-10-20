@@ -31,7 +31,7 @@ async function lock(tx: Prisma.TransactionClient, id: string) {
 	await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(hashtext(${id}))`;
 }
 export async function createConnectorLaunch(user: Viewer, id: string) {
-	const code = `m2l_${randomBytes(32).toString("base64url")}`;
+	const code = `t2l_${randomBytes(32).toString("base64url")}`;
 	const expiresAt = new Date(Date.now() + 5 * 60_000);
 	const result = await db.listing.updateMany({
 		where: { id, owner: user.address, transport: "local" },
@@ -45,7 +45,7 @@ export async function createConnectorLaunch(user: Viewer, id: string) {
 	return { code, expiresAt: expiresAt.toISOString() };
 }
 export async function redeemConnectorLaunch(authorization: string | null) {
-	const match = /^Bearer (m2l_[\w-]{43})$/.exec(authorization ?? "");
+	const match = /^Bearer (t2l_[\w-]{43})$/.exec(authorization ?? "");
 	if (!match?.[1])
 		throw new AppError("unauthorized", "需要一次性启动码。", 401);
 	const launchHash = hash(match[1]);
@@ -60,7 +60,7 @@ export async function redeemConnectorLaunch(authorization: string | null) {
 		);
 	return db.$transaction(async (tx) => {
 		await lock(tx, row.id);
-		const token = `m2c_${randomBytes(32).toString("base64url")}`;
+		const token = `t2c_${randomBytes(32).toString("base64url")}`;
 		// Consume the code and replace the previous connection in one atomic write.
 		const changed = await tx.listing.updateMany({
 			where: {
@@ -91,7 +91,7 @@ export async function createLocalDraft(
 	user: Viewer,
 	input: z.infer<typeof localDraftInput>,
 ) {
-	const token = `m2c_${randomBytes(32).toString("base64url")}`;
+	const token = `t2c_${randomBytes(32).toString("base64url")}`;
 	const row = await db.listing.create({
 		data: {
 			...input,
@@ -188,7 +188,7 @@ export async function createLocalListing(
 	user: Viewer,
 	input: z.infer<typeof localListingInput>,
 ) {
-	const token = `m2c_${randomBytes(32).toString("base64url")}`;
+	const token = `t2c_${randomBytes(32).toString("base64url")}`;
 	const row = await db.listing.create({
 		data: {
 			...input,
@@ -201,7 +201,7 @@ export async function createLocalListing(
 	return { id: row.id, token };
 }
 export async function rotateConnector(user: Viewer, id: string) {
-	const token = `m2c_${randomBytes(32).toString("base64url")}`;
+	const token = `t2c_${randomBytes(32).toString("base64url")}`;
 	const updated = await db.$transaction(async (tx) => {
 		await lock(tx, id);
 		return tx.listing.updateMany({
@@ -221,7 +221,7 @@ export async function rotateConnector(user: Viewer, id: string) {
 	return { id, token };
 }
 export async function authenticateConnector(authorization: string | null) {
-	const match = /^Bearer (m2c_[\w-]{43})$/.exec(authorization ?? "");
+	const match = /^Bearer (t2c_[\w-]{43})$/.exec(authorization ?? "");
 	if (!match?.[1])
 		throw new AppError("unauthorized", "需要本机连接器凭证。", 401);
 	const credentialHash = hash(match[1]);

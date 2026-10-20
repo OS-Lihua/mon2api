@@ -136,7 +136,7 @@ describe("merchant and consumer REST security", () => {
 	});
 	it("never promotes inference keys to management credentials, even with a session", async () => {
 		const response = await api.merchantResourcesPost(
-			req("/merchant/resources", input, { authorization: "Bearer m2a_test" }),
+			req("/merchant/resources", input, { authorization: "Bearer t2a_test" }),
 		);
 		expect(response.status).toBe(401);
 		expect(mocks.user).not.toHaveBeenCalled();
@@ -298,7 +298,7 @@ describe("buyer connection REST responses", () => {
 	const sessionId = `0x${"ab".repeat(32)}`;
 	const connection = {
 		base_url: "https://market.example/v1",
-		key: `m2a_${"x".repeat(43)}`,
+		key: `t2a_${"x".repeat(43)}`,
 		model: "seller/model",
 	};
 	it("returns a no-store connection bundle after funded-session confirmation", async () => {

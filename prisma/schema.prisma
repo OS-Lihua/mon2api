@@ -142,14 +142,28 @@ model WalletNonce {
   expiresAt DateTime
 }
 
-// One deployment and one settlement asset per database. Existing rows stay dUSD.
+// One deployment and one settlement asset per database. Asset metadata is required.
 model ChainBinding {
-  asset   String @default("dUSD")
-  tokenDecimals Int @default(6)
+  asset   String
+  tokenDecimals Int
   id      String @id
   chainId Int
   escrow  String
   token   String
+}
+
+// Signed transactions are durable before broadcast; a retry reuses the same nonce and hash.
+model ChainTransaction {
+  id        String   @id
+  sender    String
+  nonce     Int
+  raw       String
+  hash      String   @unique
+  status    String   @default("PENDING")
+  createdAt DateTime @default(now())
+
+  @@unique([sender, nonce])
+  @@index([sender, status, nonce])
 }
 
 model ConnectorJob {

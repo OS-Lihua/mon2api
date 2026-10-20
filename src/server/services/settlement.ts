@@ -107,6 +107,10 @@ export async function settleSession(
 			const closure = await findSessionClose(sessionId);
 			await db.$transaction(async (tx) => {
 				await lock(tx, sessionId);
+				await tx.chainTransaction.updateMany({
+					where: { hash: closure.txHash, status: "PENDING" },
+					data: { status: "CONFIRMED" },
+				});
 				const current = await tx.lease.findUniqueOrThrow({
 					where: { id: sessionId },
 				});
@@ -204,6 +208,10 @@ async function confirmJob(
 ) {
 	await db.$transaction(async (tx) => {
 		await lock(tx, job.sessionId);
+		await tx.chainTransaction.updateMany({
+			where: { hash: txHash, status: "PENDING" },
+			data: { status: "CONFIRMED" },
+		});
 		const transition = await tx.settlement.updateMany({
 			where: { id: job.id, status: "READY" },
 			data: { status: "CONFIRMED", txHash },
@@ -350,21 +358,28 @@ export async function processSettlementQueue() {
 	const sessions = [
 		...new Map([...pending, ...audit].map((row) => [row.id, row])).values(),
 	];
-	const results: {
-		sessionId: string;
-		ok: boolean;
-	}[] = [];
-	for (const session of sessions) {
-		try {
-			await settleSession(session.id);
-			const lease = await db.lease.findUniqueOrThrow({
-				where: { id: session.id },
-			});
-			if (lease.status === "CLOSING") await closeSession(session.id);
-			results.push({ sessionId: session.id, ok: true });
-		} catch {
-			results.push({ sessionId: session.id, ok: false });
-		}
-	}
-	return results;
+	const outcomes = new Map<string, boolean>();
+	let cursor = 0;
+	await Promise.all(
+		Array.from({ length: Math.min(4, sessions.length) }, async () => {
+			for (;;) {
+				const session = sessions[cursor++];
+				if (!session) return;
+				try {
+					await settleSession(session.id);
+					const lease = await db.lease.findUniqueOrThrow({
+						where: { id: session.id },
+					});
+					if (lease.status === "CLOSING") await closeSession(session.id);
+					outcomes.set(session.id, true);
+				} catch {
+					outcomes.set(session.id, false);
+				}
+			}
+		}),
+	);
+	return sessions.map(({ id }) => ({
+		sessionId: id,
+		ok: outcomes.get(id) === true,
+	}));
 }

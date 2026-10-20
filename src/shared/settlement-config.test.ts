@@ -16,14 +16,17 @@ const metadata = {
 	rpcUrl: "https://rpc.example",
 	token: NATIVE_TOKEN,
 	escrow: `0x${"11".repeat(20)}`,
-	meter: `0x${"22".repeat(20)}`,
-	treasury: `0x${"33".repeat(20)}`,
 	deploymentBlock: "1",
 };
 const parse = (input: unknown) =>
 	validateChainConfig(chainConfigSchema.parse(input));
 
 describe("settlement network and asset boundaries", () => {
+	it("rejects missing assets and obsolete test assets instead of applying a fallback", () => {
+		const { asset: _asset, ...missing } = metadata;
+		expect(() => parse(missing)).toThrow();
+		expect(() => parse({ ...metadata, asset: "dUSD" })).toThrow();
+	});
 	it("uses the configured default network consistently for the market and wallet", () => {
 		expect(DEFAULT_NETWORK).toMatchObject({ mode: "evm", chainId: 1 });
 		expect(previewSnapshot.network).toMatchObject({ chainId: 1, asset: "ETH" });

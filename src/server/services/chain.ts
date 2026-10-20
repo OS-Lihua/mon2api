@@ -1,14 +1,18 @@
 import "server-only";
+import type { ChainTransaction, Prisma } from "@prisma/client";
 import {
 	createPublicClient,
 	createWalletClient,
 	defineChain,
+	encodeFunctionData,
 	getAddress,
 	type Hex,
 	http,
+	keccak256,
 	parseEventLogs,
 } from "viem";
 import { mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
+import { z } from "zod";
 import { escrowAbi, nativeEscrowAbi, tokenAbi } from "~/lib/abi";
 import { db } from "~/server/db";
 import { networkMetadata } from "~/shared/network";
@@ -62,18 +66,23 @@ export function clients() {
 		publicClient: clientCache.publicClient,
 	};
 }
-function meterWallet() {
-	const { config, chain } = clients();
-	const privateKey = process.env.METER_PRIVATE_KEY;
-	if (
-		config.mode !== "local" &&
-		(!privateKey || !/^0x[\da-fA-F]{64}$/.test(privateKey))
-	)
-		throw new Error("METER_PRIVATE_KEY is required.");
+
+/** Resolve the configured signer against the current on-chain owner, never saved metadata. */
+export async function ownerWallet(checkOwner = true) {
+	const { config, chain, publicClient } = clients();
+	const privateKey = process.env.ESCROW_OWNER_PRIVATE_KEY;
 	const account =
-		config.mode === "local"
+		config.mode === "local" && !privateKey
 			? demoAccount(4)
-			: privateKeyToAccount(privateKey as Hex);
+			: privateKeyToAccount(
+					z
+						.custom<Hex>(
+							(value) =>
+								typeof value === "string" && /^0x[\da-fA-F]{64}$/.test(value),
+							"ESCROW_OWNER_PRIVATE_KEY must be configured with a valid signing key.",
+						)
+						.parse(privateKey),
+				);
 	if (
 		config.mode !== "local" &&
 		Array.from(
@@ -84,14 +93,44 @@ function meterWallet() {
 		throw new Error(
 			"Public demo accounts are restricted to loopback chain 31337.",
 		);
-	if (account.address.toLowerCase() !== config.meter.toLowerCase())
-		throw new Error("Meter signer mismatch.");
+	if (checkOwner) {
+		const owner = await publicClient.readContract({
+			address: getAddress(config.escrow),
+			abi: escrowAbi,
+			functionName: "owner",
+		});
+		if (getAddress(owner) !== account.address)
+			throw new Error("Configured signer is not the current escrow owner.");
+	}
 	return createWalletClient({ account, chain, transport: http(config.rpcUrl) });
+}
+
+let pauseState:
+	| { key: string; expires: number; value: Promise<boolean> }
+	| undefined;
+/** Admission reads share a one-second cache; failed reads never admit work. */
+export function readEscrowPaused(): Promise<boolean> {
+	const { config, publicClient } = clients();
+	const key = `${config.chainId}:${config.rpcUrl}:${config.escrow}`;
+	if (pauseState?.key === key && pauseState.expires > Date.now())
+		return pauseState.value;
+	const value = publicClient.readContract({
+		address: getAddress(config.escrow),
+		abi: escrowAbi,
+		functionName: "paused",
+	});
+	pauseState = { key, expires: Date.now() + 1000, value };
+	value.catch(() => {
+		if (pauseState?.value === value) pauseState = undefined;
+	});
+	return value;
 }
 type ChainGlobal = typeof globalThis & {
 	token2apiChainQueue?: Promise<unknown>;
 };
-async function serializedChain<T>(action: () => Promise<T>): Promise<T> {
+async function serializedChain<T>(
+	action: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
 	const global = globalThis as ChainGlobal;
 	const previous = global.token2apiChainQueue || Promise.resolve();
 	const result = previous
@@ -100,13 +139,122 @@ async function serializedChain<T>(action: () => Promise<T>): Promise<T> {
 			db.$transaction(
 				async (tx) => {
 					await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(hashtext(${"token2api:chain-signer"}))`;
-					return action();
+					return action(tx);
 				},
 				{ timeout: 120_000, maxWait: 30_000 },
 			),
 		);
 	global.token2apiChainQueue = result.catch(() => undefined);
 	return result;
+}
+
+const transactionHex = z.custom<Hex>(
+	(value) => typeof value === "string" && /^0x(?:[\da-fA-F]{2})+$/.test(value),
+	"Invalid stored transaction bytes.",
+);
+class EscrowTransactionReverted extends Error {}
+
+/** Allocate a nonce and commit the signed bytes before any broadcast. */
+async function prepareOwnerTransaction(id: string, data: Hex) {
+	return serializedChain(async (tx) => {
+		const existing = await tx.chainTransaction.findUnique({ where: { id } });
+		if (existing && !["REVERTED", "CONSUMED"].includes(existing.status))
+			return existing;
+		const { config, publicClient } = clients();
+		const wallet = await ownerWallet();
+		const sender = wallet.account.address.toLowerCase();
+		const [pendingNonce, stored] = await Promise.all([
+			publicClient.getTransactionCount({
+				address: wallet.account.address,
+				blockTag: "pending",
+			}),
+			tx.chainTransaction.aggregate({
+				where: { sender },
+				_max: { nonce: true },
+			}),
+		]);
+		// The durable maximum protects concurrent processes against a stale RPC mempool view.
+		const nonce = Math.max(pendingNonce, (stored._max.nonce ?? -1) + 1);
+		const request = await wallet.prepareTransactionRequest({
+			to: getAddress(config.escrow),
+			data,
+			nonce,
+		});
+		const raw = await wallet.signTransaction(request);
+		const transaction = {
+			sender,
+			nonce,
+			raw,
+			hash: keccak256(raw),
+			status: "PENDING",
+		};
+		return tx.chainTransaction.upsert({
+			where: { id },
+			create: { id, ...transaction },
+			update: transaction,
+		});
+	});
+}
+
+/** Replay earlier signed nonces too, including a process crash before broadcast. */
+async function broadcastOwnerTransaction(
+	transaction: ChainTransaction,
+): Promise<Hex> {
+	const { config, publicClient } = clients();
+	const pending = await db.chainTransaction.findMany({
+		where: {
+			sender: transaction.sender,
+			status: "PENDING",
+			nonce: { lte: transaction.nonce },
+		},
+		orderBy: { nonce: "asc" },
+	});
+	for (const item of pending) {
+		const hash = transactionHex.parse(item.hash);
+		try {
+			const sent = await publicClient.sendRawTransaction({
+				serializedTransaction: transactionHex.parse(item.raw),
+			});
+			if (sent.toLowerCase() !== hash.toLowerCase())
+				throw new Error(
+					"Broadcast transaction hash does not match signed bytes.",
+				);
+		} catch (cause) {
+			// An already-known or mined transaction is safe to reuse. Unknown failures stay durable.
+			const known = await publicClient
+				.getTransaction({ hash })
+				.catch(() => null);
+			if (!known) {
+				// An administrator may have used this nonce while the worker was stopped.
+				// Only a confirmed account nonce can retire the saved transaction.
+				const tip = await publicClient.getBlockNumber();
+				const depth = config.mode === "local" ? 0n : 5n;
+				const consumed =
+					tip >= depth &&
+					(await publicClient.getTransactionCount({
+						address: getAddress(item.sender),
+						blockNumber: tip - depth,
+					})) > item.nonce;
+				if (!consumed) throw cause;
+				await recordOwnerTransaction(hash, "CONSUMED");
+				if (item.id === transaction.id)
+					throw new Error(
+						"Saved transaction nonce was consumed; retry to prepare a new transaction.",
+					);
+			}
+		}
+	}
+	return transactionHex.parse(transaction.hash);
+}
+
+async function recordOwnerTransaction(
+	hash: Hex,
+	status: "CONFIRMED" | "REVERTED" | "CONSUMED",
+) {
+	await db.chainTransaction.updateMany({
+		where: { hash, status: "PENDING" },
+		data: { status },
+	});
 }
 export async function readSession(id: string, blockNumber?: bigint) {
 	const { config, publicClient } = clients();
@@ -215,21 +363,19 @@ export async function sendSettlement(
 	nonce: number,
 	receiptsHash: string,
 ) {
-	return serializedChain(async () => {
-		const { config } = clients();
-		const current = await readSession(id);
-		if (current.nonce > nonce) {
-			const recovered = await findSettlement(
-				id,
-				nonce,
-				receiptsHash,
-				cumulative,
-			);
-			if (recovered && current.spent >= cumulative) return recovered;
-			throw new Error("Settlement receipt does not match chain state.");
+	const { config } = clients();
+	const current = await readSession(id);
+	if (current.nonce > nonce) {
+		const recovered = await findSettlement(id, nonce, receiptsHash, cumulative);
+		if (recovered && current.spent >= cumulative) {
+			await recordOwnerTransaction(recovered, "CONFIRMED");
+			return recovered;
 		}
-		const hash = await meterWallet().writeContract({
-			address: getAddress(config.escrow),
+		throw new Error("Settlement receipt does not match chain state.");
+	}
+	const transaction = await prepareOwnerTransaction(
+		`settle:${id}:${nonce}`,
+		encodeFunctionData({
 			abi: escrowAbi,
 			functionName: "settle",
 			args: [
@@ -238,27 +384,47 @@ export async function sendSettlement(
 				BigInt(nonce),
 				receiptsHash as Hex,
 			],
-		});
-		return confirmSettlement(hash, id, nonce, receiptsHash, cumulative);
-	});
+		}),
+	);
+	const hash = await broadcastOwnerTransaction(transaction);
+	try {
+		const confirmed = await confirmSettlement(
+			hash,
+			id,
+			nonce,
+			receiptsHash,
+			cumulative,
+		);
+		await recordOwnerTransaction(hash, "CONFIRMED");
+		return confirmed;
+	} catch (cause) {
+		if (cause instanceof EscrowTransactionReverted)
+			await recordOwnerTransaction(hash, "REVERTED");
+		throw cause;
+	}
 }
 export async function sendClose(id: string) {
-	return serializedChain(async () => {
-		const { config, publicClient } = clients();
-		if ((await readSession(id)).closed) return null;
-		const hash = await meterWallet().writeContract({
-			address: getAddress(config.escrow),
+	const { config, publicClient } = clients();
+	if ((await readSession(id)).closed) return null;
+	const transaction = await prepareOwnerTransaction(
+		`close:${id}`,
+		encodeFunctionData({
 			abi: escrowAbi,
 			functionName: "closeSession",
 			args: [id as Hex],
-		});
-		const receipt = await publicClient.waitForTransactionReceipt({
-			hash,
-			confirmations: config.mode === "local" ? 1 : 6,
-		});
-		if (receipt.status !== "success") throw new Error("Close reverted.");
-		return hash;
+		}),
+	);
+	const hash = await broadcastOwnerTransaction(transaction);
+	const receipt = await publicClient.waitForTransactionReceipt({
+		hash,
+		confirmations: config.mode === "local" ? 1 : 6,
 	});
+	await recordOwnerTransaction(
+		hash,
+		receipt.status === "success" ? "CONFIRMED" : "REVERTED",
+	);
+	if (receipt.status !== "success") throw new Error("Close reverted.");
+	return receipt.transactionHash;
 }
 export async function demoOpen(
 	address: string,
@@ -365,7 +531,8 @@ export async function confirmSettlement(
 		hash,
 		confirmations: config.mode === "local" ? 1 : 6,
 	});
-	if (receipt.status !== "success") throw new Error("Settlement reverted.");
+	if (receipt.status !== "success")
+		throw new EscrowTransactionReverted("Settlement reverted.");
 	const events = parseEventLogs({
 		abi: escrowAbi,
 		eventName: "UsageSettled",

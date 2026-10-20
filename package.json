@@ -36,6 +36,7 @@
 		"test:api": "tsx scripts/api-smoke.ts",
 		"setup": "node scripts/setup.mjs",
 		"deploy:evm": "tsx scripts/deploy.ts",
+		"escrow:admin": "node --conditions=react-server --import tsx scripts/escrow-admin.ts",
 		"worker": "node --conditions=react-server --import tsx scripts/worker.ts",
 		"review:resolve": "node --conditions=react-server --import tsx scripts/resolve-review.ts",
 		"preview:local": "node scripts/dev.mjs --production",

@@ -297,7 +297,7 @@ try {
 	const stolen = await fetch(`${platformUrl}/api/v1/connector/poll`, {
 		method: "POST",
 		headers: {
-			authorization: "Bearer m2a_not-a-connector",
+			authorization: "Bearer t2a_not-a-connector",
 			"content-type": "application/json",
 		},
 		body: JSON.stringify({ model: input.model }),

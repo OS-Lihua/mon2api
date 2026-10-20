@@ -1,5 +1,3 @@
-import { formatAsset } from "~/shared/money";
-import type { SettlementAsset } from "~/shared/settlement-asset";
 import type { ListingView, SessionView } from "~/shared/token2api";
 
 export type Section =
@@ -26,10 +24,6 @@ const dateFormat = Intl.DateTimeFormat("zh-CN", {
 	hour12: false,
 });
 export const date = (value: string) => dateFormat.format(new Date(value));
-export const assetFormatter =
-	(asset: SettlementAsset) =>
-	(amount: number | string, precise = false) =>
-		formatAsset(amount, asset, precise);
 export const sameAddress = (left?: string | null, right?: string | null) =>
 	!!left && !!right && left.toLowerCase() === right.toLowerCase();
 export const activeSession = (session: SessionView) =>

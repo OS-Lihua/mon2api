@@ -4,15 +4,14 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
+import "./EscrowControl.sol";
 
-/// @notice Budget-bounded settlement. The meter is a trusted usage oracle.
+/// @notice Budget-bounded settlement. The owner is a trusted usage oracle.
 /// @dev Only supports non-rebasing ERC20 tokens without transfer fees. Receipts
 /// hashes anchor off-chain records; they do not prove that AI work occurred.
-contract UsageEscrow is ReentrancyGuard {
+contract UsageEscrow is EscrowControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
     IERC20 public immutable token;
-    address public immutable meter;
-    address public immutable treasury;
     uint16 public immutable feeBps;
     uint64 public constant GRACE_PERIOD = 120;
 
@@ -36,13 +35,13 @@ contract UsageEscrow is ReentrancyGuard {
     event SessionClosed(bytes32 indexed id, uint256 refund);
     event Withdrawn(address indexed recipient, uint256 amount);
 
-    constructor(IERC20 token_, address meter_, address treasury_, uint16 feeBps_) {
-        require(address(token_) != address(0) && meter_ != address(0) && treasury_ != address(0), "zero address");
+    constructor(IERC20 token_, address owner_, uint16 feeBps_) EscrowControl(owner_) {
+        require(address(token_) != address(0), "zero address");
         require(feeBps_ <= 2000, "fee too high");
-        token = token_; meter = meter_; treasury = treasury_; feeBps = feeBps_;
+        token = token_; feeBps = feeBps_;
     }
 
-    function openSession(bytes32 id, address provider, bytes32 termsHash, uint256 budget, uint64 expiresAt) external nonReentrant {
+    function openSession(bytes32 id, address provider, bytes32 termsHash, uint256 budget, uint64 expiresAt) external whenNotPaused nonReentrant {
         require(address(uint160(uint256(id >> 96))) == msg.sender, "session owner mismatch");
         require(sessions[id].consumer == address(0), "session exists");
         require(provider != address(0) && termsHash != bytes32(0) && budget > 0, "invalid terms");
@@ -54,8 +53,7 @@ contract UsageEscrow is ReentrancyGuard {
         emit SessionOpened(id, msg.sender, provider, budget, termsHash, expiresAt);
     }
 
-    function settle(bytes32 id, uint256 cumulativeSpent, uint64 nonce, bytes32 receiptsHash) external {
-        require(msg.sender == meter, "meter only");
+    function settle(bytes32 id, uint256 cumulativeSpent, uint64 nonce, bytes32 receiptsHash) external onlyOwner whenNotPaused {
         Session storage s = sessions[id];
         require(s.consumer != address(0) && !s.closed, "inactive session");
         uint256 deadline = s.closeAfter == 0 ? uint256(s.expiresAt) + GRACE_PERIOD : s.closeAfter;
@@ -66,7 +64,7 @@ contract UsageEscrow is ReentrancyGuard {
         // Cumulative fee rounding makes splitting a batch economically neutral.
         uint256 fee = Math.mulDiv(cumulativeSpent, feeBps, 10000) - Math.mulDiv(s.spent, feeBps, 10000);
         claimable[s.provider] += delta - fee;
-        claimable[treasury] += fee;
+        claimable[owner()] += fee;
         s.spent = cumulativeSpent;
         s.nonce++;
         emit UsageSettled(id, nonce, cumulativeSpent, receiptsHash);
@@ -85,9 +83,9 @@ contract UsageEscrow is ReentrancyGuard {
         Session storage s = sessions[id];
         require(s.consumer != address(0) && !s.closed, "inactive session");
         uint256 deadline = s.closeAfter == 0 ? uint256(s.expiresAt) + GRACE_PERIOD : s.closeAfter;
-        // The trusted meter may finalize early. After the window anyone can
+        // The owner may finalize early while active. After the window anyone can
         // release the refund, always to the original consumer's claimable balance.
-        require(msg.sender == meter || block.timestamp >= deadline, "await settlement window");
+        require((msg.sender == owner() && !paused()) || block.timestamp >= deadline, "await settlement window");
         s.closed = true;
         uint256 refund = s.budget - s.spent;
         claimable[s.consumer] += refund;

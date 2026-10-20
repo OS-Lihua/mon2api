@@ -1,11 +1,11 @@
 "use client";
 
 import { Activity, Blocks, Wallet, Zap } from "lucide-react";
+import { formatAmount as usd } from "~/shared/money";
 import type { Snapshot } from "~/shared/token2api";
-import { assetFormatter, compact } from "./format";
+import { compact } from "./format";
 
 export function Stats({ data }: { data: Snapshot }) {
-	const usd = assetFormatter(data.network.asset);
 	const tokens = data.metrics.inputTokens + data.metrics.outputTokens;
 	const items = [
 		{

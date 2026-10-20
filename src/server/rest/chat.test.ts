@@ -29,7 +29,7 @@ vi.mock("~/server/services/market", () => ({
 }));
 vi.mock("~/server/services/metering", () => ({ runChat: mocks.runChat }));
 vi.mock("~/server/services/runtime", () => ({
-	chainConfig: () => ({ asset: "dUSD" }),
+	chainConfig: () => ({ asset: "USDC" }),
 }));
 vi.mock("~/env", () => ({ env: { ALLOWED_ORIGINS: "" } }));
 vi.mock("~/server/security/rate-limit", () => ({
@@ -88,7 +88,7 @@ describe("REST chat finish reasons", () => {
 		expect(body.token2api).toEqual({
 			request_id: "request-123",
 			cost: 1,
-			unit: "micro_dUSD",
+			unit: "micro_USDC",
 			usage_source: "upstream_reported",
 		});
 	});

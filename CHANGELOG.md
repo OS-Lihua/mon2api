@@ -9,6 +9,14 @@ Tag format:
 
 ## Unreleased
 
+- Discard late budget-confirmation credentials after a wallet identity change. Persist signed escrow transactions and nonce assignments before broadcast, wait for confirmations outside the signer lock, replay saved transactions after failures, and process up to four settlement sessions concurrently.
+
+- Remove legacy settlement-asset fallbacks, dUSD runtime support and older escrow reuse paths. Require explicit asset metadata, move the faucet token into test fixtures, and use only t2a_, t2c_ and t2l_ credentials. Publish connector 0.1.5; existing credentials must be regenerated. Add a database migration for the signed transaction outbox without converting existing balances.
+
+- Use one escrow owner wallet for deployment, metering, administration and future platform fees. Add two-step ownership handover and pause/resume to both escrows, preserve consumer timeout exits and withdrawals while paused, and reject stale worker signers against the live on-chain owner. Replace separate signing/treasury settings with ESCROW_OWNER_PRIVATE_KEY and add escrow:admin commands; new contracts require an isolated ledger.
+
+- Let native-asset escrow users withdraw their own credit to a chosen recipient, including contract wallets that reject plain native transfers. Add a recipient field to web withdrawals and cover rejected transfers, caller ownership, retries and reentry on a local EVM.
+
 - Accept custom gateway API base paths consistently for model discovery and streamed inference in direct and local-connector modes. Keep origin approval and credential protections; publish connector 0.1.4.
 
 - Remove OAuth-pool onboarding and connection-mode fields from the UI, database, REST and OpenAPI. All resources use gateway URLs and inference API keys; user login remains wallet-signature based.

@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { inspectEscrowOwnerGuard } from "../src/server/services/escrow-version";
+import { assertEscrowOwnerGuard } from "../src/server/services/escrow-version";
 
 const escrow = "0x1111111111111111111111111111111111111111";
 const caller = "0x2222222222222222222222222222222222222222";
 const call = vi.fn();
-const client = { call } as Parameters<typeof inspectEscrowOwnerGuard>[0];
+const client = { call };
 
 describe("escrow deployment reuse", () => {
 	beforeEach(() => {
@@ -15,22 +15,22 @@ describe("escrow deployment reuse", () => {
 		call.mockRejectedValue(
 			new Error("Execution reverted with reason: session owner mismatch."),
 		);
-		await expect(inspectEscrowOwnerGuard(client, escrow, caller)).resolves.toBe(
-			"guarded",
-		);
+		await expect(
+			assertEscrowOwnerGuard(client, escrow, caller),
+		).resolves.toBeUndefined();
 		const input = call.mock.calls[0]?.[0];
 		expect(input).toMatchObject({ to: escrow, account: caller });
 	});
 
-	it("recognizes an older escrow with the same deployment terms", async () => {
+	it("rejects a deployment that does not enforce session ownership", async () => {
 		call.mockRejectedValue(
 			new Error("Execution reverted", {
 				cause: new Error("Execution reverted with reason: invalid terms."),
 			}),
 		);
-		await expect(inspectEscrowOwnerGuard(client, escrow, caller)).resolves.toBe(
-			"legacy",
-		);
+		await expect(
+			assertEscrowOwnerGuard(client, escrow, caller),
+		).rejects.toThrow("could not be verified");
 	});
 
 	it("fails closed on a successful call or RPC error", async () => {
@@ -38,10 +38,10 @@ describe("escrow deployment reuse", () => {
 			.mockResolvedValueOnce({ data: "0x" })
 			.mockRejectedValueOnce(new Error("RPC unavailable"));
 		await expect(
-			inspectEscrowOwnerGuard(client, escrow, caller),
+			assertEscrowOwnerGuard(client, escrow, caller),
 		).rejects.toThrow("guard is absent");
 		await expect(
-			inspectEscrowOwnerGuard(client, escrow, caller),
+			assertEscrowOwnerGuard(client, escrow, caller),
 		).rejects.toThrow("could not be verified");
 	});
 });

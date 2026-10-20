@@ -6,7 +6,7 @@ import type { z } from "zod";
 import { db } from "~/server/db";
 import type { ChatResult } from "~/shared/token2api";
 import { AppError } from "./auth";
-import { readSession } from "./chain";
+import { readEscrowPaused, readSession } from "./chain";
 import { resourceAvailable } from "./connector-availability";
 import { runLocalConnector } from "./local-connector";
 import { lock } from "./market";
@@ -72,6 +72,12 @@ export async function runChat(
 	accessKeyId?: string,
 ): Promise<ChatResult> {
 	await ensureChainBinding();
+	if (await readEscrowPaused())
+		throw new AppError(
+			"settlement_paused",
+			"市场结算已暂停，暂不接受新调用。",
+			503,
+		);
 	const lease = await db.lease.findUnique({
 		where: { id: input.sessionId },
 		include: { listing: true },

@@ -4,14 +4,17 @@ import { fileURLToPath } from "node:url";
 import solc from "solc";
 
 export function compile(testTokens = false) {
-	const names = ["DemoUSD", "UsageEscrow", "NativeUsageEscrow"];
-	if (testTokens) names.push("SettlementTestToken");
+	const testNames = testTokens
+		? ["DemoUSDC", "SettlementTestToken", "NativeWithdrawalWallet"]
+		: [];
+	const names = ["UsageEscrow", "NativeUsageEscrow"];
+	names.push(...testNames);
 	const sources = Object.fromEntries(
-		names.map((name) => [
+		[...names, "EscrowControl"].map((name) => [
 			`${name}.sol`,
 			{
 				content: fs.readFileSync(
-					`contracts/${name === "SettlementTestToken" ? "test" : "src"}/${name}.sol`,
+					`contracts/${testNames.includes(name) ? "test" : "src"}/${name}.sol`,
 					"utf8",
 				),
 			},
@@ -61,5 +64,5 @@ export function compile(testTokens = false) {
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
 	compile(process.argv.includes("--test-tokens"));
-	console.log("Compiled legacy ERC20 and native token escrows (Shanghai EVM).");
+	console.log("Compiled ERC20 and native token escrows (Shanghai EVM).");
 }

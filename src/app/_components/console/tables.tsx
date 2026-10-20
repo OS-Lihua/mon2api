@@ -1,10 +1,9 @@
 "use client";
 
 import { ArrowUpRight, Power, Server, Wallet } from "lucide-react";
-import type { SettlementAsset } from "~/shared/settlement-asset";
+import { formatAmount as usd } from "~/shared/money";
 import type { ListingView, SessionView, Snapshot } from "~/shared/token2api";
 import {
-	assetFormatter,
 	listingKind,
 	sameAddress,
 	short,
@@ -20,21 +19,18 @@ import {
 } from "./ui";
 
 export function ResourceTable({
-	asset,
 	listings,
 	onRent,
 	onToggle,
 	onConnect,
 	busy,
 }: {
-	asset: SettlementAsset;
 	listings: ListingView[];
 	onRent?: (listing: ListingView) => void;
 	onToggle?: (listing: ListingView) => void;
 	onConnect?: (listing: ListingView) => void;
 	busy: boolean;
 }) {
-	const usd = assetFormatter(asset);
 	if (!listings.length) return onToggle ? null : <Empty title="暂无资源" />;
 	return (
 		<TableScroll>
@@ -139,7 +135,6 @@ export function SessionTable({
 	busy: boolean;
 	showAll: boolean;
 }) {
-	const usd = assetFormatter(data.network.asset);
 	if (!data.sessions.length)
 		return (
 			<Empty

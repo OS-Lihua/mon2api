@@ -78,9 +78,8 @@ export const networkResponse = z
 			"micro_AVAX",
 			"micro_USDT",
 			"micro_USDC",
-			"micro_dUSD",
 		]),
-		balanceUnit: z.enum(["wei", "atomic", "micro_dUSD"]),
+		balanceUnit: z.enum(["wei", "atomic"]),
 		mode: z.enum(["local", "evm"]),
 		chainId: z.number().int(),
 		token: addressSchema,
@@ -95,7 +94,7 @@ export const balancesResponse = z
 	.object({
 		walletBalance: z.string().regex(/^\d+$/),
 		claimable: z.string().regex(/^\d+$/),
-		unit: z.enum(["wei", "atomic", "micro_dUSD"]),
+		unit: z.enum(["wei", "atomic"]),
 	})
 	.strict();
 export const resourceResponse = z
@@ -227,7 +226,6 @@ export const refundResponse = z
 			"micro_AVAX",
 			"micro_USDT",
 			"micro_USDC",
-			"micro_dUSD",
 		]),
 		requestedAt: timestamp,
 		txHash: sessionIdSchema.nullable(),

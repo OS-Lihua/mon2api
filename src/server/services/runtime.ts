@@ -114,7 +114,7 @@ async function verifyChainBinding(config: ChainConfig) {
 		binding.chainId !== config.chainId ||
 		binding.escrow !== config.escrow.toLowerCase() ||
 		binding.token !== config.token.toLowerCase() ||
-		(binding.asset ?? "dUSD") !== assetOf(config) ||
+		binding.asset !== assetOf(config) ||
 		binding.tokenDecimals !== decimalsOf(config)
 	)
 		throw new Error(

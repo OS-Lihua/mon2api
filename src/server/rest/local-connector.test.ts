@@ -64,7 +64,7 @@ vi.mock("~/server/observability/logger", () => ({
 }));
 const user = { address: `0x${"11".repeat(20)}`, name: "Seller", demo: false };
 const id = "caaaaaaaaaaaaaaaaaaaaaaaa";
-const token = `m2c_${"a".repeat(43)}`;
+const token = `t2c_${"a".repeat(43)}`;
 const input = {
 	kind: "gateway",
 	name: "Local resource",
@@ -92,7 +92,7 @@ beforeEach(() => {
 });
 describe("local connector REST boundaries", () => {
 	it("keeps launch creation behind wallet authentication and permits only code exchange on the public endpoint", async () => {
-		const code = `m2l_${"b".repeat(43)}`;
+		const code = `t2l_${"b".repeat(43)}`;
 		mocks.launch.mockResolvedValue({
 			code,
 			expiresAt: new Date(Date.now() + 300000).toISOString(),
@@ -185,7 +185,7 @@ describe("local connector REST boundaries", () => {
 		);
 		expect(response.headers.get("cache-control")).toBe("no-store");
 	});
-	it.each([`Bearer ${token}`, "Bearer m2a_inference"])(
+	it.each([`Bearer ${token}`, "Bearer t2a_inference"])(
 		"cannot use %s for merchant management",
 		async (authorization) => {
 			const response = await createConnectorPost(req(input, { authorization }));

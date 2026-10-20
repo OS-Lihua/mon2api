@@ -22,10 +22,10 @@ describe("Native asset denomination boundaries", () => {
 		expect(() => toChainAmount(Number.MAX_SAFE_INTEGER + 1, "ETH")).toThrow();
 		expect(() => parseMicroAmount("0.0000001")).toThrow();
 	});
-	it("keeps old deployments denominated in micro dUSD", () => {
-		expect(assetOf({})).toBe("dUSD");
-		expect(toChainAmount(1_000_000, "dUSD")).toBe(1_000_000n);
-		expect(fromChainAmount(1_000_000n, "dUSD")).toBe(1_000_000);
+	it("uses an explicitly selected stablecoin", () => {
+		expect(assetOf({ asset: "USDC" })).toBe("USDC");
+		expect(toChainAmount(1_000_000, "USDC")).toBe(1_000_000n);
+		expect(fromChainAmount(1_000_000n, "USDC")).toBe(1_000_000);
 	});
 });
 

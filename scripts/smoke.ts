@@ -174,7 +174,7 @@ async function main() {
 	const { key } = await trpc(
 		"createKey",
 		{ sessionId: opened.id, name: "local-e2e-smoke" },
-		z.object({ key: z.string().regex(/^m2a_[\w-]{43}$/) }),
+		z.object({ key: z.string().regex(/^t2a_[\w-]{43}$/) }),
 	);
 	const sdk = new OpenAI({
 		apiKey: key,
@@ -302,7 +302,7 @@ async function main() {
 		"Session total does not match its bills.",
 	);
 	pass(
-		`stream final usage captured; ${bills.length} bills reconcile to ${spent} micro dUSD`,
+		`stream final usage captured; ${bills.length} bills reconcile to ${spent} micro-units`,
 	);
 
 	step = "settlement and replay";
@@ -396,7 +396,7 @@ async function main() {
 		"Revoked key must receive HTTP 401 from /v1/models.",
 	);
 	pass(
-		`unused budget refunded (${refund} micro dUSD); key revoked; close tx ${closed.txHash}`,
+		`unused budget refunded (${refund} micro-units); key revoked; close tx ${closed.txHash}`,
 	);
 
 	step = "provider withdrawal";

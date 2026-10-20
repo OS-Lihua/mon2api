@@ -29,12 +29,12 @@ export function registerLocalConnector(
 	registry.registerComponent("securitySchemes", "connectorAuth", {
 		type: "http",
 		scheme: "bearer",
-		bearerFormat: "m2c_ resource-scoped connector credential",
+		bearerFormat: "t2c_ resource-scoped connector credential",
 	});
 	registry.registerComponent("securitySchemes", "connectorLaunchAuth", {
 		type: "http",
 		scheme: "bearer",
-		bearerFormat: "m2l_ single-use launch code; expires after five minutes",
+		bearerFormat: "t2l_ single-use launch code; expires after five minutes",
 	});
 	const operations: {
 		path: string;
@@ -181,7 +181,7 @@ export function registerLocalConnector(
 			servers: [{ url: "/api/v1" }],
 			security: [{ [op.auth]: [] }],
 			description:
-				"Local upstream URL and key stay on the merchant machine. Resource concurrency is one. Poll every 2 seconds; heartbeat expires after 15 seconds. Jobs expire after 40 seconds and are claimed at most once; never retry inference after a lost response or restart. Updates use increasing revisions and cumulative append-only text; repeating an acknowledged revision is harmless. Unknown usage retains its prepaid reservation in REVIEW. A connector credential is not a wallet management cookie or consumer inference key. Response text and prompts persist in the job for delivery/reconciliation. All responses are no-store; HTTPS is required outside loopback. Prices use integer micro-units per million tokens in the configured settlement asset; check /network ledgerUnit. Legacy isolated dUSD deployments retain micro_dUSD. Paid use still requires a funded, confirmed lease.",
+				"Local upstream URL and key stay on the merchant machine. Resource concurrency is one. Poll every 2 seconds; heartbeat expires after 15 seconds. Jobs expire after 40 seconds and are claimed at most once; never retry inference after a lost response or restart. Updates use increasing revisions and cumulative append-only text; repeating an acknowledged revision is harmless. Unknown usage retains its prepaid reservation in REVIEW. A connector credential is not a wallet management cookie or consumer inference key. Response text and prompts persist in the job for delivery/reconciliation. All responses are no-store; HTTPS is required outside loopback. Prices use integer micro-units per million tokens in the configured settlement asset; check /network ledgerUnit. Paid use still requires a funded, confirmed lease.",
 			request: op.input
 				? {
 						body: {

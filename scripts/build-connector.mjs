@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { chmod, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+	chmod,
+	copyFile,
+	mkdir,
+	readdir,
+	readFile,
+	rm,
+	writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
@@ -63,6 +71,13 @@ export async function buildConnector() {
 		downloads,
 		`token2api-connector-${manifest.version}.tgz`,
 	);
+	for (const name of await readdir(downloads)) {
+		if (
+			/^token2api-connector-\d+\.\d+\.\d+\.tgz$/.test(name) &&
+			path.join(downloads, name) !== archive
+		)
+			await rm(path.join(downloads, name));
+	}
 	console.log(`Connector package: ${path.relative(root, archive)}`);
 	return archive;
 }

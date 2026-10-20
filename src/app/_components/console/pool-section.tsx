@@ -28,7 +28,6 @@ export function PoolSection({
 			</div>
 			<Panel title="我提供的资源">
 				<ResourceTable
-					asset={data.network.asset}
 					busy={busy}
 					listings={owned}
 					onConnect={onConnect}

@@ -56,9 +56,8 @@ async function deployFixture() {
 		return wallet;
 	};
 	const consumer = walletAt(0);
-	const meter = walletAt(1);
+	const owner = walletAt(1);
 	const supplier = walletAt(2);
-	const treasury = walletAt(3);
 	const stranger = walletAt(4);
 	const client = createPublicClient({
 		chain: foundry,
@@ -67,7 +66,7 @@ async function deployFixture() {
 		pollingInterval: 20,
 	});
 	const tokenArtifact = JSON.parse(
-		readFileSync("contracts/artifacts/DemoUSD.json", "utf8"),
+		readFileSync("contracts/artifacts/DemoUSDC.json", "utf8"),
 	) as Artifact;
 	const escrowArtifact = JSON.parse(
 		readFileSync("contracts/artifacts/UsageEscrow.json", "utf8"),
@@ -81,7 +80,7 @@ async function deployFixture() {
 	const token = tokenReceipt.contractAddress;
 	const escrowTx = await consumer.deployContract({
 		...escrowArtifact,
-		args: [token, meter.account.address, treasury.account.address, 500],
+		args: [token, owner.account.address, 500],
 	});
 	const escrowReceipt = await client.waitForTransactionReceipt({
 		hash: escrowTx,
@@ -119,14 +118,14 @@ async function deployFixture() {
 		});
 	}
 	const settle = (amount: bigint, nonce: bigint) =>
-		meter.writeContract({
+		owner.writeContract({
 			address: escrow,
 			abi: escrowAbi,
 			functionName: "settle",
 			args: [id, amount, nonce, receiptHash],
 		});
 	const close = () =>
-		meter.writeContract({
+		owner.writeContract({
 			address: escrow,
 			abi: escrowAbi,
 			functionName: "closeSession",
@@ -161,9 +160,8 @@ async function deployFixture() {
 		provider,
 		client,
 		consumer,
-		meter,
+		owner,
 		supplier,
-		treasury,
 		stranger,
 		token,
 		escrow,
@@ -183,7 +181,7 @@ describe("UsageEscrow with a real local EVM", { timeout: 30_000 }, () => {
 	let snapshot: string;
 
 	beforeAll(async () => {
-		execFileSync(process.execPath, ["scripts/compile.mjs"]);
+		execFileSync(process.execPath, ["scripts/compile.mjs", "--test-tokens"]);
 		fixture = await deployFixture();
 	}, 30_000);
 	beforeEach(async () => {
@@ -251,9 +249,9 @@ describe("UsageEscrow with a real local EVM", { timeout: 30_000 }, () => {
 		await f.settle(4_001n, 0n);
 		await f.close();
 		expect(await f.claimable(f.supplier.account.address)).toBe(3_801n);
-		expect(await f.claimable(f.treasury.account.address)).toBe(200n);
+		expect(await f.claimable(f.owner.account.address)).toBe(200n);
 		expect(await f.claimable(f.consumer.account.address)).toBe(5_999n);
-		for (const wallet of [f.supplier, f.treasury, f.consumer]) {
+		for (const wallet of [f.supplier, f.owner, f.consumer]) {
 			await wallet.writeContract({
 				address: f.escrow,
 				abi: escrowAbi,
@@ -264,7 +262,7 @@ describe("UsageEscrow with a real local EVM", { timeout: 30_000 }, () => {
 		expect(await f.balance(f.escrow)).toBe(0n);
 		expect(
 			(await f.balance(f.supplier.account.address)) +
-				(await f.balance(f.treasury.account.address)) +
+				(await f.balance(f.owner.account.address)) +
 				(await f.balance(f.consumer.account.address)),
 		).toBe(budget);
 		await expect(
@@ -286,7 +284,7 @@ describe("UsageEscrow with a real local EVM", { timeout: 30_000 }, () => {
 				functionName: "settle",
 				args: [f.id, 100n, 0n, receiptHash],
 			}),
-		).rejects.toThrow("meter only");
+		).rejects.toThrow("revert");
 		await expect(
 			f.stranger.writeContract({
 				address: f.escrow,
@@ -313,7 +311,7 @@ describe("UsageEscrow with a real local EVM", { timeout: 30_000 }, () => {
 		await expect(f.settle(budget + 1n, 0n)).rejects.toThrow("invalid amount");
 		await expect(f.settle(0n, 0n)).rejects.toThrow("invalid amount");
 		await expect(
-			f.meter.writeContract({
+			f.owner.writeContract({
 				address: f.escrow,
 				abi: escrowAbi,
 				functionName: "settle",
@@ -332,12 +330,12 @@ describe("UsageEscrow with a real local EVM", { timeout: 30_000 }, () => {
 		await f.open();
 		await f.settle(1n, 0n);
 		await f.settle(19n, 1n);
-		expect(await f.claimable(f.treasury.account.address)).toBe(0n);
+		expect(await f.claimable(f.owner.account.address)).toBe(0n);
 		await f.settle(20n, 2n);
-		expect(await f.claimable(f.treasury.account.address)).toBe(1n);
+		expect(await f.claimable(f.owner.account.address)).toBe(1n);
 		await f.settle(39n, 3n);
 		await f.settle(101n, 4n);
-		expect(await f.claimable(f.treasury.account.address)).toBe(5n);
+		expect(await f.claimable(f.owner.account.address)).toBe(5n);
 		expect(await f.claimable(f.supplier.account.address)).toBe(96n);
 	});
 

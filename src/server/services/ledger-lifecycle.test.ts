@@ -31,11 +31,13 @@ const mocks = vi.hoisted(() => ({
 		settlement: { findFirst: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
 		ledgerEntry: { create: vi.fn(), createMany: vi.fn() },
 		accessKey: { updateMany: vi.fn() },
+		chainTransaction: { updateMany: vi.fn() },
 	},
 	lock: vi.fn(),
 	runEngine: vi.fn(),
 	runLocalConnector: vi.fn(),
 	readSession: vi.fn(),
+	readEscrowPaused: vi.fn(),
 	findSettlement: vi.fn(),
 	findSessionClose: vi.fn(),
 	sendSettlement: vi.fn(),
@@ -61,6 +63,7 @@ vi.mock("./runtime", () => ({
 }));
 vi.mock("./market", () => ({ lock: mocks.lock }));
 vi.mock("./chain", () => ({
+	readEscrowPaused: mocks.readEscrowPaused,
 	readSession: mocks.readSession,
 	findSettlement: mocks.findSettlement,
 	findSessionClose: mocks.findSessionClose,
@@ -155,6 +158,7 @@ function changedNumber(
 beforeEach(() => {
 	resetAdmissionCache();
 	vi.clearAllMocks();
+	mocks.readEscrowPaused.mockResolvedValue(false);
 	lease = {
 		id: sessionId,
 		listingId: listing.id,
@@ -389,6 +393,22 @@ async function interruptAndResolve() {
 	await resolveReview(row.id, 5, 10, "invoice-verified");
 }
 describe("metering lifecycle guards", () => {
+	it("does not reserve money or call an upstream while the escrow is paused", async () => {
+		mocks.readEscrowPaused.mockResolvedValue(true);
+		await expect(runChat("consumer", args)).rejects.toMatchObject({
+			code: "settlement_paused",
+		});
+		expect(mocks.db.meterRequest.create).not.toHaveBeenCalled();
+		expect(mocks.runEngine).not.toHaveBeenCalled();
+		expect(mocks.runLocalConnector).not.toHaveBeenCalled();
+		expect(lease.reserved).toBe(0);
+	});
+	it("does not execute paid work when the pause-state RPC fails", async () => {
+		mocks.readEscrowPaused.mockRejectedValue(new Error("RPC unavailable"));
+		await expect(runChat("consumer", args)).rejects.toThrow("RPC unavailable");
+		expect(mocks.db.meterRequest.create).not.toHaveBeenCalled();
+		expect(mocks.runEngine).not.toHaveBeenCalled();
+	});
 	it.each(["success", "missing", "disconnected", "unclaimed"])(
 		"preserves prepaid accounting for local supply: %s",
 		async (outcome) => {

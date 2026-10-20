@@ -42,7 +42,7 @@ const mocks = vi.hoisted(() => ({
 	},
 }));
 vi.mock("~/server/db", () => ({ db: mocks.db }));
-const token = `m2c_${"a".repeat(43)}`;
+const token = `t2c_${"a".repeat(43)}`;
 const credentialHash = createHash("sha256").update(token).digest("hex");
 const listing = {
 	id: "caaaaaaaaaaaaaaaaaaaaaaaa",
@@ -86,7 +86,7 @@ beforeEach(() => {
 	mocks.db.lease.count.mockResolvedValue(0);
 });
 describe("local connector credential and delivery boundaries", () => {
-	it.each([null, "Bearer m2a_abc", "Bearer secret", "m2c_bad"])(
+	it.each([null, "Bearer t2a_abc", "Bearer secret", "t2c_bad"])(
 		"rejects non-connector credentials %s before querying",
 		async (authorization) => {
 			await expect(authenticateConnector(authorization)).rejects.toMatchObject({
@@ -231,13 +231,13 @@ describe("local connector credential and delivery boundaries", () => {
 	});
 });
 describe("one-copy connector launch", () => {
-	const code = `m2l_${"b".repeat(43)}`;
+	const code = `t2l_${"b".repeat(43)}`;
 	it("creates a short-lived code under the signed-in owner without replacing the active connection", async () => {
 		const result = await createConnectorLaunch(
 			{ address: "owner", name: "Seller", demo: false },
 			listing.id,
 		);
-		expect(result.code).toMatch(/^m2l_[\w-]{43}$/);
+		expect(result.code).toMatch(/^t2l_[\w-]{43}$/);
 		const data = mocks.db.listing.updateMany.mock.calls[0]?.[0].data;
 		expect(data.connectorLaunchHash).toBe(
 			createHash("sha256").update(result.code).digest("hex"),
@@ -254,7 +254,7 @@ describe("one-copy connector launch", () => {
 	});
 	it("atomically consumes the code, enforces expiry and returns only a new resource credential", async () => {
 		const result = await redeemConnectorLaunch(`Bearer ${code}`);
-		expect(result.token).toMatch(/^m2c_[\w-]{43}$/);
+		expect(result.token).toMatch(/^t2c_[\w-]{43}$/);
 		expect(mocks.db.listing.updateMany).toHaveBeenCalledWith({
 			where: expect.objectContaining({
 				id: listing.id,

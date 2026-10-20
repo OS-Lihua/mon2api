@@ -7,8 +7,14 @@ export const tokenAbi = parseAbi([
 ]);
 export const escrowAbi = parseAbi([
 	"function token() view returns (address)",
-	"function meter() view returns (address)",
-	"function treasury() view returns (address)",
+	"function owner() view returns (address)",
+	"function pendingOwner() view returns (address)",
+	"function transferOwnership(address newOwner)",
+	"function acceptOwnership()",
+	"function renounceOwnership()",
+	"function paused() view returns (bool)",
+	"function pause()",
+	"function unpause()",
 	"function feeBps() view returns (uint16)",
 	"function GRACE_PERIOD() view returns (uint64)",
 	"function openSession(bytes32 id, address provider, bytes32 termsHash, uint256 budget, uint64 expiresAt)",
@@ -23,8 +29,17 @@ export const escrowAbi = parseAbi([
 	"event CloseRequested(bytes32 indexed id, uint64 closeAfter)",
 	"event SessionClosed(bytes32 indexed id, uint256 refund)",
 	"event Withdrawn(address indexed recipient, uint256 amount)",
+	"event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner)",
+	"event OwnershipTransferred(address indexed previousOwner, address indexed newOwner)",
+	"event Paused(address account)",
+	"event Unpaused(address account)",
+	"error OwnableUnauthorizedAccount(address account)",
+	"error OwnableInvalidOwner(address owner)",
+	"error EnforcedPause()",
+	"error ExpectedPause()",
 ]);
 
 export const nativeEscrowAbi = parseAbi([
 	"function openSession(bytes32 id, address provider, bytes32 termsHash, uint256 budget, uint64 expiresAt) payable",
+	"function withdrawTo(address recipient)",
 ]);

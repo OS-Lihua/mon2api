@@ -26,12 +26,13 @@ const mocks = vi.hoisted(() => ({
 		$queryRaw: vi.fn(),
 		settlement: { findMany: vi.fn() },
 	},
-	clientAsset: "ETH" as "ETH" | "dUSD",
+	clientAsset: "ETH" as "ETH" | "USDC",
 	chainBalances: vi.fn(),
 	findSessionOpen: vi.fn(),
 	readSession: vi.fn(),
+	readEscrowPaused: vi.fn(),
 	getChainId: vi.fn(),
-	inspectEscrowOwnerGuard: vi.fn(),
+	assertEscrowOwnerGuard: vi.fn(),
 	chainConfig: vi.fn(),
 	discoverModels: vi.fn(),
 }));
@@ -39,7 +40,7 @@ vi.mock("./model-discovery", () => ({ discoverModels: mocks.discoverModels }));
 
 vi.mock("~/server/db", () => ({ db: mocks.db }));
 vi.mock("./escrow-version", () => ({
-	inspectEscrowOwnerGuard: mocks.inspectEscrowOwnerGuard,
+	assertEscrowOwnerGuard: mocks.assertEscrowOwnerGuard,
 }));
 vi.mock("./auth", () => ({
 	AppError: class extends Error {
@@ -53,6 +54,7 @@ vi.mock("./auth", () => ({
 	},
 }));
 vi.mock("./chain", () => ({
+	readEscrowPaused: mocks.readEscrowPaused,
 	chainBalances: mocks.chainBalances,
 	findSessionOpen: mocks.findSessionOpen,
 	readSession: mocks.readSession,
@@ -129,10 +131,13 @@ function lease(overrides: Partial<LeaseRow> = {}): LeaseRow {
 
 beforeEach(() => {
 	vi.resetAllMocks();
+	mocks.readEscrowPaused.mockResolvedValue(false);
 	mocks.clientAsset = "ETH";
 	mocks.db.$transaction.mockImplementation(async (action) => action(mocks.db));
 	mocks.chainConfig.mockReturnValue({
 		mode: "local",
+		asset: "USDC",
+		tokenDecimals: 6,
 		chainId: 31337,
 		escrow: "0xescrow",
 		token: "0xtoken",
@@ -144,7 +149,7 @@ beforeEach(() => {
 	mocks.db.accessKey.findMany.mockResolvedValue([]);
 	mocks.db.settlement.findMany.mockResolvedValue([]);
 	mocks.getChainId.mockResolvedValue(31337);
-	mocks.inspectEscrowOwnerGuard.mockResolvedValue("guarded");
+	mocks.assertEscrowOwnerGuard.mockResolvedValue(undefined);
 	mocks.chainBalances.mockResolvedValue({
 		claimable: "11",
 		walletBalance: "99",
@@ -479,25 +484,20 @@ describe("lease creation guard", () => {
 		demo: false,
 	};
 	const input = { listingId: "clw123456789012345678901234", budget: 1_000_000 };
-	it("keeps older escrow sessions available but rejects new leases", async () => {
-		mocks.inspectEscrowOwnerGuard.mockResolvedValue("legacy");
-		await expect(openSession(consumer, input)).rejects.toMatchObject({
-			code: "unsupported_escrow",
-			status: 409,
+	it("blocks new leases before writing a budget when the escrow is paused", async () => {
+		mocks.readEscrowPaused.mockResolvedValue(true);
+		await expect(openSession(viewer, input)).rejects.toMatchObject({
+			code: "settlement_paused",
 		});
 		expect(mocks.db.lease.create).not.toHaveBeenCalled();
 	});
-
-	it("rejects new budgets on a legacy dUSD deployment even with an owner guard", async () => {
-		mocks.clientAsset = "dUSD";
-		await expect(openSession(consumer, input)).rejects.toMatchObject({
-			code: "legacy_asset",
-		});
+	it("does not admit a new lease if the pause state cannot be read", async () => {
+		mocks.readEscrowPaused.mockRejectedValue(new Error("RPC unavailable"));
+		await expect(openSession(viewer, input)).rejects.toThrow("RPC unavailable");
 		expect(mocks.db.lease.create).not.toHaveBeenCalled();
 	});
-
 	it("does not create a draft when the RPC cannot verify the guard", async () => {
-		mocks.inspectEscrowOwnerGuard.mockRejectedValue(
+		mocks.assertEscrowOwnerGuard.mockRejectedValue(
 			new Error("RPC unavailable"),
 		);
 		await expect(openSession(consumer, input)).rejects.toMatchObject({
@@ -623,7 +623,7 @@ describe("native token activation credentials", () => {
 		expect(first.connection).toMatchObject({
 			base_url: "http://localhost:3000/v1",
 			model: "seller/model",
-			key: expect.stringMatching(/^m2a_[\w-]{43}$/),
+			key: expect.stringMatching(/^t2a_[\w-]{43}$/),
 		});
 		const stored = mocks.db.accessKey.create.mock.calls[0]?.[0]?.data;
 		expect(stored).toMatchObject({

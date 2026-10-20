@@ -108,7 +108,7 @@ export const openApiDocument = new OpenApiGeneratorV31(
 		title: "Token2API API",
 		version: "0.2.0",
 		description:
-			"Merchant and consumer management over wallet sessions; text inference over scoped API keys. Management endpoints use /api/v1 only. /v1 is an inference alias. Off-chain metering and prepaid on-chain settlement. Settlement deployments support Ethereum, Base, Arbitrum, Optimism, BSC, Polygon, Avalanche and Robinhood Chain with native assets or explicitly configured USDT/USDC. Each instance fixes one chain and asset. Billing uses integer micro-units; chain transfers use network.tokenDecimals. Local tests use loopback chain 31337. Legacy dUSD deployments remain isolated and serve existing sessions only.",
+			"Merchant and consumer management over wallet sessions; text inference over scoped API keys. Management endpoints use /api/v1 only. /v1 is an inference alias. Off-chain metering and prepaid on-chain settlement. Settlement deployments support Ethereum, Base, Arbitrum, Optimism, BSC, Polygon, Avalanche and Robinhood Chain with native assets or explicitly configured USDT/USDC. Each instance fixes one chain and asset. Billing uses integer micro-units; chain transfers use network.tokenDecimals. Local tests use loopback chain 31337.",
 	},
 	servers: [{ url: "/api/v1" }, { url: "/v1" }],
 	security: [{ bearerAuth: [] }],

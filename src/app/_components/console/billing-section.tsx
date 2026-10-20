@@ -2,9 +2,9 @@
 
 import { Activity, ArrowDownLeft, Blocks } from "lucide-react";
 import { useEffect, useState } from "react";
-import { formatChainBalance } from "~/shared/money";
+import { formatChainBalance, formatAmount as usd } from "~/shared/money";
 import type { SessionView, Snapshot } from "~/shared/token2api";
-import { assetFormatter, date, short, statusLabel, statusTone } from "./format";
+import { date, short, statusLabel, statusTone } from "./format";
 import { Stats } from "./stats";
 import { SessionTable } from "./tables";
 import {
@@ -54,7 +54,6 @@ export function BillingSection({
 	const [showAllRequests, setShowAllRequests] = useState(false);
 	const [showAllSettlements, setShowAllSettlements] = useState(false);
 	const asset = data.network.asset;
-	const usd = assetFormatter(asset);
 	const { claimable, walletBalance } = data.metrics;
 	useEffect(() => {
 		if (!focusRequests) return;

@@ -8,14 +8,12 @@ import {
 } from "./settlement-asset";
 export const chainConfigSchema = z.object({
 	mode: z.enum(["local", "evm"]),
-	asset: z.enum(SETTLEMENT_ASSETS).default("dUSD"),
+	asset: z.enum(SETTLEMENT_ASSETS),
 	chainId: z.number().int().positive(),
 	tokenDecimals: z.number().int().min(6).max(18).optional(),
 	rpcUrl: z.string().url(),
 	token: z.string().regex(/^0x[\da-fA-F]{40}$/),
 	escrow: z.string().regex(/^0x[\da-fA-F]{40}$/),
-	meter: z.string().regex(/^0x[\da-fA-F]{40}$/),
-	treasury: z.string().regex(/^0x[\da-fA-F]{40}$/),
 	deploymentBlock: z.string().regex(/^\d+$/),
 });
 export type ChainConfig = z.infer<typeof chainConfigSchema>;
@@ -48,8 +46,6 @@ export function validateChainConfig(value: ChainConfig): ChainConfig {
 		value.tokenDecimals === undefined
 	)
 		throw new Error("Stablecoin tokenDecimals must be explicitly configured.");
-	if (value.asset === "dUSD" && decimalsOf(value) !== 6)
-		throw new Error("Legacy dUSD requires 6 decimals.");
 	if (
 		isNativeAsset(value.asset) !==
 		(value.token.toLowerCase() === NATIVE_TOKEN)

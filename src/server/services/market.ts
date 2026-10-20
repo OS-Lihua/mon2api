@@ -27,10 +27,11 @@ import {
 	demoOpen,
 	demoWithdraw,
 	findSessionOpen,
+	readEscrowPaused,
 	readSession,
 } from "./chain";
 import { connectorOnline, resourceAvailable } from "./connector-availability";
-import { inspectEscrowOwnerGuard } from "./escrow-version";
+import { assertEscrowOwnerGuard } from "./escrow-version";
 import { discoverModels } from "./model-discovery";
 import {
 	chainConfig,
@@ -153,16 +154,15 @@ export async function openSession(
 	input: z.infer<typeof openSessionInput>,
 ): Promise<OpenSessionResult> {
 	await ensureChainBinding();
-	const { config, publicClient } = clients();
-	if (assetOf(config) === "dUSD")
+	if (await readEscrowPaused())
 		throw new AppError(
-			"legacy_asset",
-			"旧 dUSD 部署仅服务已有会话。请使用独立账本部署新的结算资产。",
-			409,
+			"settlement_paused",
+			"市场结算已暂停，暂不能开通预算。",
+			503,
 		);
-	let ownerGuard: "guarded" | "legacy";
+	const { config, publicClient } = clients();
 	try {
-		ownerGuard = await inspectEscrowOwnerGuard(
+		await assertEscrowOwnerGuard(
 			publicClient,
 			getAddress(config.escrow),
 			getAddress(user.address),
@@ -170,16 +170,10 @@ export async function openSession(
 	} catch {
 		throw new AppError(
 			"unsupported_escrow",
-			"托管合约无法验证会话 ID 所有权，请检查链上部署；已有会话仍可结算、关闭和提现。",
+			"托管合约无法验证会话 ID 所有权，请检查链上部署。",
 			503,
 		);
 	}
-	if (ownerGuard === "legacy")
-		throw new AppError(
-			"unsupported_escrow",
-			"当前托管合约不支持安全开通新会话，请使用隔离的新部署。已有会话仍可结算、关闭和提现。",
-			409,
-		);
 	const listing = await db.listing.findUnique({
 		where: { id: input.listingId },
 	});
@@ -309,7 +303,7 @@ export async function confirmSession(
 	};
 }
 function newApiKey() {
-	return `m2a_${randomBytes(32).toString("base64url")}`;
+	return `t2a_${randomBytes(32).toString("base64url")}`;
 }
 function buyerConnection(key: string, model: string): BuyerConnection {
 	const origin = new URL(process.env.APP_ORIGIN || "http://localhost:3000");
@@ -366,7 +360,7 @@ export async function revokeKey(user: Viewer, id: string) {
 	return { ok: true };
 }
 export async function authenticateKey(authorization: string | null) {
-	const match = /^Bearer (m2a_[\w-]{43})$/.exec(authorization || "");
+	const match = /^Bearer (t2a_[\w-]{43})$/.exec(authorization || "");
 	if (!match?.[1])
 		throw new AppError("unauthorized", "需要平台 Bearer API Key。", 401);
 	const key = await db.accessKey.findUnique({

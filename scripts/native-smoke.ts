@@ -34,6 +34,7 @@ const admin = new PrismaClient();
 databaseUrl.searchParams.set("schema", namespace);
 process.env.DATABASE_URL = databaseUrl.toString();
 process.env.TOKEN2API_MODE = "local";
+process.env.ESCROW_OWNER_PRIVATE_KEY = "";
 process.env.ALLOW_DEMO = "true";
 process.env.APP_ORIGIN = "http://localhost:3000";
 process.env.RATE_LIMIT_ENABLED = "false";
@@ -110,8 +111,8 @@ try {
 			...artifact(asset === "ETH" ? "NativeUsageEscrow" : "UsageEscrow"),
 			args:
 				asset === "ETH"
-					? [account(4).address, account(5).address, 500]
-					: [token, account(4).address, account(5).address, 500],
+					? [account(4).address, 500]
+					: [token, account(4).address, 500],
 		}),
 	});
 	assert.ok(deployment.contractAddress);
@@ -124,8 +125,6 @@ try {
 		rpcUrl,
 		escrow,
 		token,
-		meter: account(4).address,
-		treasury: account(5).address,
 		deploymentBlock: deployment.blockNumber.toString(),
 	});
 	const [{ db }, market, settlement, metering, routes, commerce] =
@@ -280,7 +279,7 @@ try {
 		await balance(account(1).address),
 		gross - (gross * 500n) / 10_000n,
 	);
-	assert.equal(await balance(account(5).address), (gross * 500n) / 10_000n);
+	assert.equal(await balance(account(4).address), (gross * 500n) / 10_000n);
 	assert.equal(
 		await balance(account(0).address),
 		toChainAmount(closed.budget - closed.spent, asset, tokenDecimals),
@@ -296,13 +295,13 @@ try {
 	assert.equal((await routes.chatPost(request())).status, 401);
 	await market.withdraw(buyer);
 	await market.withdraw(seller);
-	const treasury = createWalletClient({
+	const owner = createWalletClient({
 		chain: foundry,
 		transport: http(rpcUrl),
-		account: account(5),
+		account: account(4),
 	});
 	await client.waitForTransactionReceipt({
-		hash: await treasury.writeContract({
+		hash: await owner.writeContract({
 			address: escrow,
 			abi: escrowAbi,
 			functionName: "withdraw",

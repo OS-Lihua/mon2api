@@ -389,7 +389,7 @@ describe("Token2API OpenAPI", () => {
 			token2api: {
 				request_id: "request-test",
 				cost: 1,
-				unit: "micro_dUSD",
+				unit: "micro_USDC",
 				usage_source: "demo",
 			},
 		};

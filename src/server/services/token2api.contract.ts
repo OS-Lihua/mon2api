@@ -76,7 +76,6 @@ const billingMetadataSchema = z.object({
 		"micro_AVAX",
 		"micro_USDT",
 		"micro_USDC",
-		"micro_dUSD",
 	]),
 	usage_source: z.enum(["demo", "upstream_reported"]),
 });

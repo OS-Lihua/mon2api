@@ -2,9 +2,10 @@
 
 import { ArrowRight, FlaskConical, Network, Search, X } from "lucide-react";
 import { useState } from "react";
+import { formatAmount as usd } from "~/shared/money";
 import type { ListingView, Snapshot } from "~/shared/token2api";
 import { uiPreview } from "~/shared/ui-preview";
-import { assetFormatter, listingKind, onlineListings, short } from "./format";
+import { listingKind, onlineListings, short } from "./format";
 import { Empty, ListingStatusBadge } from "./ui";
 
 export function MarketSection({
@@ -18,7 +19,6 @@ export function MarketSection({
 }) {
 	const [search, setSearch] = useState("");
 	const asset = data.network.asset;
-	const usd = assetFormatter(asset);
 	const query = search.trim().toLowerCase();
 	const visibleListings = data.listings.filter(
 		(item) =>

@@ -13,13 +13,13 @@ vi.mock("~/server/db", () => ({ db: { chainBinding: bindingStore } }));
 const addresses = {
 	token: `0x${"11".repeat(20)}`,
 	escrow: `0x${"22".repeat(20)}`,
-	meter: `0x${"33".repeat(20)}`,
-	treasury: `0x${"44".repeat(20)}`,
 };
 
 function config(mode: "local" | "evm") {
 	return JSON.stringify({
 		mode,
+		asset: "USDC",
+		tokenDecimals: 6,
 		chainId: mode === "local" ? 31337 : 1,
 		rpcUrl: mode === "local" ? "http://127.0.0.1:8545" : "https://rpc.example",
 		...addresses,
@@ -77,9 +77,13 @@ describe("demo identity chain boundary", () => {
 
 it("requires explicit native token metadata without reinterpreting old configs", () => {
 	vi.stubEnv("TOKEN2API_MODE", "evm");
-	const original = JSON.parse(config("evm"));
+	const {
+		asset: _asset,
+		tokenDecimals: _decimals,
+		...original
+	} = JSON.parse(config("evm"));
 	vi.stubEnv("CHAIN_CONFIG_JSON", JSON.stringify(original));
-	expect(chainConfig().asset).toBe("dUSD");
+	expect(() => chainConfig()).toThrow();
 	vi.stubEnv(
 		"CHAIN_CONFIG_JSON",
 		JSON.stringify({ ...original, asset: "ETH" }),

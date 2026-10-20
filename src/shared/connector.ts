@@ -3,8 +3,8 @@ import { modelCatalog } from "./model-catalog";
 
 export const CONNECTOR_HEARTBEAT_MS = 15_000;
 export const CONNECTOR_JOB_MS = 40_000;
-export const connectorTokenSchema = z.string().regex(/^m2c_[\w-]{43}$/);
-export const connectorLaunchCode = z.string().regex(/^m2l_[\w-]{43}$/);
+export const connectorTokenSchema = z.string().regex(/^t2c_[\w-]{43}$/);
+export const connectorLaunchCode = z.string().regex(/^t2l_[\w-]{43}$/);
 export const connectorLaunchResponse = z
 	.object({ code: connectorLaunchCode, expiresAt: z.string().datetime() })
 	.strict();

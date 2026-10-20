@@ -11,9 +11,10 @@ import {
 } from "lucide-react";
 import type { FormEvent } from "react";
 import { ConsoleSelect } from "~/app/_components/console-select";
+import { formatAmount as usd } from "~/shared/money";
 import type { SettlementAsset } from "~/shared/settlement-asset";
 import type { SessionView } from "~/shared/token2api";
-import { assetFormatter, remainingBudget, type Section, short } from "./format";
+import { remainingBudget, type Section, short } from "./format";
 import { Empty, Panel } from "./ui";
 
 export type ChatMessage = {
@@ -51,7 +52,6 @@ export function LabSection({
 	onOpenBilling: () => void;
 	onSubmit: (event: FormEvent) => void;
 }) {
-	const usd = assetFormatter(asset);
 	const selected = sessions.find((item) => item.id === sessionId);
 	return (
 		<div className="chat-layout">

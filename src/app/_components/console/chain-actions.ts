@@ -1,4 +1,5 @@
-import { getAddress, isHex } from "viem";
+import { getAddress, isAddress, isHex, zeroAddress } from "viem";
+import { z } from "zod";
 import { escrowAbi, nativeEscrowAbi, tokenAbi } from "~/lib/abi";
 import type { getConnectedWallet } from "~/lib/wallet";
 import { isNativeAsset, toChainAmount } from "~/shared/settlement-asset";
@@ -101,22 +102,40 @@ export async function lockBudget(
 	return hash;
 }
 
-export async function withdrawBalance({
-	getWallet,
-	network,
-	address,
-	isCurrent,
-}: ChainContext) {
+const withdrawalRecipient = z.string().trim().refine(isAddress);
+
+export async function withdrawBalance(
+	{ getWallet, network, address, isCurrent }: ChainContext,
+	recipientInput?: string,
+) {
+	const native = isNativeAsset(network.asset);
+	if (!native && recipientInput !== undefined)
+		throw new Error("自定义收款地址仅支持原生币提现。");
+	const parsed = withdrawalRecipient.safeParse(recipientInput ?? address);
+	if (!parsed.success || parsed.data === zeroAddress)
+		throw new Error("请填写有效的非零收款地址。");
+	const recipient = getAddress(parsed.data);
+	const escrow = getAddress(network.escrow);
+	if (recipient === escrow) throw new Error("收款地址不能是托管合约。");
 	const { wallet, account, publicClient } = await getWallet(network, address);
 	guard(isCurrent);
 	if (account.toLowerCase() !== address.toLowerCase())
 		throw new Error("钱包地址与登录身份不一致。");
-	const hash = await wallet.writeContract({
-		account,
-		address: getAddress(network.escrow),
-		abi: escrowAbi,
-		functionName: "withdraw",
-	});
+	const hash =
+		native && recipient !== getAddress(account)
+			? await wallet.writeContract({
+					account,
+					address: escrow,
+					abi: nativeEscrowAbi,
+					functionName: "withdrawTo",
+					args: [recipient],
+				})
+			: await wallet.writeContract({
+					account,
+					address: escrow,
+					abi: escrowAbi,
+					functionName: "withdraw",
+				});
 	const receipt = await publicClient.waitForTransactionReceipt({ hash });
 	if (receipt.status !== "success") throw new Error("提现交易失败。");
 	guard(isCurrent);

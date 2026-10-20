@@ -9,7 +9,6 @@ const zeroAddress = "0x0000000000000000000000000000000000000000";
 const zeroHash = `0x${"00".repeat(32)}` as const;
 const wrongOwnerId = `0x${"00".repeat(32)}` as const;
 const ownerGuardReason = "session owner mismatch";
-const legacyReason = "invalid terms";
 
 function hasRevertReason(error: unknown, reason: string) {
 	const seen = new Set<unknown>();
@@ -22,12 +21,12 @@ function hasRevertReason(error: unknown, reason: string) {
 	return false;
 }
 
-/** A read-only call distinguishes the owner guard from the older terms-first escrow. */
-export async function inspectEscrowOwnerGuard(
+/** Fail closed unless the deployed escrow enforces session ownership. */
+export async function assertEscrowOwnerGuard(
 	client: Pick<ReturnType<typeof createPublicClient>, "call">,
 	escrow: Address,
 	caller: Address,
-): Promise<"guarded" | "legacy"> {
+) {
 	if (caller.toLowerCase() === zeroAddress)
 		throw new Error("A nonzero caller is required to verify the escrow.");
 	try {
@@ -41,20 +40,10 @@ export async function inspectEscrowOwnerGuard(
 			}),
 		});
 	} catch (error) {
-		if (hasRevertReason(error, ownerGuardReason)) return "guarded";
-		if (hasRevertReason(error, legacyReason)) return "legacy";
+		if (hasRevertReason(error, ownerGuardReason)) return;
 		throw new Error("Escrow session ownership guard could not be verified.", {
 			cause: error,
 		});
 	}
 	throw new Error("Escrow session ownership guard is absent.");
-}
-
-export async function assertEscrowOwnerGuard(
-	client: Pick<ReturnType<typeof createPublicClient>, "call">,
-	escrow: Address,
-	caller: Address,
-) {
-	if ((await inspectEscrowOwnerGuard(client, escrow, caller)) === "legacy")
-		throw new Error("Escrow session ownership guard is absent.");
 }

@@ -1,8 +1,9 @@
 "use client";
 
 import { KeyRound, LoaderCircle, Wallet } from "lucide-react";
-import type { FormEvent } from "react";
+import { type FormEvent, useState } from "react";
 import { ConsoleSelect } from "~/app/_components/console-select";
+import { formatAmount as usd } from "~/shared/money";
 import { isNativeAsset } from "~/shared/settlement-asset";
 import type {
 	ListingView,
@@ -11,7 +12,7 @@ import type {
 	SessionView,
 } from "~/shared/token2api";
 import { uiPreview } from "~/shared/ui-preview";
-import { assetFormatter, remainingBudget, short } from "./format";
+import { remainingBudget, short } from "./format";
 import { Modal, Transaction } from "./ui";
 
 export function RentModal({
@@ -36,7 +37,6 @@ export function RentModal({
 	onSubmit: (event: FormEvent) => void;
 }) {
 	const asset = network.asset;
-	const usd = assetFormatter(asset);
 	return (
 		<Modal
 			error={error}
@@ -156,7 +156,6 @@ export function RefundModal({
 	onWithdraw: () => void;
 }) {
 	const asset = network.asset;
-	const usd = assetFormatter(asset);
 	return (
 		<Modal
 			error={error}
@@ -229,6 +228,77 @@ export function RefundModal({
 	);
 }
 
+export function WithdrawModal({
+	address,
+	network,
+	claimable,
+	busy,
+	error,
+	onClose,
+	onSubmit,
+}: {
+	address: string;
+	network: NetworkInfo;
+	claimable: string | null;
+	busy: string | null;
+	error: string | null;
+	onClose: () => void;
+	onSubmit: (recipient: string) => void;
+}) {
+	const [recipient, setRecipient] = useState(address);
+	return (
+		<Modal
+			error={error}
+			onClose={() => !busy && onClose()}
+			title={`提取 ${network.asset}`}
+		>
+			<form
+				onSubmit={(event) => {
+					event.preventDefault();
+					onSubmit(recipient);
+				}}
+			>
+				<div className="field">
+					<label htmlFor="withdraw-recipient">收款地址</label>
+					<input
+						autoComplete="off"
+						disabled={!!busy}
+						id="withdraw-recipient"
+						onChange={(event) => setRecipient(event.target.value)}
+						placeholder="0x…"
+						required
+						spellCheck={false}
+						value={recipient}
+					/>
+					<small>
+						提取当前钱包的全部可提现余额，可能包含退款和商家收入。收款地址须在当前网络支持接收{" "}
+						{network.asset}，网络手续费由当前钱包支付。
+					</small>
+				</div>
+				<div className="form-actions">
+					<button
+						className="button"
+						disabled={!!busy}
+						onClick={onClose}
+						type="button"
+					>
+						取消
+					</button>
+					<button
+						className="button primary"
+						disabled={
+							!!busy || !recipient.trim() || !claimable || claimable === "0"
+						}
+						type="submit"
+					>
+						{busy === "withdraw" ? "正在提取…" : "确认提现"}
+					</button>
+				</div>
+			</form>
+		</Modal>
+	);
+}
+
 export function KeyModal({
 	sessions,
 	sessionId,
@@ -252,7 +322,6 @@ export function KeyModal({
 	onSelectSession: (id: string) => void;
 	onSubmit: (event: FormEvent) => void;
 }) {
-	const usd = assetFormatter(asset);
 	return (
 		<Modal
 			error={error}
