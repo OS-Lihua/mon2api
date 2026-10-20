@@ -59,12 +59,12 @@ CLI/服务端客户端用自己的钱包签名器完成同一流程，并保存 
 | 方法与路径 | 凭证 | 功能 |
 | --- | --- | --- |
 | `GET /network` | 无 | 当前链、公开合约地址、费率和就绪状态 |
-| `GET /resources` | 无 | 分页查询已上架资源，支持 `q`、`kind`、`connectionMode` |
+| `GET /resources` | 无 | 分页查询已上架资源，支持 `q`、`kind` |
 | `GET /resources/{id}` | 无 | 已上架资源详情，不含连接器地址或凭证 |
 | `POST /auth/challenge`、`POST /auth/login` | 钱包签名 | 登录 |
 | `GET /auth/me`、`POST /auth/logout` | Cookie／退出无强制登录 | 当前身份／退出 |
 | `GET /account/balances` | Cookie | 当前钱包代币余额与可提现余额 |
-| `GET /merchant/resources` | Cookie | 自己的资源，包含暂停资源；支持 `q`、`kind`、`connectionMode` |
+| `GET /merchant/resources` | Cookie | 自己的资源，包含暂停资源；支持 `q`、`kind` |
 | `POST /merchant/resources` | Cookie | 创建资源；成功为 201 |
 | `GET /merchant/resources/{id}` | Cookie | 自己的资源详情 |
 | `POST /merchant/resources/{id}` | Cookie | 修改名称、描述、报价或并发 |

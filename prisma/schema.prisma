@@ -17,7 +17,6 @@ model Listing {
   description    String
   model          String
   kind           String
-  connectionMode String   @default("api")
   transport      String   @default("direct")
   connectorHash  String?  @unique
   connectorLaunchHash String? @unique

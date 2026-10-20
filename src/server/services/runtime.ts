@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { db } from "~/server/db";
+import { gatewayApiBase } from "~/shared/gateway-url";
 import { DEFAULT_NETWORK } from "~/shared/network";
 import { assetOf, decimalsOf } from "~/shared/settlement-asset";
 
@@ -60,24 +61,15 @@ export const demoEnabled = () =>
 	process.env.TOKEN2API_MODE === "local" &&
 	chainConfig().mode === "local";
 export function validateConnectorUrl(raw: string): string {
-	const url = new URL(raw);
+	const baseUrl = gatewayApiBase(raw);
+	const url = new URL(baseUrl);
 	const origins = (process.env.UPSTREAM_ALLOWED_ORIGINS || "")
 		.split(",")
 		.map((s) => s.trim())
 		.filter(Boolean);
-	if (
-		!origins.includes(url.origin) ||
-		!["http:", "https:"].includes(url.protocol) ||
-		url.username ||
-		url.password ||
-		url.search ||
-		url.hash ||
-		!["", "/", "/v1", "/v1/"].includes(url.pathname)
-	)
-		throw new Error(
-			"上游地址未列入运营者的 UPSTREAM_ALLOWED_ORIGINS，或路径不是 /v1。",
-		);
-	return url.toString();
+	if (!origins.includes(url.origin))
+		throw new Error("上游地址未列入运营者的 UPSTREAM_ALLOWED_ORIGINS。");
+	return baseUrl;
 }
 
 let bindingCheck: { key: string; done: Promise<void> } | undefined;

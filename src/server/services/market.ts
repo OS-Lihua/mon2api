@@ -68,7 +68,7 @@ export async function discoverDirectModels(input: {
 	} catch {
 		throw new AppError(
 			"discovery_failed",
-			"读取模型失败，请检查网关地址、调用 Key 和 /v1/models 接口。",
+			"读取模型失败，请检查网关 API 基础地址、调用 Key 和模型列表接口。",
 			400,
 		);
 	}
@@ -100,7 +100,6 @@ export async function createListing(
 			description: input.description,
 			model: input.model,
 			kind: input.kind,
-			connectionMode: input.connectionMode,
 			inputRate: input.inputRate,
 			outputRate: input.outputRate,
 			concurrency: input.concurrency,
@@ -535,7 +534,6 @@ export async function snapshot(
 			kind: l.kind === "demo" ? "demo" : "gateway",
 			transport: l.transport === "local" ? "local" : "direct",
 			online: connectorOnline(l),
-			connectionMode: l.connectionMode === "oauth_pool" ? "oauth_pool" : "api",
 			enabled: l.enabled,
 			inputRate: l.inputRate,
 			outputRate: l.outputRate,

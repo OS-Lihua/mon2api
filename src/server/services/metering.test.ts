@@ -254,20 +254,23 @@ describe("connector origin authorization", () => {
 		vi.unstubAllEnvs();
 	});
 
-	it("requires exact operator-approved origins and the supported /v1 paths", () => {
+	it("accepts custom API prefixes only on operator-approved origins", () => {
 		vi.stubEnv(
 			"UPSTREAM_ALLOWED_ORIGINS",
 			" https://connector.example, http://127.0.0.1:9000 ",
 		);
 		expect(validateConnectorUrl("https://connector.example")).toBe(
-			"https://connector.example/",
+			"https://connector.example/v1",
 		);
 		expect(validateConnectorUrl("https://connector.example/v1/")).toBe(
-			"https://connector.example/v1/",
+			"https://connector.example/v1",
 		);
 		expect(validateConnectorUrl("http://127.0.0.1:9000/v1")).toBe(
 			"http://127.0.0.1:9000/v1",
 		);
+		expect(
+			validateConnectorUrl("https://connector.example/proxy/openai/"),
+		).toBe("https://connector.example/proxy/openai");
 	});
 
 	it.each([
@@ -277,7 +280,6 @@ describe("connector origin authorization", () => {
 		"https://user:secret@connector.example/v1",
 		"https://connector.example/v1?key=secret",
 		"https://connector.example/v1#secret",
-		"https://connector.example/admin",
 		"https://connector.example/v1/chat/completions",
 		"file:///etc/passwd",
 		"not-a-url",

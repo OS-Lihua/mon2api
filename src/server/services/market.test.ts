@@ -85,7 +85,6 @@ const listing: Listing = {
 	description: "Snapshot regression fixture",
 	model: "test-model",
 	kind: "demo",
-	connectionMode: "api",
 	transport: "direct",
 	connectorHash: null,
 	connectorLaunchHash: null,
@@ -215,12 +214,11 @@ describe("market snapshot accounting", () => {
 			});
 		},
 	);
-	it("preserves the declared OAuth pool mode in snapshots", async () => {
+	it("keeps upstream credentials out of resource snapshots", async () => {
 		mocks.db.listing.findMany.mockResolvedValue([
-			{ ...listing, kind: "gateway", connectionMode: "oauth_pool" },
+			{ ...listing, kind: "gateway" },
 		]);
 		const result = await snapshot({ ...viewer, demo: false }, true);
-		expect(result.listings[0]?.connectionMode).toBe("oauth_pool");
 		expect(result.listings[0]).not.toHaveProperty("secret");
 		expect(result.listings[0]).not.toHaveProperty("baseUrl");
 	});
@@ -430,43 +428,38 @@ describe("market snapshot accounting", () => {
 });
 
 describe("resource connection persistence", () => {
-	it.each(["api", "oauth_pool"])(
-		"encrypts the inference key and stores %s under the owner",
-		async (connectionMode) => {
-			mocks.db.listing.create.mockResolvedValue({ id: "resource-id" });
-			const input = listingInput.parse({
-				name: "My resource",
-				description: "Provider resource",
-				model: "example-model",
-				kind: "gateway",
-				connectionMode,
-				baseUrl: "https://pool.example/v1",
-				apiKey: "test-dedicated-inference-key",
-				inputRate: 1,
-				outputRate: 2,
-			});
-			expect(await createListing(viewer, input)).toEqual({ id: "resource-id" });
-			const args = mocks.db.listing.create.mock.calls[0]?.[0];
-			expect(args).toMatchObject({
-				data: { owner: viewer.address, connectionMode, baseUrl: input.baseUrl },
-				select: { id: true },
-			});
-			expect(args.data.secret).not.toContain(input.apiKey);
-			expect(
-				await unsealData(args.data.secret, {
-					password: "test-only-session-password-at-least-32-characters",
-					ttl: 0,
-				}),
-			).toBe(input.apiKey);
-		},
-	);
-	it("applies the origin allowlist to OAuth pools before storing credentials", async () => {
+	it("encrypts the inference key under the resource owner", async () => {
+		mocks.db.listing.create.mockResolvedValue({ id: "resource-id" });
+		const input = listingInput.parse({
+			name: "My resource",
+			description: "Provider resource",
+			model: "example-model",
+			kind: "gateway",
+			baseUrl: "https://pool.example/v1",
+			apiKey: "test-dedicated-inference-key",
+			inputRate: 1,
+			outputRate: 2,
+		});
+		expect(await createListing(viewer, input)).toEqual({ id: "resource-id" });
+		const args = mocks.db.listing.create.mock.calls[0]?.[0];
+		expect(args).toMatchObject({
+			data: { owner: viewer.address, baseUrl: input.baseUrl },
+			select: { id: true },
+		});
+		expect(args.data.secret).not.toContain(input.apiKey);
+		expect(
+			await unsealData(args.data.secret, {
+				password: "test-only-session-password-at-least-32-characters",
+				ttl: 0,
+			}),
+		).toBe(input.apiKey);
+	});
+	it("applies the origin allowlist before storing gateway credentials", async () => {
 		const input = listingInput.parse({
 			name: "My pool",
 			description: "Provider pool",
 			model: "example-model",
 			kind: "gateway",
-			connectionMode: "oauth_pool",
 			baseUrl: "https://unapproved.example/v1",
 			apiKey: "test-pool-key",
 			inputRate: 1,

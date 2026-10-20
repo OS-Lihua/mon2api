@@ -107,6 +107,4 @@ export const listingKind = (
 		? labels.demo
 		: item.transport === "local"
 			? "本机连接器"
-			: item.connectionMode === "oauth_pool"
-				? "OAuth 号池"
-				: labels.api;
+			: labels.api;

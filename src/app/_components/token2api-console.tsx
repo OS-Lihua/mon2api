@@ -450,14 +450,9 @@ export function Token2ApiConsole() {
 		event.preventDefault();
 		const form = new FormData(event.currentTarget);
 		void run("listing", async (isCurrent) => {
-			const connectionMode = form.get("connectionMode");
-			if (connectionMode !== "api" && connectionMode !== "oauth_pool")
-				throw new Error("请选择 API 接入或 OAuth 号池。");
 			const common = {
 				name: String(form.get("name")),
 				description: String(form.get("description")),
-				connectionMode:
-					connectionMode === "api" ? ("api" as const) : ("oauth_pool" as const),
 				kind: "gateway" as const,
 			};
 			if (form.has("local")) {

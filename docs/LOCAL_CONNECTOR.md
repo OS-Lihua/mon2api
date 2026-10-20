@@ -12,15 +12,15 @@
 ## 启动
 
 1. 在运行网关的电脑安装 Node.js 24 或更高版本（包含 npm / npx）。商家无需下载 Token2API 源码、安装 pnpm 或配置数据库；可以在任意目录启动连接器。平台数据库迁移由运营者在部署流程中单独执行。
-2. 在网页连接钱包并签名登录，打开“我的资源 → 接入资源”。保留“Key 保留在本机”选项，只填写资源名称和简介。此时创建未上架的连接草稿，无需填写模型或价格。API Key 或 OAuth 号池均可通过本机选定的 OpenAI 兼容网关提供。
+2. 在网页连接钱包并签名登录，打开“我的资源 → 接入资源”。保留“Key 保留在本机”选项，只填写资源名称和简介。此时创建未上架的连接草稿，无需填写模型或价格。连接器使用商家指定的网关地址和模型调用 API Key。
 3. 点击“复制并启动”，在本机终端粘贴运行。一次复制就包含安装包地址、平台地址、上游地址和一次性启动码，无需单独粘贴平台连接凭证。启动码五分钟内有效、只能使用一次；过期或连接失败时重新点击复制。复制命令不会中断现有连接；命令成功兑换后会替换此资源的旧连接凭证。关闭弹窗后可从“我的资源 → 继续接入”恢复。
 4. 复制网页提供的完整启动命令，在商家的机器执行。npx 从当前平台下载带版本号的独立安装包并缓存，无需进入项目目录。仅需指定网关地址，不指定模型 ID。Magpie 默认使用下面的地址：
 
 ```sh
-npx --yes --package=https://market.example/downloads/token2api-connector-0.1.3.tgz token2api-connector start --platform https://market.example --upstream http://127.0.0.1:3425/v1
+npx --yes --package=https://market.example/downloads/token2api-connector-0.1.4.tgz token2api-connector start --platform https://market.example --upstream http://127.0.0.1:3425/v1
 ```
 
-将示例中两处 `https://market.example` 换成真实平台地址。网页复制的命令含 `--connect-code`，CLI 自动兑换平台连接凭证，只用隐藏输入读取本机上游 Key。命令行里没有长期平台凭证或上游 Key。下面不带启动码的手动示例仍会询问平台连接器凭证，可在网页“手动连接（高级）”中获取。不要把长期密钥写进命令行参数。一次性启动码也不要分享；它在兑换或过期后失效。直接使用外部 API 时，将 `--upstream` 换成对应的 HTTPS API 地址。连接器自动读取上游 `/v1/models`，每分钟刷新一次，仅向平台发送模型 ID 列表，不发送上游 URL、Key 或供应商配置。网关返回空列表、错误、无效 ID 或超出限制时明确失败，不会猜测或生成模型 ID。目录最多 500 个模型，响应最多 512 KiB。
+将示例中两处 `https://market.example` 换成真实平台地址。网页复制的命令含 `--connect-code`，CLI 自动兑换平台连接凭证，只用隐藏输入读取本机上游 Key。命令行里没有长期平台凭证或上游 Key。下面不带启动码的手动示例仍会询问平台连接器凭证，可在网页“手动连接（高级）”中获取。不要把长期密钥写进命令行参数。一次性启动码也不要分享；它在兑换或过期后失效。直接使用外部 API 时，将 `--upstream` 换成对应的 HTTPS API 地址。网关地址和端口均可自定义，Magpie 地址只是示例。可填写 `/proxy/openai` 等 API 基础路径；根地址默认使用 `/v1`，自定义路径原样保留。连接器读取该基础路径下的 `/models`，每分钟刷新一次，仅向平台发送模型 ID 列表，不发送上游 URL、Key 或供应商配置。网关返回空列表、错误、无效 ID 或超出限制时明确失败，不会猜测或生成模型 ID。目录最多 500 个模型，响应最多 512 KiB。
 
 5. 回到网页，从自动显示的模型列表选择一个模型，填写输入和输出单价后确认上架。价格单位为当前部署的结算资产 / 百万 Token。未选择模型或连接器离线时不能上架；目录需在两分钟内刷新。草稿不进入公开市场，也不能创建预算会话。一个资源固定一个模型；上架后不可更换模型。网页仅展示网关声明的 ID，不验证真实模型身份。
 6. 保持进程运行。连接器每两秒向平台请求任务，或回传在执行任务的进度。15 秒无心跳后资源显示离线并停止接收新调用。Ctrl+C / SIGTERM 会停止进程并尝试通知平台离线。网页的“暂停”阻止新接单，已经领取的任务继续回传用量。
@@ -32,13 +32,13 @@ npx --yes --package=https://market.example/downloads/token2api-connector-0.1.3.t
 查询自己的连接状态：
 
 ```sh
-npx --yes --package=https://market.example/downloads/token2api-connector-0.1.3.tgz token2api-connector status --platform https://market.example
+npx --yes --package=https://market.example/downloads/token2api-connector-0.1.4.tgz token2api-connector status --platform https://market.example
 ```
 
 也可在任意目录全局安装，再使用短命令：
 
 ```sh
-npm install --global https://market.example/downloads/token2api-connector-0.1.3.tgz
+npm install --global https://market.example/downloads/token2api-connector-0.1.4.tgz
 token2api-connector start --platform https://market.example --upstream http://127.0.0.1:3425/v1
 token2api-connector --version
 ```
@@ -58,7 +58,7 @@ token2api-connector --version
 ## 计量与故障
 
 - 当前本机资源限制为单并发，支持现有文本 Chat Completions、流式文本及最终 Token 用量。支持从 Magpie 或其他 OpenAI 兼容网关自动读取模型目录；工具调用、图片、多模态和供应商密钥配置导入尚未实现。
-- 创建资源不会验证上游模型的身份或执行质量。验收需用真实上游完成调用，并核对用量与账单。OAuth 授权、刷新和账号池调度仍由商家选定的网关负责。
+- 创建资源不会验证上游模型的身份或执行质量。验收需用真实上游完成调用，并核对用量与账单。平台仅使用网关 API Key，不提供第三方账号登录或授权。
 - 任务先写入 Postgres，再由连接器原子领取。已领取任务不会再次派发。连接器不会自动重试上游推理；只允许重传同一版本的累计响应。
 - 平台在调用前预留最大费用，继续使用原有价格快照和预算限制。只有尚未领取并成功取消的任务可以释放预留。
 - 已领取任务断线、超时、缺失用量或超出预留时，保留预留并进入 REVIEW，不能推断为零费用。连接器不能通过报告“失败”要求平台释放预算。
@@ -79,14 +79,14 @@ token2api-connector --version
 pnpm connector:build
 ```
 
-生成 `packages/connector/dist/connector.mjs` 和 `public/downloads/token2api-connector-0.1.3.tgz`。安装包包含 JavaScript、包元数据、说明和许可证，无运行时 npm 依赖，也无安装脚本；不包含网站、Prisma、数据库配置、源码映射或凭证。生成文件不入库，由部署构建生成并随 public 目录发布。更新版本时修改 `packages/connector/package.json` 的 `version`，并同步文档中的示例版本；网页命令自动读取该版本。用户需要复制新版网页命令或重新全局安装以升级。
+生成 `packages/connector/dist/connector.mjs` 和 `public/downloads/token2api-connector-0.1.4.tgz`。安装包包含 JavaScript、包元数据、说明和许可证，无运行时 npm 依赖，也无安装脚本；不包含网站、Prisma、数据库配置、源码映射或凭证。生成文件不入库，由部署构建生成并随 public 目录发布。更新版本时修改 `packages/connector/package.json` 的 `version`，并同步文档中的示例版本；网页命令自动读取该版本。用户需要复制新版网页命令或重新全局安装以升级。
 
 平台托管安装包不依赖 npm 登录。若要发布到 npm，先完成验证并确认 npm 账号拥有 `@token2api` scope 的发布权限，然后在本机登录并发布同一安装包：
 
 ```sh
 pnpm verify
 npm login
-npm publish public/downloads/token2api-connector-0.1.3.tgz --access public
+npm publish public/downloads/token2api-connector-0.1.4.tgz --access public
 ```
 
-只有 npm 发布成功后，用户才可改用 `npx --yes @token2api/connector@0.1.3 start ...`。发布前使用网页提供的平台安装包地址。
+只有 npm 发布成功后，用户才可改用 `npx --yes @token2api/connector@0.1.4 start ...`。发布前使用网页提供的平台安装包地址。

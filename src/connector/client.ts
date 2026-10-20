@@ -11,6 +11,7 @@ import {
 	connectorTokenResponse,
 	type connectorUpdate,
 } from "../shared/connector";
+import { gatewayApiBase } from "../shared/gateway-url";
 
 export function serviceUrl(raw: string, upstream = false) {
 	const url = new URL(raw);
@@ -21,12 +22,12 @@ export function serviceUrl(raw: string, upstream = false) {
 		url.password ||
 		url.search ||
 		url.hash ||
-		!(upstream ? ["/", "/v1", "/v1/"] : ["/"]).includes(url.pathname)
+		(!upstream && url.pathname !== "/")
 	)
 		throw new Error(
 			"地址必须为 HTTPS（回环地址可用 HTTP），且不能包含凭证或查询参数。",
 		);
-	return url.toString().replace(/\/$/, "");
+	return upstream ? gatewayApiBase(raw) : url.toString().replace(/\/$/, "");
 }
 class ConnectorClientError extends Error {
 	constructor(readonly status: number) {

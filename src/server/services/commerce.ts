@@ -30,7 +30,6 @@ const resourceSelect = {
 	description: true,
 	model: true,
 	kind: true,
-	connectionMode: true,
 	transport: true,
 	connectorSeenAt: true,
 	connectorCatalog: true,
@@ -153,7 +152,6 @@ export async function listResources(
 		where: {
 			...(owner ? { owner } : { enabled: true }),
 			...(query.kind ? { kind: query.kind } : {}),
-			...(query.connectionMode ? { connectionMode: query.connectionMode } : {}),
 			...(query.q
 				? {
 						OR: [

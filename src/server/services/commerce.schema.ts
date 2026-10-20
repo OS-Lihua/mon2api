@@ -3,7 +3,6 @@ import { SETTLEMENT_ASSETS } from "~/shared/settlement-asset";
 import { codePointString } from "./token2api.contract";
 import {
 	addressSchema,
-	connectionModeSchema,
 	sessionIdSchema,
 	walletSignatureSchema,
 } from "./token2api.schema";
@@ -18,7 +17,6 @@ export const resourceQuery = pageQuery
 	.extend({
 		q: z.string().trim().max(100).optional(),
 		kind: z.enum(["demo", "gateway"]).optional(),
-		connectionMode: connectionModeSchema.optional(),
 	})
 	.strict();
 export const ledgerQuery = pageQuery
@@ -108,7 +106,6 @@ export const resourceResponse = z
 		description: z.string(),
 		model: z.string(),
 		kind: z.enum(["demo", "gateway"]),
-		connectionMode: connectionModeSchema,
 		transport: z.enum(["direct", "local"]),
 		online: z.boolean(),
 		inputRate: amount,

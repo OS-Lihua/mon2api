@@ -9,6 +9,10 @@ Tag format:
 
 ## Unreleased
 
+- Accept custom gateway API base paths consistently for model discovery and streamed inference in direct and local-connector modes. Keep origin approval and credential protections; publish connector 0.1.4.
+
+- Remove OAuth-pool onboarding and connection-mode fields from the UI, database, REST and OpenAPI. All resources use gateway URLs and inference API keys; user login remains wallet-signature based.
+
 - Remove obsolete naming aliases and configuration fallbacks. Release connector 0.1.3 so cached packages do not retain the removed command alias. Only TOKEN2API_* settings, the token2api wallet cookie/router/response field and token2api-connector command remain. Normalize database, Docker project, seed, signer-lock and migration names; existing migration records are not translated.
 
 - Standardize Token2API branding, token2api source filenames and internal API calls, Token2Api code identifiers and TOKEN2API_* environment variables.
@@ -66,7 +70,6 @@ Tag format:
 
 - Simplify overview helper text, duplicate network status and empty-state captions; move metric scope to a tooltip and screen-reader text, and show metric breakdowns only when nonzero.
 
-- Add distinct API and OAuth-pool resource onboarding, persist connection modes with an API-compatible default, expose mode filters through REST/OpenAPI, and keep OAuth authorization and account scheduling on the provider's pool gateway.
 - Remove demo sign-in and simulated resource creation from the user console; show gateway resources and their related records, with empty states when none exist. Retain database demo records for local tests.
 
 - Replace native budget-session dropdowns with styled, keyboard-accessible selectors, with option descriptions, selected indicators, and dialog-aware menus.

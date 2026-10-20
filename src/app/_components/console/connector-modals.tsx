@@ -1,14 +1,6 @@
 "use client";
 
-import {
-	Check,
-	Copy,
-	KeyRound,
-	Layers3,
-	LoaderCircle,
-	Network,
-	Plus,
-} from "lucide-react";
+import { Copy, LoaderCircle, Plus } from "lucide-react";
 import { type FormEvent, useRef, useState } from "react";
 import { ConsoleSelect } from "~/app/_components/console-select";
 import { connectorStartCommand } from "~/shared/connector-distribution";
@@ -267,11 +259,7 @@ export function ListingModal({
 	error: string | null;
 	busy: boolean;
 }) {
-	const [connectionMode, setConnectionMode] = useState<"api" | "oauth_pool">(
-		"api",
-	);
 	const [isLocal, setIsLocal] = useState(true);
-	const isPool = connectionMode === "oauth_pool";
 	const [upstreamUrl, setUpstreamUrl] = useState("");
 	const [upstreamKey, setUpstreamKey] = useState("");
 	const [models, setModels] = useState<string[]>([]);
@@ -330,65 +318,6 @@ export function ListingModal({
 							: "填写网关地址和调用 Key 后读取模型列表，再选择模型和报价。平台将加密保存调用 Key。"}
 					</small>
 				</div>
-				<fieldset className="resource-modes" disabled={busy}>
-					<legend>接入方式</legend>
-					<div className="resource-mode-grid">
-						<label className="resource-mode">
-							<input
-								checked={!isPool}
-								name="connectionMode"
-								onChange={() => setConnectionMode("api")}
-								type="radio"
-								value="api"
-							/>
-							<span aria-hidden="true" className="resource-mode-icon">
-								<KeyRound size={20} />
-							</span>
-							<span className="resource-mode-copy">
-								<strong>API 接入</strong>
-								<span>通过 API Key 提供模型服务</span>
-							</span>
-							<span aria-hidden="true" className="resource-mode-check">
-								{!isPool && <Check size={12} strokeWidth={3} />}
-							</span>
-						</label>
-						<label className="resource-mode">
-							<input
-								checked={isPool}
-								name="connectionMode"
-								onChange={() => setConnectionMode("oauth_pool")}
-								type="radio"
-								value="oauth_pool"
-							/>
-							<span aria-hidden="true" className="resource-mode-icon">
-								<Network size={20} />
-							</span>
-							<span className="resource-mode-copy">
-								<strong>OAuth 号池</strong>
-								<span>接入已授权账号的号池网关</span>
-							</span>
-							<span aria-hidden="true" className="resource-mode-check">
-								{isPool && <Check size={12} strokeWidth={3} />}
-							</span>
-						</label>
-					</div>
-				</fieldset>
-				{isPool && (
-					<div className="pool-connection-guide">
-						<span className="pool-guide-heading">
-							<Layers3 size={15} />
-							连接你的 OAuth 号池
-						</span>
-						<p>
-							先在 vm2api 等号池网关完成账号授权，再创建绑定该号池的专用调用
-							Key。
-						</p>
-						<small>
-							账号授权、令牌刷新和调度由号池网关管理。此处无需提交账号密码或
-							OAuth 令牌。
-						</small>
-					</div>
-				)}
 				<div className="field-row">
 					<div className="field">
 						<label htmlFor="listing-name">资源名称</label>
@@ -434,56 +363,40 @@ export function ListingModal({
 				{!isLocal && (
 					<div className="field-row resource-credentials">
 						<div className="field">
-							<label htmlFor="listing-url">
-								{isPool ? "号池网关地址" : "API 服务地址"}
-							</label>
+							<label htmlFor="listing-url">API 服务地址</label>
 							<input
 								id="listing-url"
-								key={`url-${connectionMode}`}
 								name="baseUrl"
 								onChange={(event) => {
 									setUpstreamUrl(event.target.value);
 									resetModels();
 								}}
-								placeholder={
-									isPool
-										? "https://your-pool.example/v1"
-										: "https://api.example.com/v1"
-								}
+								placeholder="https://api.example.com/v1"
 								required
 								type="url"
 								value={upstreamUrl}
 							/>
 							<small>
-								需支持 OpenAI Chat Completions 并返回 Token
-								用量。服务地址需由运营者加入允许列表。
+								支持自定义 API 基础路径。网关需支持文本 Chat Completions 和
+								Token 用量，网关域名和端口需加入运营者允许列表。
 							</small>
 						</div>
 						<div className="field">
-							<label htmlFor="listing-secret">
-								{isPool ? "号池专用调用 Key" : "API Key"}
-							</label>
+							<label htmlFor="listing-secret">API Key</label>
 							<input
 								autoComplete="new-password"
 								id="listing-secret"
-								key={`secret-${connectionMode}`}
 								name="apiKey"
 								onChange={(event) => {
 									setUpstreamKey(event.target.value);
 									resetModels();
 								}}
-								placeholder={
-									isPool ? "填写绑定该号池的调用 Key" : "填写上游 API Key"
-								}
+								placeholder="填写上游 API Key"
 								required
 								type="password"
 								value={upstreamKey}
 							/>
-							<small>
-								{isPool
-									? "请使用仅绑定目标号池的推理 Key，不要使用网关管理密钥。"
-									: "凭证加密保存，仅用于服务端调用，不向使用者公开。"}
-							</small>
+							<small>凭证加密保存，仅用于服务端调用，不向使用者公开。</small>
 						</div>
 					</div>
 				)}
@@ -503,7 +416,7 @@ export function ListingModal({
 							<small>
 								{models.length
 									? `已读取 ${models.length} 个模型，请从列表中选择。`
-									: "网关需提供 /v1/models。这里只读取网关声明的模型，不验证模型身份。"}
+									: "网关需在 API 基础路径下提供 /models。这里只读取声明，不验证模型身份。"}
 							</small>
 						</div>
 						<div className="field-row">

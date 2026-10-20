@@ -108,12 +108,11 @@ beforeEach(() => {
 	mocks.updateListing.mockResolvedValue({ ok: true });
 });
 describe("merchant and consumer REST security", () => {
-	it("passes an OAuth pool's validated mode to the shared resource service", async () => {
+	it("passes gateway credentials to the shared resource service", async () => {
 		const response = await api.merchantResourcesPost(
 			req("/merchant/resources", {
 				...input,
 				kind: "gateway",
-				connectionMode: "oauth_pool",
 				baseUrl: "https://pool.example/v1",
 				apiKey: "test-dedicated-key",
 			}),
@@ -121,7 +120,10 @@ describe("merchant and consumer REST security", () => {
 		expect(response.status).toBe(201);
 		expect(mocks.createListing).toHaveBeenCalledWith(
 			user,
-			expect.objectContaining({ connectionMode: "oauth_pool" }),
+			expect.objectContaining({
+				baseUrl: "https://pool.example/v1",
+				apiKey: "test-dedicated-key",
+			}),
 		);
 		expect(await response.json()).not.toHaveProperty("apiKey");
 	});

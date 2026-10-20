@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { gatewayApiBase } from "../../shared/gateway-url";
 import { discoveredModel, modelCatalog } from "../../shared/model-catalog";
 
 /** Only the caller's fixed destination receives its key. Never follow redirects. */
@@ -7,15 +8,12 @@ export async function discoverModels(
 	apiKey: string,
 	fetcher: typeof fetch = fetch,
 ) {
-	const base = baseUrl.replace(/\/$/, "");
-	const response = await fetcher(
-		`${base.endsWith("/v1") ? base : `${base}/v1`}/models`,
-		{
-			headers: { Authorization: `Bearer ${apiKey}` },
-			redirect: "error",
-			signal: AbortSignal.timeout(8000),
-		},
-	);
+	const base = gatewayApiBase(baseUrl);
+	const response = await fetcher(`${base}/models`, {
+		headers: { Authorization: `Bearer ${apiKey}` },
+		redirect: "error",
+		signal: AbortSignal.timeout(8000),
+	});
 	if (!response.ok) {
 		await response.body?.cancel();
 		throw new Error(`读取模型列表失败（HTTP ${response.status}）。`);

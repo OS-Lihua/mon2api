@@ -68,6 +68,10 @@ describe("connector destination and credential isolation", () => {
 		expect(serviceUrl("https://platform.example")).toBe(
 			"https://platform.example",
 		);
+		expect(serviceUrl("https://gateway.example/api/openai/", true)).toBe(
+			"https://gateway.example/api/openai",
+		);
+		expect(() => serviceUrl("https://platform.example/api")).toThrow();
 	});
 	it("sends only the resource credential to the platform and refuses redirects", async () => {
 		const fetcher = vi.fn<typeof fetch>().mockResolvedValue(

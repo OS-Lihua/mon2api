@@ -2,14 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
 	chatInput,
 	listingInput,
-	listingUpdateInput,
 	messagesSchema,
 	publicChatInput,
 } from "./token2api.schema";
 
 const messages = [{ role: "user", content: "hello" }];
 
-describe("resource connection modes", () => {
+describe("gateway resource credentials", () => {
 	const gateway = {
 		name: "My resource",
 		description: "A provider resource",
@@ -17,36 +16,25 @@ describe("resource connection modes", () => {
 		model: "example-model",
 		inputRate: 1,
 		outputRate: 2,
-		baseUrl: "https://pool.example/v1",
-		apiKey: "dedicated-inference-key",
+		baseUrl: "https://gateway.example/v1",
+		apiKey: "inference-key",
 	};
-	it("preserves API compatibility and accepts an explicit OAuth pool mode", () => {
-		expect(listingInput.parse(gateway).connectionMode).toBe("api");
-		expect(
-			listingInput.parse({ ...gateway, connectionMode: "oauth_pool" }),
-		).toMatchObject({
-			connectionMode: "oauth_pool",
-			kind: "gateway",
-		});
+	it("accepts a gateway URL and inference key", () => {
+		expect(listingInput.parse(gateway)).toMatchObject(gateway);
 	});
 	it.each([
-		{ ...gateway, connectionMode: "oauth" },
-		{ ...gateway, connectionMode: "oauth_pool", kind: "demo" },
-		{ ...gateway, connectionMode: "oauth_pool", apiKey: undefined },
-		{ ...gateway, connectionMode: "oauth_pool", baseUrl: undefined },
-		{
-			...gateway,
-			connectionMode: "oauth_pool",
-			refreshToken: "not-a-gateway-key",
+		{ ...gateway, apiKey: undefined },
+		{ ...gateway, baseUrl: undefined },
+		{ ...gateway, accessToken: "account-token" },
+		{ ...gateway, refreshToken: "account-refresh-token" },
+		{ ...gateway, connectionMode: "api" },
+		{ ...gateway, connectionMode: "oauth_pool" },
+	])(
+		"rejects missing credentials, account tokens and removed connection categories",
+		(input) => {
+			expect(listingInput.safeParse(input).success).toBe(false);
 		},
-	])("rejects invalid modes and incomplete pool connections", (input) => {
-		expect(listingInput.safeParse(input).success).toBe(false);
-	});
-	it("prevents changes to a resource's connection mode after publication", () => {
-		expect(
-			listingUpdateInput.safeParse({ connectionMode: "oauth_pool" }).success,
-		).toBe(false);
-	});
+	);
 });
 
 describe("Token2API Unicode input limits", () => {

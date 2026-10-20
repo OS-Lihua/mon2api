@@ -36,7 +36,7 @@ let upstreamCalls = 0;
 const upstreamKey = "test-only-upstream-credential";
 const upstream = createServer(async (req, res) => {
 	try {
-		if (req.url === "/v1/models") {
+		if (req.url === "/custom/openai/models") {
 			assert.equal(req.headers.authorization, `Bearer ${upstreamKey}`);
 			res.writeHead(200, { "Content-Type": "application/json" });
 			res.end(
@@ -46,7 +46,7 @@ const upstream = createServer(async (req, res) => {
 			);
 			return;
 		}
-		assert.equal(req.url, "/v1/chat/completions");
+		assert.equal(req.url, "/custom/openai/chat/completions");
 		assert.equal(req.headers.authorization, `Bearer ${upstreamKey}`);
 		let body = "";
 		for await (const chunk of req) body += chunk;
@@ -134,7 +134,6 @@ try {
 		name: "Isolated local connector",
 		description: "Integration smoke fixture",
 		model: "local-test-model",
-		connectionMode: "api" as const,
 		inputRate: 1000000,
 		outputRate: 1000000,
 		concurrency: 1 as const,
@@ -148,7 +147,6 @@ try {
 		name: input.name,
 		description: input.description,
 		kind: input.kind,
-		connectionMode: input.connectionMode,
 		concurrency: input.concurrency,
 	});
 	const launch = await service.createConnectorLaunch(seller, created.id);
@@ -199,7 +197,7 @@ try {
 			"--platform",
 			platformUrl,
 			"--upstream",
-			`${upstreamUrl}/v1`,
+			`${upstreamUrl}/custom/openai`,
 			"--credentials-stdin",
 		],
 		{ stdio: ["pipe", "pipe", "pipe"], env: process.env },

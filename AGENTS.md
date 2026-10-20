@@ -23,7 +23,7 @@ Use an ASD-STE100-inspired style, aiming for about 80% of its discipline rather 
 - Keep mobile, public, webhook, and third-party API calls on versioned `REST`.
 - Keep REST request and response shapes represented in OpenAPI.
 - Do not add a second ORM or database. This template uses `Prisma + Postgres`.
-- Do not install an auth provider by default. Clerk is intentionally reserved for later integration.
+- Use wallet-signature sessions; do not add third-party login providers.
 - Do not commit secrets, project IDs, Vercel IDs, Sentry tokens, or production database URLs.
 
 ## Commands
@@ -81,5 +81,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Keep uncertain usage in REVIEW with a retained reservation. Do not infer zero usage.
 - Persist settlement jobs before sending transactions; recover by nonce and receipt hash.
 - Demo identities and public test keys only operate on loopback chain 31337.
+- Authenticate users with wallet signatures. Resource connectors use gateway URLs and inference API keys; do not add third-party OAuth login or account-authorization flows.
 - Keep the product name Token2API; use token2api for repository and package names. Use only the current naming conventions; do not add legacy configuration, command or protocol aliases. Connector terminology is gateway or pool connector.
 - If a .codegraph directory exists, use CodeGraph before searching or reading code.

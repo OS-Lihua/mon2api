@@ -156,7 +156,7 @@ export function registerCommerce(
 			output: c.idResponse,
 			created: true,
 			description:
-				"Gateway origin must be operator-approved and support OpenAI Chat Completions with usage. connectionMode defaults to api. oauth_pool requires a dedicated inference key bound to the provider's OAuth account pool; OAuth authorization, refresh and scheduling stay on the pool gateway. The mode is provider-declared, not verified account authorization. Gateway credentials are encrypted and never returned. Demo resources are local-only. Creation is not replay-safe: do not automatically retry.",
+				"Gateway origin must be operator-approved and support OpenAI Chat Completions with usage. baseUrl may include a custom API base path; a bare origin defaults to /v1. Discovery and inference use the same base path. Gateway credentials are encrypted and never returned. Demo resources are local-only. Creation is not replay-safe: do not automatically retry.",
 		},
 		{
 			method: "get",
@@ -179,7 +179,7 @@ export function registerCommerce(
 			input: updateResource,
 			output: ok,
 			description:
-				"At least one field is required. New prices apply only to future sessions; existing price snapshots remain unchanged. Model, kind, connectionMode and connector credentials are immutable. Pause and publish a new resource to replace a connector.",
+				"At least one field is required. New prices apply only to future sessions; existing price snapshots remain unchanged. Model, kind and connector credentials are immutable. Pause and publish a new resource to replace a connector.",
 		},
 		{
 			method: "post",

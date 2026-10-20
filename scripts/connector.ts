@@ -70,7 +70,7 @@ async function main() {
 	const command = positionals[0] ?? "help";
 	if (values.help || command === "help") {
 		console.log(
-			'Token2API 本机连接器\n\ntoken2api-connector start --platform <平台地址> --upstream <本机上游 /v1 地址>\ntoken2api-connector status --platform <平台地址>\ntoken2api-connector --version\n\n需要 Node.js 24 或更高版本。从平台网页复制 npx 启动命令，可在任意目录运行，无需下载项目源码。\n自动读取上游 /v1/models，再回到网页选择模型和报价。Magpie 的默认上游为 http://127.0.0.1:3425/v1。\n网页“复制并启动”提供 --connect-code，一次性启动码 5 分钟内有效，自动兑换平台凭证，无需再次粘贴。\n手动连接器凭证与上游 Key 使用隐藏输入，或 TOKEN2API_CONNECTOR_TOKEN / TOKEN2API_UPSTREAM_KEY。\n后台服务可使用 --credentials-stdin 从标准输入读取 {"token":"...","apiKey":"..."}；不接受命令行密钥。\n上游 Key 不会上传平台。保持进程在线以接单；Ctrl+C 停止。仅支持文本 Chat Completions。旧资源可用 --model <模型 ID> 保持原有固定模型模式。 ',
+			'Token2API 本机连接器\n\ntoken2api-connector start --platform <平台地址> --upstream <上游 API 基础地址>\ntoken2api-connector status --platform <平台地址>\ntoken2api-connector --version\n\n需要 Node.js 24 或更高版本。从平台网页复制 npx 启动命令，可在任意目录运行，无需下载项目源码。\n自动读取上游模型列表，再回到网页选择模型和报价。网关地址、端口和 API 路径可自定义；Magpie 的默认示例为 http://127.0.0.1:3425/v1。\n网页“复制并启动”提供 --connect-code，一次性启动码 5 分钟内有效，自动兑换平台凭证，无需再次粘贴。\n手动连接器凭证与上游 Key 使用隐藏输入，或 TOKEN2API_CONNECTOR_TOKEN / TOKEN2API_UPSTREAM_KEY。\n后台服务可使用 --credentials-stdin 从标准输入读取 {"token":"...","apiKey":"..."}；不接受命令行密钥。\n上游 Key 不会上传平台。保持进程在线以接单；Ctrl+C 停止。仅支持文本 Chat Completions。旧资源可用 --model <模型 ID> 保持原有固定模型模式。 ',
 		);
 		return;
 	}

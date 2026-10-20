@@ -1,8 +1,9 @@
 import OpenAI from "openai";
+import { gatewayApiBase } from "../../shared/gateway-url";
 
 export type EngineInput = {
 	kind: "demo" | "gateway";
-	/** Operator-approved gateway origin (optionally ending in /v1), never caller input. */
+	/** Operator-approved gateway API base URL, never caller request input. */
 	baseUrl?: string;
 	apiKey?: string;
 	model: string;
@@ -128,18 +129,9 @@ export async function runEngine(
 			false,
 		);
 	}
-	let baseUrl: URL;
+	let baseUrl: string;
 	try {
-		baseUrl = new URL(input.baseUrl);
-		if (
-			!["http:", "https:"].includes(baseUrl.protocol) ||
-			baseUrl.username ||
-			baseUrl.password ||
-			baseUrl.search ||
-			baseUrl.hash
-		) {
-			throw new Error("Invalid endpoint");
-		}
+		baseUrl = gatewayApiBase(input.baseUrl);
 	} catch {
 		throw new EngineFailure(
 			"configuration",
@@ -148,11 +140,9 @@ export async function runEngine(
 			false,
 		);
 	}
-	const path = baseUrl.pathname.replace(/\/+$/, "");
-	baseUrl.pathname = path.endsWith("/v1") ? path : `${path}/v1`;
 	const client = new OpenAI({
 		apiKey: input.apiKey,
-		baseURL: baseUrl.toString().replace(/\/$/, ""),
+		baseURL: baseUrl,
 		maxRetries: 0,
 		timeout: 120_000,
 		// Do not let a redirect forward the bearer credential to another host.

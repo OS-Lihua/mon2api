@@ -100,7 +100,7 @@ export function registerLocalConnector(
 			method: "post",
 			operationId: "discoverDirectGatewayModels",
 			summary:
-				"Read /v1/models from an operator-approved gateway; no inference or resource creation",
+				"Read models under an operator-approved gateway API base path; no inference or resource creation",
 			auth: "walletSession",
 			input: directDiscoveryInput,
 			output: modelCatalogResponse,

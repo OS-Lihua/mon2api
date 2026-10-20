@@ -46,6 +46,29 @@ function mockSse(body: string, singleByteChunks = false) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("gateway engine through the official OpenAI SDK", () => {
+	it("calls a custom API prefix without appending another version path", async () => {
+		const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+			mockSse(
+				event(completion("answer", "stop")) +
+					event({
+						choices: [],
+						usage: { prompt_tokens: 3, completion_tokens: 2 },
+					}) +
+					event("[DONE]"),
+			),
+		);
+		vi.stubGlobal("fetch", fetcher);
+		await expect(
+			runEngine(
+				{ ...input, baseUrl: "https://gateway.example/api/openai/" },
+				() => {},
+			),
+		).resolves.toMatchObject({ text: "answer", pendingReview: false });
+		expect(fetcher).toHaveBeenCalledWith(
+			"https://gateway.example/api/openai/chat/completions",
+			expect.objectContaining({ redirect: "error" }),
+		);
+	});
 	it("handles fragmented SSE and UTF-8, records upstream usage, and sends scoped sticky identity", async () => {
 		const fetcher = vi.fn().mockResolvedValue(
 			mockSse(

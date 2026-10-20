@@ -38,14 +38,14 @@ pnpm dev
 
 ## 商家资源接入
 
-「接入资源」提供两种方式，并在资源列表中分别标记：
+商家统一使用网关地址和模型调用 API Key 接入，支持两种部署方式：
 
-- **API 接入**：填写上游服务地址、API Key、实际模型 ID、输入/输出报价和并发上限。
-- **OAuth 号池**：先在 vm2api 等号池网关完成账号授权，再创建仅绑定目标账号池的专用推理 Key；在 Token2API 填写该网关地址、专用 Key、模型 ID 和报价。不要填写网关管理密钥、账号密码、OAuth access token 或 refresh token。
+- **本机连接器**：上游 Key 保留在商家机器，由 CLI 出站接单并调用网关。
+- **平台直连**：填写上游服务地址和 API Key，读取模型列表后选择模型、报价和并发上限。平台加密保存调用 Key。
 
-两种方式均要求网关支持 `POST /v1/chat/completions`（包括流式响应及 Token usage），且 origin 已在 `UPSTREAM_ALLOWED_ORIGINS` 中配置。OAuth 授权、令牌刷新、账号健康和调度由号池网关管理；Token2API 保存接入类型和加密后的推理 Key，处理资源挂牌、预算、计量和结算。接入类型由商家声明，不表示平台已核验账号授权。尚未配置真实号池网关时，不能将本地界面验证视为真实 OAuth 账号调用验收。
+网关地址、端口和 API 基础路径可自定义，Magpie 地址仅为示例；根地址默认使用 `/v1`，自定义路径原样保留。网关须支持文本 Chat Completions、流式响应和最终 Token usage；平台直连的 origin 须加入 `UPSTREAM_ALLOWED_ORIGINS`。Token2API 使用钱包签名登录，不提供第三方账号登录或授权，也不接收账号 access token、refresh token 或管理密钥。
 
-REST 创建资源沿用 `kind: "gateway"`，新增 `connectionMode: "api" | "oauth_pool"`，省略时默认为 `api`。`GET /api/v1/resources` 和 `GET /api/v1/merchant/resources` 支持按 `connectionMode` 筛选。接入类型与连接凭证在上架后不可更改；更换时请暂停旧资源并新建资源。升级已有本地库时运行 `pnpm db:migrate`；生产迁移需按独立迁移流程执行。
+REST 创建资源使用 `kind: "gateway"`，资源查询支持 `q`、`kind`。模型与连接凭证在上架后不可更改。升级数据库时运行 `pnpm db:migrate`；生产迁移独立执行。
 
 ## 钱包连接
 

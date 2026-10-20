@@ -153,7 +153,6 @@ try {
 		description: "Isolated simulated text resource",
 		model: "token2api-demo",
 		kind: "demo",
-		connectionMode: "api",
 		inputRate: 1_000_000,
 		outputRate: 3_000_000,
 		concurrency: 2,

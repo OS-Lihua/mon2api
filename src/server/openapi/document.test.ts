@@ -108,7 +108,6 @@ describe("Token2API OpenAPI", () => {
 			description: "Text gateway",
 			model: "test-model",
 			kind: "gateway",
-			connectionMode: "api",
 			transport: "direct",
 			online: true,
 			inputRate: 1,
@@ -151,37 +150,33 @@ describe("Token2API OpenAPI", () => {
 		);
 		expect(validateUsage({ ...usage, reservation: -1 })).toBe(false);
 	});
-	it("documents the same resource connection modes and required pool credentials as runtime validation", () => {
+	it("requires gateway credentials and rejects removed connection categories in runtime and OpenAPI", () => {
 		const validate = contract("CreateResource");
 		const gateway = {
 			name: "My resource",
 			description: "Provider resource",
 			kind: "gateway",
 			model: "example-model",
-			baseUrl: "https://pool.example/v1",
-			apiKey: "test-pool-key",
+			baseUrl: "https://gateway.example/v1",
+			apiKey: "test-inference-key",
 			inputRate: 1,
 			outputRate: 2,
 		};
+		expect(listingInput.safeParse(gateway).success).toBe(true);
+		expect(validate(gateway), JSON.stringify(validate.errors)).toBe(true);
 		for (const input of [
-			gateway,
+			{ ...gateway, apiKey: undefined },
+			{ ...gateway, baseUrl: undefined },
 			{ ...gateway, connectionMode: "api" },
 			{ ...gateway, connectionMode: "oauth_pool" },
-		]) {
-			expect(listingInput.safeParse(input).success).toBe(true);
-			expect(validate(input), JSON.stringify(validate.errors)).toBe(true);
-		}
-		for (const input of [
-			{ ...gateway, connectionMode: "oauth_pool", apiKey: undefined },
-			{ ...gateway, connectionMode: "oauth_pool", kind: "demo" },
-			{ ...gateway, connectionMode: "other" },
+			{ ...gateway, refreshToken: "account-token" },
 		]) {
 			expect(listingInput.safeParse(input).success).toBe(false);
 			expect(validate(input)).toBe(false);
 		}
-		expect(openApiDocument.components?.schemas?.Resource).toMatchObject({
-			properties: { connectionMode: { enum: ["api", "oauth_pool"] } },
-		});
+		expect(openApiDocument.components?.schemas?.Resource).not.toHaveProperty(
+			"properties.connectionMode",
+		);
 	});
 	it("documents authenticated versioned model and chat endpoints", () => {
 		expect(openApiDocument.openapi).toBe("3.1.0");

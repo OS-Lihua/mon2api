@@ -43,7 +43,6 @@ curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/merchant/resources" \
   "name": "My text gateway",
   "description": "授权的文本推理资源",
   "kind": "gateway",
-  "connectionMode": "api",
   "model": "your-provider-model-id",
   "baseUrl": "https://gateway.example.com/v1",
   "apiKey": "YOUR_CALL_ONLY_UPSTREAM_KEY",
@@ -53,9 +52,9 @@ curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/merchant/resources" \
 }
 ```
 
-返回 HTTP 201 与 `{ "id": "资源 ID" }`。示例 origin 必须替换并先加入允许清单。`baseUrl` 使用根地址或 `/v1`，不填完整 `/chat/completions`。报价表示输入 2、输出 10 单位当前结算资产 / 百万 Token；并发范围 1–20。
+返回 HTTP 201 与 `{ "id": "资源 ID" }`。示例 origin 必须替换并先加入允许清单。`baseUrl` 可包含自定义 API 基础路径，如 `/proxy/openai`；根地址默认使用 `/v1`。不填完整 `/chat/completions`。报价表示输入 2、输出 10 单位当前结算资产 / 百万 Token；并发范围 1–20。
 
-`connectionMode` 默认 `api`。连接商家自己的 OAuth 号池网关时使用 `oauth_pool`，并提交该网关签发、绑定号池的专用推理 Key。OAuth 授权、凭证刷新与账号调度仍由商家的号池网关完成；该字段只是商家声明，不代表平台已验证账号授权。查询资源时可用 `connectionMode=api` 或 `connectionMode=oauth_pool` 筛选。
+商家统一以网关地址和模型调用 API Key 接入。平台使用钱包签名登录，不提供第三方账号登录或授权，不接收账号 access token、refresh token 或网关管理密钥。
 
 模型名与报价是商家声明，不代表平台已核验模型身份或官方折扣。上游凭证会加密存储；所有资源查询都不返回它。
 

@@ -315,7 +315,6 @@ describe("automatic local model discovery", () => {
 			name: "Magpie",
 			description: "Local models",
 			kind: "gateway",
-			connectionMode: "api",
 			concurrency: 1,
 		});
 		expect(mocks.db.listing.create).toHaveBeenCalledWith(
@@ -405,15 +404,10 @@ describe("local resource contract", () => {
 		inputRate: 1,
 		outputRate: 2,
 	};
-	it("accepts API or OAuth pool supply without uploading an upstream secret", () => {
+	it("accepts gateway supply without uploading an upstream secret", () => {
 		expect(localListingInput.parse(input)).toMatchObject({
 			concurrency: 1,
-			connectionMode: "api",
 		});
-		expect(
-			localListingInput.safeParse({ ...input, connectionMode: "oauth_pool" })
-				.success,
-		).toBe(true);
 		for (const extra of [
 			{ apiKey: "secret" },
 			{ baseUrl: "https://upstream.example" },

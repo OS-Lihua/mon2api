@@ -38,7 +38,6 @@ export const previewSnapshot: Snapshot = {
 			model: "token2api-demo",
 			owner,
 			kind: "demo",
-			connectionMode: "api",
 			transport: "direct",
 			online: true,
 			enabled: true,

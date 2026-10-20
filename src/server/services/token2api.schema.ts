@@ -7,11 +7,6 @@ export const walletSignatureSchema = z
 	.max(2 + 8192 * 2)
 	.regex(/^0x(?:[\da-fA-F]{2})+$/);
 
-export const connectionModeSchema = z.enum(["api", "oauth_pool"]).openapi({
-	description:
-		"Provider-declared supply type. api uses an API key; oauth_pool uses a dedicated inference key bound to an OAuth account pool on an OpenAI Chat Completions-compatible gateway. OAuth authorization, token rotation and account scheduling remain on that gateway. This field is not proof of account authorization.",
-});
-
 // A resource's model, kind and connector are immutable: existing leases use them.
 export const listingUpdateInput = z
 	.object({
@@ -48,11 +43,9 @@ const listingFields = z
 export const listingInput = z.discriminatedUnion("kind", [
 	listingFields.extend({
 		kind: z.literal("demo"),
-		connectionMode: z.literal("api").default("api"),
 	}),
 	listingFields.extend({
 		kind: z.literal("gateway"),
-		connectionMode: connectionModeSchema.default("api"),
 		baseUrl: z.string().url(),
 		apiKey: codePointString({ min: 1, max: 2048 }),
 	}),

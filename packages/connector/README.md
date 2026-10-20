@@ -7,7 +7,7 @@
 在 Token2API 网页创建本机连接后，点击“复制并启动”，一次复制完整命令，包含五分钟内有效、只能使用一次的启动码。无需单独复制连接凭证。平台会提供带版本号的独立安装包，首次运行时由 npx 下载并缓存。可以在任意目录执行，例如：
 
 ```sh
-npx --yes --package=https://market.example/downloads/token2api-connector-0.1.3.tgz token2api-connector start --platform https://market.example --upstream http://127.0.0.1:3425/v1
+npx --yes --package=https://market.example/downloads/token2api-connector-0.1.4.tgz token2api-connector start --platform https://market.example --upstream http://127.0.0.1:3425/v1
 ```
 
 将示例中的 `https://market.example` 换成实际平台地址。网页复制的命令带有 `--connect-code`，运行后只需隐藏输入本机上游 API Key。手动示例不带启动码时，仍会额外询问平台连接器凭证。不要把长期密钥放进命令行参数。启动码失效时回到网页重新复制。连接器读取上游模型列表后，回到网页选择模型和报价并上架。保持终端运行，Ctrl+C 停止。
@@ -15,7 +15,7 @@ npx --yes --package=https://market.example/downloads/token2api-connector-0.1.3.t
 也可先在任意目录安装，再用短命令启动：
 
 ```sh
-npm install --global https://market.example/downloads/token2api-connector-0.1.3.tgz
+npm install --global https://market.example/downloads/token2api-connector-0.1.4.tgz
 token2api-connector start --platform https://market.example --upstream http://127.0.0.1:3425/v1
 token2api-connector status --platform https://market.example
 token2api-connector --help

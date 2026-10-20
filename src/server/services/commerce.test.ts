@@ -51,7 +51,6 @@ const resource = {
 	description: "Text gateway",
 	model: "example-model",
 	kind: "gateway",
-	connectionMode: "api",
 	inputRate: 1,
 	outputRate: 2,
 	concurrency: 2,
@@ -68,21 +67,15 @@ beforeEach(() => {
 	mocks.settlement.findMany.mockResolvedValue([]);
 });
 describe("commerce read isolation and pagination", () => {
-	it("filters OAuth pools without exposing connection credentials", async () => {
-		mocks.listing.findMany.mockResolvedValue([
-			{ ...resource, connectionMode: "oauth_pool" },
-		]);
-		const result = await listResources(
-			{ ...query, connectionMode: "oauth_pool" },
-			address,
-		);
+	it("scopes provider resources without selecting connection credentials", async () => {
+		mocks.listing.findMany.mockResolvedValue([resource]);
+		const result = await listResources(query, address);
 		expect(mocks.listing.findMany).toHaveBeenCalledWith(
 			expect.objectContaining({
-				where: { owner: address, connectionMode: "oauth_pool" },
-				select: expect.objectContaining({ connectionMode: true }),
+				where: { owner: address },
+				select: expect.not.objectContaining({ secret: true, baseUrl: true }),
 			}),
 		);
-		expect(result.data[0]?.connectionMode).toBe("oauth_pool");
 		expect(result.data[0]).not.toHaveProperty("secret");
 	});
 	it("only discovers enabled resources and selects no connector credentials", async () => {
