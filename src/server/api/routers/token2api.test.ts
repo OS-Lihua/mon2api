@@ -48,7 +48,6 @@ vi.mock("~/server/services/settlement", () => ({
 
 const router = createTRPCRouter({
 	token2api: token2apiRouter,
-	mon2api: token2apiRouter,
 });
 const address = `0x${"11".repeat(20)}`;
 function request(

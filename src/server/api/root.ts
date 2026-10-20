@@ -8,8 +8,6 @@ import { createTRPCRouter } from "~/server/api/trpc";
  */
 export const appRouter = createTRPCRouter({
 	token2api: token2apiRouter,
-	// Compatibility for existing web clients.
-	mon2api: token2apiRouter,
 });
 
 // export type definition of API

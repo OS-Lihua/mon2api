@@ -20,10 +20,7 @@ import { assetOf, NATIVE_TOKEN } from "../src/shared/settlement-asset";
 
 // Public development mnemonic, identical to the application's demo wallets.
 const mnemonic = "test test test test test test test test test test test junk";
-const directory = path.resolve(
-	(process.env.TOKEN2API_DATA_DIR ?? process.env.MON2API_DATA_DIR) ||
-		".runtime",
-);
+const directory = path.resolve(process.env.TOKEN2API_DATA_DIR || ".runtime");
 const configFile = path.join(directory, "chain.json");
 const rpcUrl = "http://127.0.0.1:8545";
 const account = (index: number) =>
@@ -32,7 +29,7 @@ const meter = account(4).address;
 const treasury = account(5).address;
 type Artifact = { abi: Abi; bytecode: Hex };
 
-if ((process.env.TOKEN2API_MODE ?? process.env.MON2API_MODE) !== "local") {
+if (process.env.TOKEN2API_MODE !== "local") {
 	throw new Error(
 		"Local chain requires TOKEN2API_MODE=local. Use deploy:evm for EVM network.",
 	);

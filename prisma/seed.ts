@@ -7,7 +7,7 @@ const mnemonic = "test test test test test test test test test test test junk";
 async function main() {
 	if (
 		process.env.ALLOW_DEMO !== "true" ||
-		(process.env.TOKEN2API_MODE ?? process.env.MON2API_MODE) !== "local"
+		process.env.TOKEN2API_MODE !== "local"
 	) {
 		console.log("Demo seed disabled.");
 		return;
@@ -16,7 +16,7 @@ async function main() {
 	for (let i = 0; i < names.length; i++) {
 		const name = names[i];
 		if (!name) continue;
-		const id = `cmon2apidemo00000000000000${i + 1}`;
+		const id = `ctoken2apidemo000000000000${i + 1}`;
 		await prisma.listing.upsert({
 			where: { id },
 			update: {},

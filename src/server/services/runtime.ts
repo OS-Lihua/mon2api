@@ -15,17 +15,15 @@ import {
 export type { ChainConfig };
 export const runtimeDirectory = () =>
 	path.resolve(
-		/* turbopackIgnore: true */ (process.env.TOKEN2API_DATA_DIR ??
-			process.env.MON2API_DATA_DIR) ||
-			((process.env.TOKEN2API_MODE ?? process.env.MON2API_MODE) === "local"
+		/* turbopackIgnore: true */ process.env.TOKEN2API_DATA_DIR ||
+			(process.env.TOKEN2API_MODE === "local"
 				? ".runtime"
 				: `.runtime/evm/${process.env.SETTLEMENT_CHAIN_ID || DEFAULT_NETWORK.chainId}-${(process.env.SETTLEMENT_ASSET || "ETH").toLowerCase()}`),
 	);
 let configCache: { source: string; value: ChainConfig } | undefined;
 /** Parsed once per source. A rewritten chain.json is detected by its mtime. */
 export function chainConfig(): ChainConfig {
-	const mode =
-		(process.env.TOKEN2API_MODE ?? process.env.MON2API_MODE) || "evm";
+	const mode = process.env.TOKEN2API_MODE || "evm";
 	const inline = process.env.CHAIN_CONFIG_JSON;
 	const file = inline ? "" : path.join(runtimeDirectory(), "chain.json");
 	const source = `${mode}\n${inline || `${file}@${fs.statSync(file).mtimeMs}`}`;
@@ -44,7 +42,7 @@ export function sessionPassword(): string {
 	if (process.env.SESSION_PASSWORD && process.env.SESSION_PASSWORD.length >= 32)
 		return process.env.SESSION_PASSWORD;
 	if (
-		(process.env.TOKEN2API_MODE ?? process.env.MON2API_MODE) !== "local" ||
+		process.env.TOKEN2API_MODE !== "local" ||
 		process.env.NODE_ENV === "production"
 	)
 		throw new Error("Set SESSION_PASSWORD to at least 32 random characters.");
@@ -59,7 +57,7 @@ export function sessionPassword(): string {
 }
 export const demoEnabled = () =>
 	process.env.ALLOW_DEMO === "true" &&
-	(process.env.TOKEN2API_MODE ?? process.env.MON2API_MODE) === "local" &&
+	process.env.TOKEN2API_MODE === "local" &&
 	chainConfig().mode === "local";
 export function validateConnectorUrl(raw: string): string {
 	const url = new URL(raw);

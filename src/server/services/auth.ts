@@ -52,9 +52,9 @@ const viewerSchema = z.object({
 	name: z.string().max(100),
 	demo: z.boolean(),
 });
-async function authSession(cookieName = "token2api_session") {
+async function authSession() {
 	return getIronSession<{ viewer?: Viewer }>(await cookies(), {
-		cookieName,
+		cookieName: "token2api_session",
 		password: sessionPassword(),
 		ttl: 8 * 3600,
 		cookieOptions: {
@@ -66,12 +66,7 @@ async function authSession(cookieName = "token2api_session") {
 	});
 }
 export async function viewer(): Promise<Viewer | null> {
-	const store = await cookies();
-	const session = await authSession(
-		!store.has("token2api_session") && store.has("mon2api_session")
-			? "mon2api_session"
-			: "token2api_session",
-	);
+	const session = await authSession();
 	const parsed = viewerSchema.safeParse(session.viewer);
 	if (!parsed.success || (parsed.data.demo && !demoEnabled())) return null;
 	return parsed.data;
@@ -97,7 +92,6 @@ export async function demoLogin(role: "consumer" | "provider") {
 }
 export async function logout() {
 	(await authSession()).destroy();
-	(await authSession("mon2api_session")).destroy();
 }
 export async function walletChallenge(address: string) {
 	const signer = walletAddress(address);

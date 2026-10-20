@@ -133,8 +133,7 @@ function lease(value: Snapshot, id: string) {
 
 async function main() {
 	check(
-		!(process.env.TOKEN2API_MODE ?? process.env.MON2API_MODE) ||
-			(process.env.TOKEN2API_MODE ?? process.env.MON2API_MODE) === "local",
+		!process.env.TOKEN2API_MODE || process.env.TOKEN2API_MODE === "local",
 		"TOKEN2API_MODE must be local for this smoke script.",
 	);
 	localOnly(await snapshot());

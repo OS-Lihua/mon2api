@@ -98,9 +98,6 @@ export const completionResponseSchema = z.object({
 	),
 	usage: usageResponseSchema,
 	token2api: billingMetadataSchema,
-	mon2api: billingMetadataSchema
-		.optional()
-		.describe("Deprecated compatibility alias for token2api."),
 });
 
 export const streamChunkResponseSchema = z.object({

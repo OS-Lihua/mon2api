@@ -19,8 +19,7 @@ import { pathToFileURL } from "node:url";
  * }} options
  */
 export function startDev({ spawnChild = spawn, runtime = process } = {}) {
-	const mode =
-		(runtime.env.TOKEN2API_MODE ?? runtime.env.MON2API_MODE) || "evm";
+	const mode = runtime.env.TOKEN2API_MODE || "evm";
 	if (mode !== "local" && mode !== "evm")
 		throw new Error("TOKEN2API_MODE must be evm or local.");
 	/** @type {Set<import("node:child_process").ChildProcess>} */

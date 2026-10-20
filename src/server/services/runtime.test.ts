@@ -33,22 +33,6 @@ afterEach(() => {
 });
 
 describe("demo identity chain boundary", () => {
-	it("reads legacy deployment settings and gives canonical settings priority", () => {
-		vi.stubEnv("TOKEN2API_MODE", undefined);
-		vi.stubEnv("TOKEN2API_DATA_DIR", undefined);
-		vi.stubEnv("MON2API_MODE", "local");
-		vi.stubEnv("MON2API_DATA_DIR", ".runtime/legacy");
-		vi.stubEnv("ALLOW_DEMO", "true");
-		vi.stubEnv("CHAIN_CONFIG_JSON", config("local"));
-		expect(demoEnabled()).toBe(true);
-		expect(runtimeDirectory()).toMatch(/\.runtime\/legacy$/);
-		vi.stubEnv("TOKEN2API_MODE", "evm");
-		vi.stubEnv("TOKEN2API_DATA_DIR", ".runtime/current");
-		vi.stubEnv("CHAIN_CONFIG_JSON", config("evm"));
-		expect(chainConfig().chainId).toBe(1);
-		expect(demoEnabled()).toBe(false);
-		expect(runtimeDirectory()).toMatch(/\.runtime\/current$/);
-	});
 	it("defaults to Ethereum mainnet and rejects implicit local deployments", () => {
 		vi.stubEnv("TOKEN2API_MODE", "");
 		vi.stubEnv("TOKEN2API_DATA_DIR", "");

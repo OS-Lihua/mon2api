@@ -78,23 +78,18 @@ async function trpc<T extends z.ZodTypeAny>(
 
 async function scenario(withLaterUsage: boolean) {
 	check(
-		(process.env.TOKEN2API_RECOVERY_TEST ??
-			process.env.MON2API_RECOVERY_TEST) === "true",
+		process.env.TOKEN2API_RECOVERY_TEST === "true",
 		"Set TOKEN2API_RECOVERY_TEST=true to explicitly authorize local fault injection.",
 	);
 	check(
-		process.env.ALLOW_DEMO === "true" &&
-			(process.env.TOKEN2API_MODE ?? process.env.MON2API_MODE) === "local",
+		process.env.ALLOW_DEMO === "true" && process.env.TOKEN2API_MODE === "local",
 		"Fault injection requires ALLOW_DEMO=true and TOKEN2API_MODE=local.",
 	);
 	check(
 		!process.env.CHAIN_CONFIG_JSON,
 		"Use the local chain.json file rather than CHAIN_CONFIG_JSON for this test.",
 	);
-	const directory = path.resolve(
-		(process.env.TOKEN2API_DATA_DIR ?? process.env.MON2API_DATA_DIR) ||
-			".runtime",
-	);
+	const directory = path.resolve(process.env.TOKEN2API_DATA_DIR || ".runtime");
 	const config = configSchema.parse(
 		JSON.parse(fs.readFileSync(path.join(directory, "chain.json"), "utf8")),
 	);

@@ -174,57 +174,51 @@ afterAll(async () => {
 });
 
 describe("standalone connector distribution", () => {
-	it.each(["token2api-connector", "mon2api-connector"])(
-		"installs the platform-hosted package and runs %s from a directory without project files",
-		async (commandName) => {
-			// Serve the actual archive, just as Next serves public/downloads in production.
-			const download = createServer(async (_req, res) =>
-				res.end(await fs.readFile(archive)),
+	it("installs the platform-hosted package and runs from a directory without project files", async () => {
+		// Serve the actual archive, just as Next serves public/downloads in production.
+		const download = createServer(async (_req, res) =>
+			res.end(await fs.readFile(archive)),
+		);
+		await new Promise<void>((resolve) =>
+			download.listen(0, "127.0.0.1", resolve),
+		);
+		try {
+			const address = download.address();
+			if (!address || typeof address === "string")
+				throw new Error("No download port");
+			const origin = `http://127.0.0.1:${address.port}`;
+			const command = connectorStartCommand(origin);
+			expect(command).toContain(`--package=${origin}${connectorDownloadPath}`);
+			const completeCommand = connectorStartCommand(
+				origin,
+				undefined,
+				launchCode,
 			);
-			await new Promise<void>((resolve) =>
-				download.listen(0, "127.0.0.1", resolve),
-			);
-			try {
-				const address = download.address();
-				if (!address || typeof address === "string")
-					throw new Error("No download port");
-				const origin = `http://127.0.0.1:${address.port}`;
-				const command = connectorStartCommand(origin);
-				expect(command).toContain(
+			expect(completeCommand).toContain(`--connect-code ${launchCode}`);
+			expect(completeCommand).not.toContain(token);
+			expect(completeCommand).not.toContain(apiKey);
+			const { stdout } = await exec(
+				"npm",
+				[
+					"exec",
+					"--yes",
+					"--cache",
+					path.join(emptyDir, "cache"),
 					`--package=${origin}${connectorDownloadPath}`,
-				);
-				const completeCommand = connectorStartCommand(
-					origin,
-					undefined,
-					launchCode,
-				);
-				expect(completeCommand).toContain(`--connect-code ${launchCode}`);
-				expect(completeCommand).not.toContain(token);
-				expect(completeCommand).not.toContain(apiKey);
-				const { stdout } = await exec(
-					"npm",
-					[
-						"exec",
-						"--yes",
-						"--cache",
-						path.join(emptyDir, "cache"),
-						`--package=${origin}${connectorDownloadPath}`,
-						"--",
-						commandName,
-						"--help",
-					],
-					{ cwd: emptyDir, timeout: 20_000 },
-				);
-				expect(stdout).toContain("token2api-connector start");
-				expect(stdout).not.toContain("pnpm connector");
-				expect(await fs.readdir(emptyDir)).toEqual(["cache"]);
-			} finally {
-				download.closeAllConnections();
-				await new Promise<void>((resolve) => download.close(() => resolve()));
-			}
-		},
-		30_000,
-	);
+					"--",
+					"token2api-connector",
+					"--help",
+				],
+				{ cwd: emptyDir, timeout: 20_000 },
+			);
+			expect(stdout).toContain("token2api-connector start");
+			expect(stdout).not.toContain("pnpm connector");
+			expect(await fs.readdir(emptyDir)).toEqual(["cache"]);
+		} finally {
+			download.closeAllConnections();
+			await new Promise<void>((resolve) => download.close(() => resolve()));
+		}
+	}, 30_000);
 
 	it("packs only the standalone executable, metadata and license files", async () => {
 		const { stdout } = await exec("tar", ["-tzf", archive]);

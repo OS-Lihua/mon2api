@@ -1,6 +1,6 @@
 name: token2api-evm
 x-runtime: &runtime
-  DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/mon2api
+  DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/token2api
   TOKEN2API_MODE: evm
   ALLOW_DEMO: "false"
   APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN}
@@ -44,19 +44,19 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/mon2api
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/token2api
     restart: "no"
   postgres:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_DB: mon2api
+      POSTGRES_DB: token2api
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       POSTGRES_USER: postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d mon2api"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d token2api"]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -1,6 +1,6 @@
 # 商家本机连接器
 
-命令使用 `token2api-connector`，凭证环境变量使用 `TOKEN2API_CONNECTOR_TOKEN` 和 `TOKEN2API_UPSTREAM_KEY`。旧配置的兼容规则见[命名与兼容](./NAMING.md)。
+命令使用 `token2api-connector`，凭证环境变量使用 `TOKEN2API_CONNECTOR_TOKEN` 和 `TOKEN2API_UPSTREAM_KEY`。命名规则见[命名规范](./NAMING.md)。
 
 商家可以保留本机 API Key，并出售该 Key 对应的模型调用能力。连接器主动访问 Token2API，不需要开放本机端口。买家通过 Token2API 调用，无法取得商家的上游 Key。
 
@@ -17,7 +17,7 @@
 4. 复制网页提供的完整启动命令，在商家的机器执行。npx 从当前平台下载带版本号的独立安装包并缓存，无需进入项目目录。仅需指定网关地址，不指定模型 ID。Magpie 默认使用下面的地址：
 
 ```sh
-npx --yes --package=https://market.example/downloads/token2api-connector-0.1.2.tgz token2api-connector start --platform https://market.example --upstream http://127.0.0.1:3425/v1
+npx --yes --package=https://market.example/downloads/token2api-connector-0.1.3.tgz token2api-connector start --platform https://market.example --upstream http://127.0.0.1:3425/v1
 ```
 
 将示例中两处 `https://market.example` 换成真实平台地址。网页复制的命令含 `--connect-code`，CLI 自动兑换平台连接凭证，只用隐藏输入读取本机上游 Key。命令行里没有长期平台凭证或上游 Key。下面不带启动码的手动示例仍会询问平台连接器凭证，可在网页“手动连接（高级）”中获取。不要把长期密钥写进命令行参数。一次性启动码也不要分享；它在兑换或过期后失效。直接使用外部 API 时，将 `--upstream` 换成对应的 HTTPS API 地址。连接器自动读取上游 `/v1/models`，每分钟刷新一次，仅向平台发送模型 ID 列表，不发送上游 URL、Key 或供应商配置。网关返回空列表、错误、无效 ID 或超出限制时明确失败，不会猜测或生成模型 ID。目录最多 500 个模型，响应最多 512 KiB。
@@ -32,13 +32,13 @@ npx --yes --package=https://market.example/downloads/token2api-connector-0.1.2.t
 查询自己的连接状态：
 
 ```sh
-npx --yes --package=https://market.example/downloads/token2api-connector-0.1.2.tgz token2api-connector status --platform https://market.example
+npx --yes --package=https://market.example/downloads/token2api-connector-0.1.3.tgz token2api-connector status --platform https://market.example
 ```
 
 也可在任意目录全局安装，再使用短命令：
 
 ```sh
-npm install --global https://market.example/downloads/token2api-connector-0.1.2.tgz
+npm install --global https://market.example/downloads/token2api-connector-0.1.3.tgz
 token2api-connector start --platform https://market.example --upstream http://127.0.0.1:3425/v1
 token2api-connector --version
 ```
@@ -79,14 +79,14 @@ token2api-connector --version
 pnpm connector:build
 ```
 
-生成 `packages/connector/dist/connector.mjs` 和 `public/downloads/token2api-connector-0.1.2.tgz`。安装包包含 JavaScript、包元数据、说明和许可证，无运行时 npm 依赖，也无安装脚本；不包含网站、Prisma、数据库配置、源码映射或凭证。生成文件不入库，由部署构建生成并随 public 目录发布。更新版本时修改 `packages/connector/package.json` 的 `version`，并同步文档中的示例版本；网页命令自动读取该版本。用户需要复制新版网页命令或重新全局安装以升级。
+生成 `packages/connector/dist/connector.mjs` 和 `public/downloads/token2api-connector-0.1.3.tgz`。安装包包含 JavaScript、包元数据、说明和许可证，无运行时 npm 依赖，也无安装脚本；不包含网站、Prisma、数据库配置、源码映射或凭证。生成文件不入库，由部署构建生成并随 public 目录发布。更新版本时修改 `packages/connector/package.json` 的 `version`，并同步文档中的示例版本；网页命令自动读取该版本。用户需要复制新版网页命令或重新全局安装以升级。
 
 平台托管安装包不依赖 npm 登录。若要发布到 npm，先完成验证并确认 npm 账号拥有 `@token2api` scope 的发布权限，然后在本机登录并发布同一安装包：
 
 ```sh
 pnpm verify
 npm login
-npm publish public/downloads/token2api-connector-0.1.2.tgz --access public
+npm publish public/downloads/token2api-connector-0.1.3.tgz --access public
 ```
 
-只有 npm 发布成功后，用户才可改用 `npx --yes @token2api/connector@0.1.2 start ...`。发布前使用网页提供的平台安装包地址。
+只有 npm 发布成功后，用户才可改用 `npx --yes @token2api/connector@0.1.3 start ...`。发布前使用网页提供的平台安装包地址。

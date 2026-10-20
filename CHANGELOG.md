@@ -9,7 +9,9 @@ Tag format:
 
 ## Unreleased
 
-- Standardize Token2API branding, token2api source filenames and internal API calls, Token2Api code identifiers and TOKEN2API_* environment variables; retain explicit compatibility for existing sessions, clients, deployment settings and ledger identifiers.
+- Remove obsolete naming aliases and configuration fallbacks. Release connector 0.1.3 so cached packages do not retain the removed command alias. Only TOKEN2API_* settings, the token2api wallet cookie/router/response field and token2api-connector command remain. Normalize database, Docker project, seed, signer-lock and migration names; existing migration records are not translated.
+
+- Standardize Token2API branding, token2api source filenames and internal API calls, Token2Api code identifiers and TOKEN2API_* environment variables.
 
 - Split the console into focused sections, dialogs, shared UI and wallet transaction helpers; load secondary sections and dialogs on demand and warm their chunks after the initial render.
 
@@ -35,7 +37,7 @@ Tag format:
 - Bind each isolated ledger to its chain, asset, token precision and escrow; preserve migration history and historical denominations. A running instance still serves one chain and asset.
 - Add `deploy:evm`, refresh REST/OpenAPI units and document stablecoin provenance and per-chain acceptance requirements.
 
-- Rename the product to Token2API and the repository/package identifiers to token2api. Update page metadata, wallet sign-in text, OpenAPI titles, artwork labels, SDK examples and docs. Package the platform-hosted connector as `@token2api/connector` 0.1.2 with the `token2api-connector` command and a legacy command alias; preserve deployment settings, database names and protocol identifiers.
+- Rename the product to Token2API and the repository/package identifiers to token2api. Update page metadata, wallet sign-in text, OpenAPI titles, artwork labels, SDK examples and docs. Package the platform-hosted connector as `@token2api/connector` 0.1.2 with the `token2api-connector` command.
 
 
 

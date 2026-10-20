@@ -67,7 +67,7 @@ async function main() {
 	if (isNativeAsset(asset) && asset !== chain.nativeCurrency.symbol)
 		throw new Error("Native asset does not match the selected chain.");
 	const directory = path.resolve(
-		(process.env.TOKEN2API_DATA_DIR ?? process.env.MON2API_DATA_DIR) ||
+		process.env.TOKEN2API_DATA_DIR ||
 			`.runtime/evm/${chain.id}-${asset.toLowerCase()}`,
 	);
 	const configFile = path.join(directory, "chain.json");

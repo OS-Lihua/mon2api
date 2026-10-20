@@ -103,7 +103,6 @@ export const chatPost = createRestMutation({
 							total_tokens: result.inputTokens + result.outputTokens,
 						},
 						token2api: billingMetadata,
-						mon2api: billingMetadata,
 					},
 					{ headers: { ...headers, "x-idempotency-key": idempotencyKey } },
 				);

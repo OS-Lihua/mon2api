@@ -81,5 +81,5 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Keep uncertain usage in REVIEW with a retained reservation. Do not infer zero usage.
 - Persist settlement jobs before sending transactions; recover by nonce and receipt hash.
 - Demo identities and public test keys only operate on loopback chain 31337.
-- Keep the product name Token2API; use token2api for repository and package names. Retain legacy configuration and protocol identifiers for compatibility. Connector terminology is gateway or pool connector.
+- Keep the product name Token2API; use token2api for repository and package names. Use only the current naming conventions; do not add legacy configuration, command or protocol aliases. Connector terminology is gateway or pool connector.
 - If a .codegraph directory exists, use CodeGraph before searching or reading code.

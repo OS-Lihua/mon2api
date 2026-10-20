@@ -4,7 +4,7 @@ AI 资源市场 · 多链结算平台。支持 Ethereum 主网、Base、Arbitrum
 
 每套运行实例固定一条链、一种资产和一个托管合约，并使用独立数据库。当前不在同一实例内切换多个资金账本，不自动换币或跨链。链、稳定币版本及合约精度的配置见[多链结算](docs/MULTICHAIN.md)。加入支持列表不代表已经部署或完成真实资金验收。
 
-买方锁定预算并确认后，直接获得 `connection: {base_url, key, model}`。账本和报价按结算资产的整数百万分之一计量；链上转账按 `tokenDecimals` 换算。旧账本保持原资产与金额，不能更名或直接复用。产品展示名称统一为 Token2API，文件、目录和包名使用 `token2api`，代码标识使用 `Token2Api`，环境变量使用 `TOKEN2API_*`。旧部署兼容规则见[命名与兼容](docs/NAMING.md)。
+买方锁定预算并确认后，直接获得 `connection: {base_url, key, model}`。账本和报价按结算资产的整数百万分之一计量；链上转账按 `tokenDecimals` 换算。旧账本保持原资产与金额，不能更名或直接复用。产品展示名称统一为 Token2API，文件、目录和包名使用 `token2api`，代码标识使用 `Token2Api`，环境变量使用 `TOKEN2API_*`。完整规则见[命名规范](docs/NAMING.md)。
 
 商家可通过[本机连接器](docs/LOCAL_CONNECTOR.md)保留上游 Key，并让持续运行的 CLI 服务接收平台任务。安装 Node.js 24 或更高版本后，在“接入资源”中选择本机模式，复制凭证及网页提供的 `npx` 启动命令，可在任意目录运行，无需下载项目或配置数据库。独立安装包由当前平台提供，不依赖 npm 注册表发布。连接器自动读取网关模型列表，再在网页选择模型和报价上架，无需手填模型 ID。Magpie 默认地址为 `http://127.0.0.1:3425/v1`。离线后停止接单，已执行但用量不确定的请求保留预算等待核对。
 
@@ -63,7 +63,7 @@ REST 创建资源沿用 `kind: "gateway"`，新增 `connectionMode: "api" | "oau
 | 服务 | 地址或位置 |
 | --- | --- |
 | Web | `http://localhost:3000` |
-| PostgreSQL | `127.0.0.1:55432`，数据库 `mon2api` |
+| PostgreSQL | `127.0.0.1:55432`，数据库 `token2api` |
 | 链与资产 | `CHAIN_CONFIG_JSON` 或公开 `chain.json` |
 | 部署信息 | `.runtime/evm/<chainId>-<asset>/chain.json`，仅公开字段 |
 | API 规范 | `/api/v1/openapi.json` |

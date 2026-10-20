@@ -99,7 +99,7 @@ async function serializedChain<T>(action: () => Promise<T>): Promise<T> {
 		.then(() =>
 			db.$transaction(
 				async (tx) => {
-					await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(hashtext(${"mon2api:chain-signer"}))`;
+					await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(hashtext(${"token2api:chain-signer"}))`;
 					return action();
 				},
 				{ timeout: 120_000, maxWait: 30_000 },

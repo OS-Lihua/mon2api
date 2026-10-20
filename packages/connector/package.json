@@ -1,12 +1,11 @@
 {
 	"name": "@token2api/connector",
-	"version": "0.1.2",
+	"version": "0.1.3",
 	"description": "Token2API local gateway connector; upstream keys stay on your machine",
 	"license": "MIT",
 	"type": "module",
 	"bin": {
-		"token2api-connector": "dist/connector.mjs",
-		"mon2api-connector": "dist/connector.mjs"
+		"token2api-connector": "dist/connector.mjs"
 	},
 	"files": [
 		"dist/connector.mjs",

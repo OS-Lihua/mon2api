@@ -81,7 +81,7 @@ beforeEach(() => {
 });
 
 describe("REST chat finish reasons", () => {
-	it("returns canonical billing metadata and the same legacy compatibility metadata", async () => {
+	it("returns Token2API billing metadata", async () => {
 		mocks.runChat.mockResolvedValue(result("stop"));
 		const response = await chatPost(request(false));
 		const body = completionResponseSchema.parse(await response.json());
@@ -91,7 +91,6 @@ describe("REST chat finish reasons", () => {
 			unit: "micro_dUSD",
 			usage_source: "upstream_reported",
 		});
-		expect(body.mon2api).toEqual(body.token2api);
 	});
 	it.each(["stop", "length", "content_filter"] as const)(
 		"returns %s in an ordinary completion",

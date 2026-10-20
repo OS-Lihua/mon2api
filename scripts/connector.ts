@@ -101,8 +101,7 @@ async function main() {
 					throw new ConnectorLaunchError();
 				})
 			: credentials?.token ||
-					(process.env.TOKEN2API_CONNECTOR_TOKEN ??
-						process.env.MON2API_CONNECTOR_TOKEN) ||
+					process.env.TOKEN2API_CONNECTOR_TOKEN ||
 					(await secret("平台连接器凭证")),
 	);
 	const client = new ConnectorClient(platform, token);
@@ -117,8 +116,7 @@ async function main() {
 		.max(2048)
 		.parse(
 			credentials?.apiKey ||
-				(process.env.TOKEN2API_UPSTREAM_KEY ??
-					process.env.MON2API_UPSTREAM_KEY) ||
+				process.env.TOKEN2API_UPSTREAM_KEY ||
 				(await secret("本机上游 API Key")),
 		);
 	const stopping = new AbortController();
