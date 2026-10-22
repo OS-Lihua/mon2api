@@ -27,6 +27,8 @@ USDT、USDC 在不同链上可能是发行方原生版本、桥接版本或其�
 
 ## 配置和部署
 
+模型 Key 的统一预付余额需要包含 `prepaidVersion() == 1`、`depositPrepaid`、`withdrawPrepaid`、`reservePrepaidSession` 和 `settlePrepaid` 的新版托管合约。源码更新不会改变已部署合约。旧合约仍可处理原有会话和退出；预付功能在不支持的合约上明确返回不可用。部署新合约时使用新的独立数据库和数据目录，不把旧数据库改绑到新合约，不转换或合并旧余额。应用数据库的新增迁移只增加模型、路由、权限与分账字段。生产迁移独立执行，构建不执行迁移。
+
 1. 为每个链和资产准备独立 PostgreSQL 数据库或 schema，设置 `DATABASE_URL`，执行 `pnpm db:migrate`。
 2. 设置 `TOKEN2API_MODE=evm`、`SETTLEMENT_CHAIN_ID`、`SETTLEMENT_ASSET`。原生资产必须与该链匹配；稳定币另设 `SETTLEMENT_TOKEN_ADDRESS`。可用资产为 `ETH`、`BNB`、`POL`、`AVAX`、`USDT`、`USDC`。
 3. 设置 `TOKEN2API_DATA_DIR`，默认为 `.runtime/evm/<chainId>-<asset小写>`。设置唯一的 `ESCROW_OWNER_PRIVATE_KEY`，用于部署、计量结算、管理和平台手续费收款；私钥只放服务器环境。可通过 `EVM_RPC_URL` 指定 HTTPS RPC。

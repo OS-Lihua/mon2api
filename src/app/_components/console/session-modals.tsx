@@ -1,146 +1,12 @@
 "use client";
 
-import { KeyRound, LoaderCircle, Wallet } from "lucide-react";
 import { type FormEvent, useState } from "react";
-import { ConsoleSelect } from "~/app/_components/console-select";
+import type { ModelView } from "~/shared/model-routing";
 import { formatChainBalance, formatAmount as usd } from "~/shared/money";
-import { isNativeAsset } from "~/shared/settlement-asset";
-import type {
-	ListingView,
-	NetworkInfo,
-	RefundView,
-	SessionView,
-} from "~/shared/token2api";
-import { uiPreview } from "~/shared/ui-preview";
-import { remainingBudget, short } from "./format";
+import type { NetworkInfo, RefundView, SessionView } from "~/shared/token2api";
+import { remainingBudget } from "./format";
+import { ModelPicker } from "./model-picker";
 import { Modal, Transaction } from "./ui";
-
-export function RentModal({
-	listing,
-	network,
-	nativeSymbol,
-	budget,
-	busy,
-	error,
-	onBudgetChange,
-	onClose,
-	onSubmit,
-}: {
-	listing: ListingView;
-	network: NetworkInfo;
-	nativeSymbol: string;
-	budget: string;
-	busy: string | null;
-	error: string | null;
-	onBudgetChange: (value: string) => void;
-	onClose: () => void;
-	onSubmit: (event: FormEvent) => void;
-}) {
-	const asset = network.asset;
-	return (
-		<Modal
-			busy={!!busy}
-			error={error}
-			onClose={() => !busy && onClose()}
-			title="创建预算会话"
-		>
-			<form onSubmit={onSubmit}>
-				<div className="rent-summary">
-					<strong>{listing.name}</strong>
-					<span className="rent-model mono">{listing.model}</span>
-					<dl>
-						<div>
-							<dt>提供者</dt>
-							<dd className="mono" title={listing.owner}>
-								{short(listing.owner)}
-							</dd>
-						</div>
-						<div>
-							<dt>结算网络</dt>
-							<dd>{network.name}</dd>
-						</div>
-						<div>
-							<dt>结算资产</dt>
-							<dd>{asset}</dd>
-						</div>
-						<div>
-							<dt>输入 / 百万 Token</dt>
-							<dd>
-								{usd(listing.inputRate)} {asset}
-							</dd>
-						</div>
-						<div>
-							<dt>输出 / 百万 Token</dt>
-							<dd>
-								{usd(listing.outputRate)} {asset}
-							</dd>
-						</div>
-					</dl>
-					{!isNativeAsset(asset) && (
-						<p className="settlement-token">
-							代币合约 <code>{network.token}</code>
-						</p>
-					)}
-					<p>
-						{listing.kind === "demo"
-							? "模拟资源，无官方同款可比较。"
-							: "模型 ID 和价格由提供者声明，模型身份未核验。"}
-					</p>
-				</div>
-				<div className="field">
-					<label htmlFor="rent-budget">锁定预算（{asset}）</label>
-					<input
-						aria-describedby="rent-budget-help"
-						disabled={!!busy}
-						id="rent-budget"
-						inputMode="decimal"
-						onChange={(event) => onBudgetChange(event.target.value)}
-						pattern="(?:0|[1-9][0-9]*)(?:[.][0-9]{1,6})?"
-						placeholder="输入要锁定的金额"
-						required
-						title="金额最多六位小数，不使用科学计数法"
-						type="text"
-						value={budget}
-					/>
-					<small id="rent-budget-help">
-						会话固定此资源、提供者和 {asset}{" "}
-						挂牌价快照。每次调用先预留预算，关闭后可提取未使用的 {asset}
-						。网络手续费使用 {nativeSymbol}，另计。
-						{isNativeAsset(asset)
-							? `请在钱包中确认 ${asset} 预算锁定交易。`
-							: `需先确认 ${asset} 授权，再确认预算锁定交易。`}
-					</small>
-				</div>
-				<div className="form-actions">
-					<button
-						className="button"
-						disabled={!!busy}
-						onClick={onClose}
-						type="button"
-					>
-						取消
-					</button>
-					<button
-						className="button primary"
-						disabled={!!busy || uiPreview}
-						type="submit"
-					>
-						{busy === "rent" ? (
-							<LoaderCircle className="spin" size={12} />
-						) : (
-							<Wallet size={12} />
-						)}
-						{uiPreview
-							? "预览模式 · 不执行交易"
-							: busy === "rent"
-								? "正在确认链上交易…"
-								: "锁定预算并开始"}
-					</button>
-				</div>
-			</form>
-		</Modal>
-	);
-}
 
 export function RefundModal({
 	session,
@@ -166,6 +32,8 @@ export function RefundModal({
 	onWithdraw: () => void;
 }) {
 	const asset = network.asset;
+	const prepaid =
+		refund?.destination === "prepaid" || session.fundingSource === "PREPAID";
 	return (
 		<Modal
 			busy={!!busy}
@@ -179,15 +47,19 @@ export function RefundModal({
 				</p>
 				<p>
 					{refund?.status === "AVAILABLE"
-						? "已转入可提现余额："
+						? prepaid
+							? "已退回预付账户："
+							: "已转入可提现余额："
 						: "当前可退额度（待确认）："}
 					<strong>
 						{usd(refund?.amount ?? remainingBudget(session), true)} {asset}
 					</strong>
 				</p>
 				<p>
-					申请后停止新调用。退款仍使用 {asset}，提取时的网络手续费使用{" "}
-					{nativeSymbol}
+					{prepaid
+						? "本次未使用的预留退回统一预付账户，Key 可继续调用。"
+						: "申请后停止此会话的新调用。"}
+					退款仍使用 {asset}，提取时的网络手续费使用 {nativeSymbol}
 					。已消费费用和网络手续费不退；待核对用量继续保留预留。
 				</p>
 				{(refund?.reserved ?? session.reserved) > 0 && (
@@ -199,7 +71,9 @@ export function RefundModal({
 				{refund && (
 					<div className="notice info">
 						{refund.status === "AVAILABLE"
-							? "退款已转入可提现余额，请用钱包提取。若此前已提取，无需重复操作。"
+							? prepaid
+								? "未使用金额已退回预付账户，可继续调用，或在预付账户中提取到钱包。"
+								: "退款已转入可提现余额，请用钱包提取。若此前已提取，无需重复操作。"
 							: refund.status === "PENDING_REVIEW"
 								? "申请已保存，正在等待用量核对。预留预算不会被当作零消费释放。"
 								: "申请已保存，后台正在结算并关闭会话。"}
@@ -218,14 +92,16 @@ export function RefundModal({
 						返回
 					</button>
 					{refund?.status === "AVAILABLE" ? (
-						<button
-							className="button primary"
-							disabled={!!busy || !claimable || claimable === "0"}
-							onClick={onWithdraw}
-							type="button"
-						>
-							提取可提现 {asset} 到钱包
-						</button>
+						prepaid ? null : (
+							<button
+								className="button primary"
+								disabled={!!busy || !claimable || claimable === "0"}
+								onClick={onWithdraw}
+								type="button"
+							>
+								提取可提现 {asset} 到钱包
+							</button>
+						)
 					) : (
 						<button
 							className="button primary"
@@ -237,7 +113,7 @@ export function RefundModal({
 						</button>
 					)}
 				</div>
-				{refund?.status === "AVAILABLE" && (
+				{refund?.status === "AVAILABLE" && !prepaid && (
 					<p className="code-hint">
 						提现会提取当前钱包的全部可提现余额，可能同时包含其他会话退款或商家收入。
 					</p>
@@ -336,26 +212,32 @@ export function WithdrawModal({
 }
 
 export function KeyModal({
-	sessions,
-	sessionId,
+	models,
+	selectedModels,
 	keyName,
 	asset,
 	busy,
 	error,
+	loading,
+	queryError,
+	onRetry,
 	onClose,
 	onKeyNameChange,
-	onSelectSession,
+	onModelsChange,
 	onSubmit,
 }: {
-	sessions: SessionView[];
-	sessionId: string;
+	models: ModelView[];
+	selectedModels: string[];
 	keyName: string;
 	asset: NetworkInfo["asset"];
 	busy: string | null;
 	error: string | null;
+	loading: boolean;
+	queryError: string | null;
+	onRetry: () => void;
 	onClose: () => void;
 	onKeyNameChange: (value: string) => void;
-	onSelectSession: (id: string) => void;
+	onModelsChange: (models: string[]) => void;
 	onSubmit: (event: FormEvent) => void;
 }) {
 	return (
@@ -371,32 +253,26 @@ export function KeyModal({
 					<input
 						disabled={!!busy}
 						id="key-name"
-						maxLength={60}
+						maxLength={64}
 						onChange={(event) => onKeyNameChange(event.target.value)}
 						required
 						value={keyName}
 					/>
 				</div>
-				<div className="field">
-					<label htmlFor="key-session">绑定预算会话</label>
-					<ConsoleSelect
-						disabled={!!busy}
-						id="key-session"
-						onValueChange={onSelectSession}
-						options={sessions.map((item) => ({
-							value: item.id,
-							label: item.listingName,
-							description: `${short(item.id)} · 剩余 ${usd(remainingBudget(item), true)} ${asset}`,
-							icon: Wallet,
-						}))}
-						placeholder="选择要绑定的预算会话"
-						required
-						value={sessionId}
-					/>
-					<small>
-						密钥只能使用该会话的预算和资源，创建后完整密钥只显示一次。
-					</small>
-				</div>
+				<ModelPicker
+					asset={asset}
+					disabled={!!busy}
+					error={queryError}
+					loading={loading}
+					models={models}
+					onChange={onModelsChange}
+					onRetry={onRetry}
+					selected={selectedModels}
+				/>
+				<p className="muted">
+					Key
+					仅控制模型权限。调用费用从当前钱包的统一预付余额扣除，无需绑定供应商或预算会话。
+				</p>
 				<div className="form-actions">
 					<button
 						className="button"
@@ -408,15 +284,16 @@ export function KeyModal({
 					</button>
 					<button
 						className="button primary"
-						disabled={!sessionId || !keyName.trim() || !!busy}
+						disabled={
+							!!busy ||
+							!selectedModels.length ||
+							!keyName.trim() ||
+							loading ||
+							!!queryError
+						}
 						type="submit"
 					>
-						{busy === "key" ? (
-							<LoaderCircle className="spin" size={12} />
-						) : (
-							<KeyRound size={12} />
-						)}
-						创建密钥
+						{busy === "key" ? "正在创建…" : "创建密钥"}
 					</button>
 				</div>
 			</form>

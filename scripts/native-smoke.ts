@@ -467,6 +467,10 @@ try {
 	console.log(
 		"PASS native fee/refund/withdrawal conservation, key revocation and durable settlement recovery",
 	);
+	const { runModelRoutingScenarios } = await import(
+		"./model-routing-scenarios"
+	);
+	await runModelRoutingScenarios();
 } finally {
 	await appDb?.$disconnect();
 	await server.close();

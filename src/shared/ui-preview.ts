@@ -1,3 +1,4 @@
+import type { ModelView } from "./model-routing";
 import { DEFAULT_NETWORK } from "./network";
 import type { Snapshot } from "./token2api";
 
@@ -5,6 +6,22 @@ export const uiPreview =
 	process.env.NODE_ENV === "development" &&
 	process.env.NEXT_PUBLIC_UI_PREVIEW === "true";
 const owner = "0x0000000000000000000000000000000000000001";
+export const previewModels: ModelView[] = [
+	{
+		id: "token2api-demo",
+		name: "通用对话（预览）",
+		inputRate: 3_000_000,
+		outputRate: 15_000_000,
+		available: true,
+	},
+	{
+		id: "token2api-reasoning-demo",
+		name: "推理对话（预览）",
+		inputRate: 4_000_000,
+		outputRate: 18_000_000,
+		available: true,
+	},
+];
 export const previewSnapshot: Snapshot = {
 	viewer: { address: owner, name: "UI 预览", demo: true },
 	network: {
@@ -82,7 +99,8 @@ export const previewSnapshot: Snapshot = {
 			id: "ui-preview-key",
 			name: "预览应用",
 			prefix: "preview_only",
-			sessionId: `0x${"1".repeat(64)}`,
+			sessionId: null,
+			models: ["token2api-demo"],
 			revoked: false,
 			createdAt: "2026-10-18T00:00:00.000Z",
 		},

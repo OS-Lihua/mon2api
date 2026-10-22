@@ -11,7 +11,7 @@
 | 凭证 | 用途 | 获取方式 |
 | --- | --- | --- |
 | `token2api_session` Cookie | 商家、消费者管理操作与私有账单 | 钱包签署 SIWE 登录消息；8 小时有效 |
-| `Authorization: Bearer t2a_…` | 模型查询、推理、按幂等键查询该会话的用量 | 为自己的活跃预算会话创建 Key；完整值仅返回一次 |
+| `Authorization: Bearer t2a_…` | 模型查询、推理、按幂等键查询该 Key 的请求 | 创建 Key 并显式授权模型，或保留原会话 Key；完整值仅返回一次 |
 
 管理接口拒绝 `Authorization` 头，即使同时携带有效 Cookie。推理 Key 不能上架资源、创建预算、创建其他 Key 或读取其他会话。
 
@@ -59,6 +59,10 @@ CLI/服务端客户端用自己的钱包签名器完成同一流程，并保存 
 | 方法与路径 | 凭证 | 功能 |
 | --- | --- | --- |
 | `GET /network` | 无 | 当前链、公开合约地址、费率和就绪状态 |
+| `GET /catalog/models` | 无 | 已发布模型、统一报价与路由可用状态 |
+| `GET /consumer/prepaid` | Cookie | 当前钱包的确认余额与处理中资金 |
+| `POST /consumer/prepaid/transactions` | Cookie | 构造指定金额的充值或提取交易；仍须钱包签名 |
+| `POST /consumer/keys/{id}/models` | Cookie | 更新自己的模型 Key 授权 |
 | `GET /resources` | 无 | 分页查询已上架资源，支持 `q`、`kind` |
 | `GET /resources/{id}` | 无 | 已上架资源详情，不含连接器地址或凭证 |
 | `POST /auth/challenge`、`POST /auth/login` | 钱包签名 | 登录 |
@@ -81,11 +85,13 @@ CLI/服务端客户端用自己的钱包签名器完成同一流程，并保存 
 | `POST /consumer/keys/{id}/revoke` | Cookie | 撤销自己的 Key |
 | `GET /consumer/requests` | Cookie | 自己的调用账单；支持 `sessionId`、`idempotencyKey` |
 | `GET /consumer/settlements` | Cookie | 自己的结算批次 |
-| `GET /models` | 推理 Key | Key 绑定的模型名称 |
+| `GET /models` | 推理 Key | Key 已授权且仍启用的模型 |
 | `POST /chat/completions` | 推理 Key | 文本普通／流式调用 |
-| `GET /requests/lookup?idempotency_key=…` | 推理 Key | 查询该 Key 会话的请求状态与用量 |
+| `GET /requests/lookup?idempotency_key=…` | 推理 Key | 查询该 Key 的请求状态与用量 |
 
 `merchant/requests`、两端的 `settlements` 和 `consumer/keys` 支持 `sessionId` 过滤。商家读接口不返回消费者 Key 或提示词。
+
+模型 Key 创建输入为 `{"name":"My app","models":["平台模型 ID"]}`，无需预算会话。1–100 个模型须显式授权；未来新增模型不会自动放行。所有模型 Key 共用钱包预付余额。路由、价格快照、逐次预留、恢复和新版合约边界见[模型路由说明](./MODEL_ROUTING.md)。原 `sessionId` 创建形式继续兼容旧客户端。
 
 ## 金额与状态
 
@@ -95,7 +101,7 @@ CLI/服务端客户端用自己的钱包签名器完成同一流程，并保存 
 
 | 对象 | 关键状态 |
 | --- | --- |
-| 会话 | `DRAFT` 待链上确认；`ACTIVE` 可接单；`CLOSING` 停止新请求；`CLOSED` 已关闭 |
+| 会话 | `PREPARING` 准备预付预留；`REJECTED` 未执行的预留已取消；`DRAFT` 待链上确认；`ACTIVE` 可接单；`CLOSING` 停止新请求；`CLOSED` 已关闭 |
 | 调用 | `RUNNING` 处理中；`COMPLETED` 已核销用量；`REVIEW` 待核对；`FAILED` 失败 |
 | 结算 | `READY` 待确认；`CONFIRMED` 已确认；`UNCOLLECTIBLE` 无法收回 |
 

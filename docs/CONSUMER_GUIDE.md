@@ -1,167 +1,111 @@
-> 按当前部署的结算资产报价与计费。读取 `/network` 的 `chainId`、`asset`、`tokenDecimals`、`ledgerUnit` 和 `balanceUnit`，按[多链结算](./MULTICHAIN.md)换算金额。
-
 # 下游使用指南
 
-下游使用者先选择资源、锁定预算，再用独立 Key 调用模型。一个预算会话固定一位商家、一份资源和一份价格快照，不自动切换商家或模型。
+创建 API Key，选择允许使用的模型，再向统一预付账户充值。调用时指定平台模型 ID，上游由平台选择，按平台统一模型报价计费。所有模型 Key 共用当前钱包的预付余额，不需要选择供应商或创建预算会话。
+
+每套部署固定一条链、一种结算资产和一个托管合约，不自动换币或跨链。先读取 `/api/v1/network` 的 `chainId`、`asset`、`tokenDecimals`、`ledgerUnit` 和 `balanceUnit`。金额使用结算资产的整数百万分之一，价格单位是当前资产 / 百万 Token，换算见[多链结算](./MULTICHAIN.md)。
 
 ## 网页使用
 
-1. 打开控制台，在“当前市场”核对结算网络、结算资产和网络手续费币种。首页的链目录表示已适配范围，不表示当前市场同时开通了所有链或资产。
-2. 连接钱包并签名登录。在“资源市场”搜索模型或提供者，按可用状态、接入类型筛选，按输入价或输出价排序。表格便于比较；手机端可切换卡片。核对报价单位为当前资产 / 百万 Token。
-3. 创建预算会话。弹窗会再次显示网络、资产和价格；使用稳定币时还会显示代币合约。预算和退款使用同一种资产，网络手续费另计。
-4. 在钱包确认操作。原生代币直接锁定预算；稳定币先授权，再锁定预算。资金确认后保存 Base URL、API Key 和模型名，完整 Key 只显示一次。
-5. 在“调用实验室”或自己的 SDK 中发起调用，在“账单与结算”核对用量、费用和链上交易。
-6. 不再使用时申请退回未用预算。待结算和用量核对完成后，使用原钱包提取可提现余额。
+1. 在控制台核对网络、结算资产与 Gas 币种，连接钱包并签名登录。登录签名不授权转账。
+2. 在“模型市场”搜索模型，按可用状态筛选、按输入或输出价格排序。这里显示平台统一报价，平台模型 ID 可以与上游 ID 不同。
+3. 点击“创建模型 Key”，填写名称并勾选允许使用的模型。也可在“API 密钥”创建。每个 Key 明确授权 1–100 个模型，平台新增模型不会自动授权。
+4. 保存仅显示一次的完整 Key 与 Base URL。列表只显示脱敏元数据。可以编辑模型权限或撤销 Key；撤销不取消已经派发的调用。
+5. 在“API 密钥”或“账单与结算”的预付账户中充值。原生币直接支付充值金额；稳定币依次重置授权、设置本次授权、充值。每次交易由钱包签名，Gas 另计。
+6. 在调用实验室选择 Key 与已授权模型，或通过 SDK 调用。界面等待完整响应，不提供停止按钮。失败后先查账单和原幂等请求，避免重复付费调用。
+7. 在账单核对用量、用户费用、预留和链上结算。未用调用预留由 worker 退回预付账户。只有可用余额可提取，提取由钱包签名。
 
-调用实验室等待完整响应后才展示文本与费用，不提供前端停止按钮。支持 Ctrl / ⌘ + Enter 发送。请求失败时保留消息；先查看账单，避免将新调用误当成重试。REVIEW、执行中或用量不完整的请求显示“待核对”，不显示零费用或已完成结算；对应预留预算继续保留。
+加载、空数据、错误、提交中和成功分别显示。手机端可完成 Key 创建、授权、充值表单与调用；宽表格可横向滚动。弹窗支持 Tab、Shift+Tab 和 Escape，关闭后归还焦点。提交失败保留输入；切换钱包会清除当前身份的私密状态。
 
-预算会话、请求和结算分别分页，可按名称或状态筛选。分页只覆盖当前返回的最多 100 个会话、200 条请求和 100 笔结算。API 密钥支持搜索、状态筛选和撤销确认，完整密钥仍仅显示一次。
+## API 创建 Key 与授权
 
-当前市场固定一种链和资产，没有自动换币或跨链操作。若需另一种结算资产，使用已开通对应资产的市场。
-
-下面的 API 步骤面向自行集成的客户端。
-
-## 1. 发现资源与登录
+先按 [API 钱包登录](./API.md#钱包登录) 获取 Cookie。以下 `BASE_URL` 为平台地址，`COOKIE_JAR` 为私密登录文件。
 
 ```bash
-BASE_URL=http://localhost:3000
-curl "$BASE_URL/api/v1/network"
-curl "$BASE_URL/api/v1/resources?kind=gateway&limit=20"
-```
+curl "$BASE_URL/api/v1/catalog/models"
 
-资源价格以当前结算资产的整数百万分之一 / 百万 Token 表示。核对模型 ID 和输入、输出报价；模型身份由商家声明。
-
-连接钱包并签名登录，或使用 [API 钱包认证](./API.md#钱包登录)。下列管理示例中的 `COOKIE_JAR` 是该消费者自己的登录 Cookie，不是商家 Cookie。
-
-## 2. 锁定预算
-
-网页可直接创建预算会话。外部客户端：
-
-```bash
-curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/sessions" \
-  -H 'Content-Type: application/json' \
-  -d '{"listingId":"YOUR_RESOURCE_ID","budget":5000000}'
-```
-
-`5000000` 表示 5 单位当前结算资产；锁定金额由用户自行填写，支持小于 1 或大于 100 单位的金额。金额必须大于零，最多六位小数；REST 使用安全整数微单位。不同资产不做汇率换算。
-
-钱包模式返回 `mode: "wallet"`、会话 `id` 和 `transaction` 条款，此时是 **DRAFT，不是已付款或已激活**。不要自动重复创建会话。
-
-1. 读取 `/network`，核对链 ID、资产、代币精度、托管合约和 `ready`。原生代币的 token 为零地址。
-2. 将整数预算乘以 `10 ** (tokenDecimals - 6)`，得到链上预算。USDT、USDC 先授权托管合约，原生代币直接附带 value。
-3. 钱包调用 `openSession(id, provider, termsHash, chainBudget, expiresAt)`。原生资产使用 `nativeEscrowAbi` 并附带 `value: chainBudget`；稳定币使用 `escrowAbi`，不附带 value。其他参数逐项使用返回条款。
-4. 等待回执，再确认开通：
-
-```bash
-curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/sessions/$SESSION_ID/confirm" \
-  -H 'Content-Type: application/json' \
-  -d '{"txHash":"YOUR_OPEN_TRANSACTION_HASH"}'
-```
-
-也可发送 `{}`，由服务端查找开通事件。确认会核对消费者、提供者、预算、条款和确认数；首次返回 `ACTIVE` 时同时返回 `connection: {base_url, key, model}`，可直接复制到调用方。Key 与激活在同一事务中写入，平台仅保存哈希。重复确认不再发新 Key；若首次响应丢失，在密钥页撤销未知 Key，再按下节创建替代 Key。ABI 源文件为 [`src/lib/abi.ts`](../src/lib/abi.ts)，使用自己钱包对应的 viem 等客户端发送交易。
-
-本地演示仅接受显式设置的回环链 31337。外部钱包按 `/network` 的链 ID、资产和托管合约操作。
-
-## 3. 创建 Key
-
-```bash
 curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/keys" \
   -H 'Content-Type: application/json' \
-  -d '{"sessionId":"YOUR_SESSION_ID","name":"My application"}'
+  -d '{"name":"My app","models":["platform-model-id"]}'
 ```
 
-成功为 HTTP 201，返回 `{ "base_url": "https://your-platform.example/v1", "key": "t2a_…", "model": "YOUR_SESSION_MODEL" }`。完整 Key 仅此一次返回，保存在应用服务端。它只能使用该会话的模型和预算。用 `GET /consumer/keys` 查询元数据，用 `POST /consumer/keys/{id}/revoke` 和 `{}` 撤销。
-
-## 4. 调用模型
+创建成功返回 HTTP 201，包含 `base_url`、完整 `key`、已授权 `models` 和一个供示例使用的 `model`。调用时可选 `models` 中任意仍启用的模型。完整 Key 不再提供重读；遗失后创建新 Key 并撤销旧 Key。
 
 ```bash
-curl -N "$BASE_URL/v1/chat/completions" \
+curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/keys?limit=20"
+
+curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/keys/$KEY_ID/models" \
+  -H 'Content-Type: application/json' \
+  -d '{"models":["platform-model-id","another-model-id"]}'
+
+curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/keys/$KEY_ID/revoke" \
+  -H 'Content-Type: application/json' -d '{}'
+```
+
+Cookie 管理接口拒绝推理 Bearer Key。模型权限在请求受理和执行准入时复查，不能用另一个钱包管理 Key。
+
+## 充值与提取
+
+```bash
+curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/prepaid"
+
+curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/prepaid/transactions" \
+  -H 'Content-Type: application/json' \
+  -d '{"kind":"deposit","amount":1000000}'
+```
+
+`amount: 1000000` 表示 1 单位当前结算资产。响应只是交易计划，包含 `chainId`、账本 `amount` 和依次发送的 `transactions`（`to`、`data`、原始链上 `value`）。必须核对网络、目标、方法、金额和授权接收方，再由原钱包逐笔签名发送。Web 内部继续使用 tRPC，不直接调用这些管理 REST。
+
+提取使用 `{"kind":"withdraw","amount":1000000}`。只能提取已确认且未预留的余额，不能取走运行中或 REVIEW 占用的资金。链上权限和余额检查仍会执行，过期计划可能失败，不能自动扩大授权或换钱包重试。
+
+预付账户返回：
+
+- `balance`：保守确认的空闲链上余额，原始整数单位按 `/network` 的 `balanceUnit` 和 `tokenDecimals` 解释。
+- `available`：扣除尚在准备的预留后可用于新调用或提取的余额，使用 `ledgerUnit`。
+- `preparing`：正在准备的逐次预算；`reserved`：执行中或待核对用量的预留。
+- `pendingSettlement`：已确认用量、尚待链上结算的费用；`releasing`：内部预算中尚未核销、待关闭退回的部分。
+
+这些状态可能短暂重叠，不能相加当作账户总资产。充值需等待确认，已发生的提取立即限制新准入。旧合约不支持预付账户或 RPC 不可用时返回 503，界面不会把错误显示为零余额。
+
+## 调用模型
+
+```bash
+curl "$BASE_URL/v1/models" -H "Authorization: Bearer $TOKEN2API_KEY"
+
+curl "$BASE_URL/v1/chat/completions" \
   -H "Authorization: Bearer $TOKEN2API_KEY" \
   -H 'Content-Type: application/json' \
-  -H 'Idempotency-Key: logical-request-0001' \
-  -d '{"model":"YOUR_SESSION_MODEL","messages":[{"role":"user","content":"Hello"}],"max_tokens":512,"stream":true,"stream_options":{"include_usage":true}}'
+  -H "Idempotency-Key: $REQUEST_KEY" \
+  -d '{"model":"platform-model-id","messages":[{"role":"user","content":"Hello"}],"max_tokens":512}'
 ```
 
-每个新逻辑调用使用新的 `Idempotency-Key`，同一次调用重试复用原键。长度 8–128；重复键返回 409，不再派发或扣费。服务端不保存可重放的完整生成内容。
+`GET /models` 仅返回该 Key 已授权且平台仍启用的模型。支持 OpenAI 文本 Chat Completions 的普通响应及真实 SSE，SDK 设置 `maxRetries: 0`。每个新调用使用新的 `Idempotency-Key`（8–128 字符）；同一次调用重试复用原值，Key 级幂等范围跨模型和上游。重复受理返回 409，不再次执行。
 
-Node.js / TypeScript 的官方 OpenAI SDK 用法：
+每次调用先固定可用上游和两份报价，再从预付余额确认最大费用预留，之后才执行推理。因此开始输出前包含真实的链上准备时间。平台选择已上架、在线、有并发且报价不高于用户报价的路由；不保证固定供应商。受理后不会因失败切换上游重放请求。
 
-```ts
-import { randomUUID } from "node:crypto";
-import OpenAI from "openai";
+JSON 响应的 `token2api.cost` 使用 `token2api.unit`。提示词限文本、最多 20 条，序列化后最多 24000 UTF-8 字节；输出上限 128–2048 Token。SSE 出错可在 HTTP 200 后返回错误帧。客户端断开不证明上游停止或免费。
 
-const client = new OpenAI({
-  apiKey: process.env.TOKEN2API_KEY,
-  baseURL: "http://localhost:3000/v1",
-  maxRetries: 0,
-});
-const requestKey = randomUUID(); // 保存到自己的业务请求记录中
-const completion = await client.chat.completions.create(
-  {
-    model: "YOUR_SESSION_MODEL",
-    messages: [{ role: "user", content: "Hello" }],
-    max_tokens: 512,
-  },
-  { headers: { "Idempotency-Key": requestKey } },
-);
-console.log(completion.choices[0]?.message.content);
-```
-
-生产环境替换为自己的 HTTPS 应用地址。当前只支持纯文本 Chat Completions；未知参数会返回 400。`max_tokens` 为 128–2048，默认 512；最多 20 条消息，单条内容最多 8000 Unicode 码点，整个 messages 序列化 JSON 不超过 24000 UTF-8 字节。原始请求体不超过 160 KiB。
-
-流式 HTTP 200 后仍可能收到 SSE `error`。收到 `[DONE]` 不会抵消此前的 error；不能只根据 HTTP 200 或 DONE 判为成功。使用 SDK 或完整 SSE 解析器处理数据帧，不要把网络分片当作完整事件。
-
-## 5. 响应丢失与账单核对
-
-响应丢失、超时或断流后，先用同一 Key 和原幂等键查询：
+## 核账与 REVIEW
 
 ```bash
-curl -G "$BASE_URL/api/v1/requests/lookup" \
-  -H "Authorization: Bearer $TOKEN2API_KEY" \
-  --data-urlencode "idempotency_key=$REQUEST_KEY"
+curl "$BASE_URL/api/v1/requests/lookup?idempotency_key=$REQUEST_KEY" \
+  -H "Authorization: Bearer $TOKEN2API_KEY"
+
+curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/requests?limit=20"
+curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/settlements?limit=20"
 ```
 
-接口返回请求状态、Token、费用和预留，不返回生成文本，也不再次调用上游。Key 撤销后改用钱包会话查询：
+预留尚未生成上游账单时，lookup 返回 `409 request_preparing`。这不是允许换幂等键重发的证明。若预留已被确认取消或释放且没有上游执行记录，返回 `409 request_not_executed`；本次幂等键仍不会重新执行。不存在返回 404，也须先排除钱包、Key 和请求标识错误。已撤销 Key 不再允许查询，原钱包仍可用 Cookie 核账。
 
-```bash
-curl -G -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/requests" \
-  --data-urlencode "sessionId=$SESSION_ID" \
-  --data-urlencode "idempotencyKey=$REQUEST_KEY"
-```
+`RUNNING` 表示执行中；`COMPLETED` 表示用量已核销，仍须核对结算状态。`REVIEW` 或未知 Token 为 `null` 时保留预留，费用不按零处理。只有确认链上结算的批次可显示 `CONFIRMED`。`providerCost` 为供应商费用（未扣服务费），与调用者支付的 `cost` 分开。
 
-- `RUNNING`：等待并继续查询。
-- `COMPLETED`：费用已核销；再查结算批次确认链上状态。
-- `REVIEW` 或 Token 为 `null`：用量待核对，保留预留，联系运营者；不能当成零消费。
-- 404／空列表：不能据此认定在途调用从未受理。先排除竞态、会话与 Key 不匹配；核对完成前不要用新键重新付费调用。
+结算 worker 恢复持久化的资金任务，不重新执行推理。未知用量由运营者依据上游账单或审计证据处理，不自动推断零用量。详见[模型路由说明](./MODEL_ROUTING.md)。
 
-REST 流断开后服务端会继续收集上游用量。客户端断开并不等于请求取消或免费。
+## 原有预算会话兼容
 
-## 6. 结算、关闭与退款
+原有会话仍固定一位商家、一份资源和一份价格快照，不切换资金来源或报价。保留 `/consumer/sessions` 的创建、详情、确认、结算、关闭和退款接口；旧客户端也可继续用 `{"name":"Legacy app","sessionId":"会话 ID"}` 创建单会话 Key。
 
-```bash
-curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/sessions/$SESSION_ID"
-curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/settlements?sessionId=$SESSION_ID"
+`POST /consumer/sessions/{id}/refund` 使用 `{}` 申请退款，`GET` 查询。`PROCESSING` 为处理中，`PENDING_REVIEW` 继续保留预留。`AVAILABLE` 表示链上关闭已确认。原有钱包预算的退款进入 `claimable`，需由原钱包调用 `withdraw()`；新预付租约的退款返回统一预付账户，响应 `destination: "prepaid"` 且 `withdrawRequired: false`。不能把两类余额合并或直接转换。
 
-curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/sessions/$SESSION_ID/settle" \
-  -H 'Content-Type: application/json' -d '{}'
+原生币旧会话的可提现余额支持原钱包调用 `withdrawTo(recipient)`。预付余额提取使用 `withdrawPrepaid(amount)`，返回原钱包，不借用旧会话提现入口。
 
-curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/sessions/$SESSION_ID/close" \
-  -H 'Content-Type: application/json' -d '{}'
-```
-
-worker 会自动处理结算；手工触发仍复用持久化结算任务。会话 `availableBudget = budget - spent - reserved`；先预留，再按 usage 核销，不会因为用量未知而显示成全部预算可用。
-
-关闭遇到 `409 pending_requests` 时，服务端已停止新接单；须等待执行中请求或人工核对完成后重试。关闭后未用预算进入链上 **可提现余额**，不会由此 REST 自动转入钱包。网页提取余额或由自己的钱包调用 escrow 的 `withdraw()`。
-
-原生币市场的网页提现可以填写收款地址，默认使用当前钱包地址。不能直接接收原生币转账的合约钱包，可由该钱包调用 `withdrawTo(recipient)`，将自己的全部可提现余额转入同一网络上可收款的地址。只有原钱包可以发起提现；收款地址不会获得代提现权限。收款地址不能为零地址，转账失败会回滚，原可提现余额保持不变。ERC20 市场仍提取到当前钱包。
-
-`withdrawTo` 需要部署包含此入口的新版原生币托管合约。已经部署的合约不会因源码更新而改变。按部署规则，新合约使用独立账本；原合约中的余额和会话须在原合约处理，不能直接改绑数据库。
-
-长期平台故障时，消费者可直接在合约 `requestClose(id)`，等待 120 秒退出窗口后 `closeSession(id)`，再 `withdraw()`。请按部署 ABI 与当前链上状态操作。链上正常退出不能代替对未核对用量的运营处理。
-
-
-## 申请退回未使用额度
-
-网页“账单与结算 → 预算会话 → 申请退款”会显示当前可退额度，确认后停止新调用。对应钱包 Cookie 管理接口为 `POST /api/v1/consumer/sessions/{id}/refund`，JSON body 为 `{}`；使用 `GET` 同一路径读取状态。申请在账本留痕，重复申请不会重复记账或退款。
-
-`PROCESSING` 表示结算中，`PENDING_REVIEW` 表示仍有待核对用量与预留。`AVAILABLE` 表示合约已确认关闭，未用预算进入原消费者的可提现余额。原钱包调用 `withdraw` 提取全部可提现资产；已消费用量与 Gas 不在退款范围内。
+平台长期故障时，消费者可直接调用合约 `requestClose(id)`，等待退出窗口，再调用 `closeSession(id)`。预付租约的未用预算退回预付余额，原钱包预算则退回可提现余额；分别通过对应入口提取。按实际部署 ABI 和链上状态操作，链上退出不能代替未知用量的运营核对。

@@ -7,6 +7,13 @@ import {
 	openSessionInput,
 	sessionIdSchema,
 } from "~/server/services/token2api.schema";
+import {
+	keyModels,
+	modelProductResponse,
+	prepaidAccountResponse,
+	prepaidTransactionResponse,
+	prepaidTransferInput,
+} from "~/shared/model-routing";
 
 type Operation = {
 	method: "get" | "post";
@@ -56,6 +63,54 @@ export function registerCommerce(
 	const opened = registry.register("OpenedSession", c.openSessionResponse);
 	const ok = registry.register("Ok", c.okResponse);
 	const operations: Operation[] = [
+		{
+			method: "get",
+			path: "/catalog/models",
+			operationId: "listPlatformModels",
+			summary: "List platform model IDs and uniform prices",
+			tag: "Discovery",
+			auth: "public",
+			output: z.object({ data: z.array(modelProductResponse) }).strict(),
+			description:
+				"Prices are integer micro-units of this deployment's settlement asset per million tokens. Check /network for asset and precision. Availability is advisory; route capacity is checked at admission.",
+		},
+		{
+			method: "get",
+			path: "/consumer/prepaid",
+			operationId: "getPrepaidAccount",
+			summary: "Read confirmed prepaid balance and retained reservations",
+			tag: "Consumer",
+			auth: "wallet",
+			output: prepaidAccountResponse,
+			description:
+				"balance is in chain atomic units. Other amounts are integer micro-units. A chain or capability error is not a zero balance. Account funds are shared by all model-scoped keys.",
+		},
+		{
+			method: "post",
+			path: "/consumer/prepaid/transactions",
+			operationId: "preparePrepaidTransfer",
+			summary:
+				"Construct wallet-signed prepaid deposit or withdrawal transactions",
+			tag: "Consumer",
+			auth: "wallet",
+			input: prepaidTransferInput,
+			output: prepaidTransactionResponse,
+			description:
+				"Does not send transactions. amount is positive integer micro-units. Transaction value is a decimal integer string in chain atomic units. Sign approvals and transfer in order on chainId; wait for confirmed receipts. Only unreserved confirmed funds can be withdrawn.",
+		},
+		{
+			method: "post",
+			path: "/consumer/keys/{id}/models",
+			operationId: "updateKeyModelPermissions",
+			summary: "Set an owned model key's explicit model allowlist",
+			tag: "Consumer",
+			auth: "wallet",
+			id: z.string().cuid(),
+			input: z.object({ models: keyModels }).strict(),
+			output: ok,
+			description:
+				"At least one and at most 100 distinct model IDs. Newly published models are never granted automatically. Only the owner can update a non-revoked model key.",
+		},
 		{
 			method: "get",
 			path: "/network",
@@ -321,14 +376,15 @@ export function registerCommerce(
 			method: "post",
 			path: "/consumer/keys",
 			operationId: "createConsumerKey",
-			summary: "Create an inference key for an owned active session",
+			summary:
+				"Create a model-scoped inference key or a key for an existing funded session",
 			tag: "Consumer",
 			auth: "wallet",
 			input: c.createKeyInput,
 			output: c.buyerConnectionResponse,
 			created: true,
 			description:
-				"Full key is returned once. Store it server-side. This operation is not replay-safe.",
+				"For prepaid usage send name and an explicit models allowlist. No provider or session selection is needed. Existing funded sessions may still use sessionId and name. Full key is returned once; store it server-side. This operation is not replay-safe.",
 		},
 		{
 			method: "post",
@@ -372,7 +428,7 @@ export function registerCommerce(
 			query: c.lookupQuery,
 			output: usage,
 			description:
-				"Read-only and scoped to the API key's own session and consumer. Returns usage status, not completion text. REVIEW and null tokens mean unknown usage with a retained reservation. A 404 is not proof that an in-flight request was never accepted. Never retry lost paid work under a new key.",
+				"Read-only and scoped to the API key and consumer, across all its model routes. Returns usage status, not completion text. A model invocation still preparing funds returns 409. REVIEW and null tokens mean unknown usage with a retained reservation. A 404 is not proof that an in-flight request was never accepted. Never retry lost paid work under a new key.",
 		},
 	];
 	for (const op of operations) {

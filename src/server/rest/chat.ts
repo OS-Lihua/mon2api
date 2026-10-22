@@ -6,6 +6,7 @@ import { db } from "~/server/db";
 import { AppError } from "~/server/services/auth";
 import { authenticateKey } from "~/server/services/market";
 import { runChat } from "~/server/services/metering";
+import { runModelChat } from "~/server/services/model-routing";
 import { publicChatInput } from "~/server/services/token2api.schema";
 import { createRestMutation, createRestQuery } from "./endpoint";
 
@@ -44,13 +45,28 @@ export const chatPost = createRestMutation({
 	handler: async ({ input, request }) => {
 		try {
 			const key = await requestKey(request);
-			const lease = await db.lease.findUnique({ where: { id: key.sessionId } });
-			if (!lease || lease.model !== input.model)
+			const lease = key.sessionId
+				? await db.lease.findUnique({ where: { id: key.sessionId } })
+				: null;
+			if (key.sessionId && (!lease || lease.model !== input.model))
 				throw new AppError(
 					"model_not_available",
 					"模型不属于此 API Key 绑定的租赁会话。",
 					400,
 				);
+			if (!key.sessionId) {
+				if (!key.models.includes(input.model))
+					throw new AppError("model_forbidden", "此 Key 无权调用该模型。", 403);
+				const model = await db.modelProduct.findUnique({
+					where: { id: input.model },
+				});
+				if (!model?.enabled)
+					throw new AppError(
+						"model_not_available",
+						"模型不存在或已停用。",
+						400,
+					);
+			}
 			const idempotencyKey = request.headers.get("idempotency-key");
 			if (
 				!idempotencyKey ||
@@ -62,22 +78,33 @@ export const chatPost = createRestMutation({
 					"必须提供长度为 8 到 128 的 Idempotency-Key。",
 				);
 			const args = {
-				sessionId: key.sessionId,
 				messages: input.messages,
 				maxTokens: input.max_tokens,
 				conversationId: input.conversation_id,
 				idempotencyKey,
 			};
+			const execute = (
+				onDelta: (text: string) => void | Promise<void>,
+				signal?: AbortSignal,
+			) =>
+				key.sessionId
+					? runChat(
+							key.owner,
+							{ ...args, sessionId: key.sessionId },
+							onDelta,
+							signal,
+							key.id,
+						)
+					: runModelChat(
+							key.owner,
+							{ ...args, keyId: key.id, model: input.model },
+							onDelta,
+							signal,
+						);
 			const id = `chatcmpl-${randomUUID()}`;
 			const created = Math.floor(Date.now() / 1000);
 			if (!input.stream) {
-				const result = await runChat(
-					key.owner,
-					args,
-					() => undefined,
-					request.signal,
-					key.id,
-				);
+				const result = await execute(() => undefined, request.signal);
 				const billingMetadata = {
 					request_id: result.id,
 					cost: result.cost,
@@ -126,21 +153,16 @@ export const chatPost = createRestMutation({
 						...(usage ? { usage } : {}),
 					});
 					try {
-						const result = await runChat(
-							key.owner,
-							args,
-							(delta) =>
-								emit(
-									chunk([
-										{
-											index: 0,
-											delta: { content: delta },
-											finish_reason: null,
-										},
-									]),
-								),
-							undefined,
-							key.id,
+						const result = await execute((delta) =>
+							emit(
+								chunk([
+									{
+										index: 0,
+										delta: { content: delta },
+										finish_reason: null,
+									},
+								]),
+							),
 						);
 						emit(
 							chunk([
@@ -193,20 +215,36 @@ export const modelsGet = createRestQuery({
 	handler: async ({ request }) => {
 		try {
 			const key = await requestKey(request);
-			const lease = await db.lease.findUniqueOrThrow({
-				where: { id: key.sessionId },
-			});
+			const lease = key.sessionId
+				? await db.lease.findUniqueOrThrow({ where: { id: key.sessionId } })
+				: null;
+			const models = lease
+				? [
+						{
+							id: lease.model,
+							createdAt: lease.createdAt,
+							owner: lease.provider,
+						},
+					]
+				: (
+						await db.modelProduct.findMany({
+							where: { id: { in: key.models }, enabled: true },
+							orderBy: { id: "asc" },
+						})
+					).map((model) => ({
+						id: model.id,
+						createdAt: model.createdAt,
+						owner: "token2api",
+					}));
 			return Response.json(
 				{
 					object: "list",
-					data: [
-						{
-							id: lease.model,
-							object: "model",
-							created: Math.floor(lease.createdAt.getTime() / 1000),
-							owned_by: lease.provider,
-						},
-					],
+					data: models.map((model) => ({
+						id: model.id,
+						object: "model",
+						created: Math.floor(model.createdAt.getTime() / 1000),
+						owned_by: model.owner,
+					})),
 				},
 				{ headers },
 			);

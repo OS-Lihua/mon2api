@@ -86,6 +86,19 @@ export async function runChat(
 	});
 	if (!lease || lease.consumer !== owner)
 		throw new AppError("not_found", "调用会话不存在。", 404);
+	const prepaid = lease.fundingSource === "PREPAID";
+	if (
+		prepaid &&
+		(!accessKeyId ||
+			lease.providerInputRate === null ||
+			lease.providerOutputRate === null ||
+			!lease.upstreamModel)
+	)
+		throw new AppError(
+			"unauthorized",
+			"预付调用需要有效的模型 Key 和完整的价格快照。",
+			403,
+		);
 	if (lease.listing.kind === "demo" && !demoEnabled())
 		throw new AppError("demo_disabled", "模拟引擎未启用。", 403);
 	const chain = await admissionSessionState(lease.id);
@@ -148,11 +161,20 @@ export async function runChat(
 		await lock(tx, lease.id);
 		if (accessKeyId) {
 			const key = await tx.accessKey.findUnique({ where: { id: accessKeyId } });
+			const invocation = prepaid
+				? await tx.routedInvocation.findUnique({
+						where: { sessionId: lease.id },
+					})
+				: null;
 			if (
 				!key ||
 				key.revoked ||
 				key.owner !== owner ||
-				key.sessionId !== lease.id
+				(prepaid
+					? key.sessionId !== null ||
+						!key.models.includes(lease.model) ||
+						invocation?.accessKeyId !== key.id
+					: key.sessionId !== lease.id)
 			)
 				throw new AppError("unauthorized", "密钥已撤销。", 401);
 		}
@@ -218,7 +240,7 @@ export async function runChat(
 			kind,
 			baseUrl,
 			apiKey,
-			model: lease.model,
+			model: lease.upstreamModel ?? lease.model,
 			messages: input.messages,
 			maxTokens: input.maxTokens,
 			conversationId,
@@ -248,7 +270,13 @@ export async function runChat(
 						lease.outputRate,
 					)
 				: null;
-		if (result.pendingReview || cost === null || cost > reservation) {
+		if (
+			result.pendingReview ||
+			result.inputTokens === null ||
+			result.outputTokens === null ||
+			cost === null ||
+			cost > reservation
+		) {
 			await db.$transaction(async (tx) => {
 				await lock(tx, lease.id);
 				const evidence = {
@@ -287,6 +315,14 @@ export async function runChat(
 				409,
 			);
 		}
+		const providerCost = prepaid
+			? calculateCost(
+					result.inputTokens,
+					result.outputTokens,
+					lease.providerInputRate ?? lease.inputRate,
+					lease.providerOutputRate ?? lease.outputRate,
+				)
+			: 0;
 		const finalized = await db.$transaction(async (tx) => {
 			await lock(tx, lease.id);
 			const transition = await tx.meterRequest.updateMany({
@@ -294,6 +330,7 @@ export async function runChat(
 				data: {
 					status: "COMPLETED",
 					cost,
+					...(prepaid ? { providerCost } : {}),
 					inputTokens: result.inputTokens,
 					outputTokens: result.outputTokens,
 					usageSource: result.usageSource,
@@ -326,6 +363,7 @@ export async function runChat(
 				where: { id: lease.id },
 				data: {
 					spent: { increment: cost },
+					...(prepaid ? { providerSpent: { increment: providerCost } } : {}),
 					reserved: { decrement: reservation },
 				},
 			});
@@ -357,8 +395,8 @@ export async function runChat(
 			id: request.id,
 			text: result.text,
 			finishReason: result.finishReason,
-			inputTokens: result.inputTokens || 0,
-			outputTokens: result.outputTokens || 0,
+			inputTokens: result.inputTokens,
+			outputTokens: result.outputTokens,
 			cost,
 			usageSource: result.usageSource,
 		};

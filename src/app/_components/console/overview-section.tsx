@@ -9,15 +9,14 @@ import {
 	Layers3,
 	Wallet,
 } from "lucide-react";
-import type { ListingView, SessionView, Snapshot } from "~/shared/token2api";
-import { onlineListings, type Section } from "./format";
+import type { Snapshot } from "~/shared/token2api";
+import type { Section } from "./format";
 import { Stats, UsageChart } from "./stats";
-import { ResourceTable } from "./tables";
 import { Panel } from "./ui";
 
 const flow = [
-	{ icon: Layers3, title: "资源" },
-	{ icon: Wallet, title: "预算" },
+	{ icon: Layers3, title: "模型" },
+	{ icon: Wallet, title: "密钥" },
 	{ icon: Activity, title: "用量" },
 	{ icon: Coins, title: "结算" },
 ];
@@ -25,35 +24,37 @@ const flow = [
 export function OverviewSection({
 	data,
 	nativeSymbol,
-	sessions,
-	busy,
 	navigate,
-	onRent,
 }: {
 	data: Snapshot;
 	nativeSymbol: string;
-	sessions: SessionView[];
-	busy: boolean;
 	navigate: (section: Section) => void;
-	onRent: (listing: ListingView) => void;
 }) {
 	const asset = data.network.asset;
 	return (
 		<>
 			<section className="hero">
 				<div className="hero-copy">
-					<span className="hero-eyebrow">资源 · 预算 · 按量结算</span>
-					<h2>选择资源，开始调用。</h2>
+					<span className="hero-eyebrow">模型 · 密钥 · 按量结算</span>
+					<h2>创建密钥，开始调用。</h2>
 					<p className="settlement-intro">
 						在同一工作台核对预算、用量与结算记录。
 					</p>
 					<div className="hero-actions">
 						<button
 							className="button lime"
-							onClick={() => navigate(sessions.length ? "lab" : "market")}
+							onClick={() =>
+								navigate(
+									data.keys.some((key) => !key.revoked && !key.sessionId)
+										? "lab"
+										: "keys",
+								)
+							}
 							type="button"
 						>
-							{sessions.length ? "继续调用" : "查看可用资源"}{" "}
+							{data.keys.some((key) => !key.revoked && !key.sessionId)
+								? "继续调用"
+								: "创建 API Key"}{" "}
 							<ArrowRight size={16} />
 						</button>
 						{!data.viewer && (
@@ -112,12 +113,20 @@ export function OverviewSection({
 							</strong>
 						</div>
 						<div className="overview-ledger-row">
-							<span>可用资源</span>
-							<strong>{onlineListings(data.listings)}</strong>
+							<span>有效 API Key</span>
+							<strong>{data.keys.filter((key) => !key.revoked).length}</strong>
 						</div>
 						<div className="overview-ledger-row">
-							<span>我的活跃预算会话</span>
-							<strong>{sessions.length}</strong>
+							<span>已授权模型</span>
+							<strong>
+								{
+									new Set(
+										data.keys
+											.filter((key) => !key.revoked)
+											.flatMap((key) => key.models),
+									).size
+								}
+							</strong>
 						</div>
 						<div className="overview-ledger-row">
 							<span>相关已确认结算</span>
@@ -142,15 +151,16 @@ export function OverviewSection({
 						查看市场 <ArrowUpRight size={11} />
 					</button>
 				}
-				subtitle={data.listings.length ? `${asset} / 百万 Token` : undefined}
-				title="发现可用资源"
+				subtitle="创建 Key、授权模型、使用统一预付余额"
+				title="接入应用"
 			>
-				<ResourceTable
-					asset={asset}
-					busy={busy}
-					listings={data.listings.slice(0, 4)}
-					onRent={onRent}
-				/>
+				<div className="panel-body">
+					<ol className="onboarding-steps">
+						<li>创建 API Key，勾选该 Key 可以使用的模型。</li>
+						<li>充值统一预付余额，所有 Key 共用账户资金。</li>
+						<li>使用平台 Base URL 调用已授权模型，上游由平台路由。</li>
+					</ol>
+				</div>
 			</Panel>
 		</>
 	);

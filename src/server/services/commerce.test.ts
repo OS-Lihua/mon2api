@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
 	lease: { findMany: vi.fn(), findFirst: vi.fn() },
 	meterRequest: { findMany: vi.fn(), findFirst: vi.fn() },
 	accessKey: { findMany: vi.fn() },
+	routedInvocation: { findUnique: vi.fn() },
 	settlement: { findMany: vi.fn() },
 	balances: vi.fn(),
 }));
@@ -174,7 +175,10 @@ describe("commerce read isolation and pagination", () => {
 	it("binds idempotency lookup to both the inference key's session and consumer", async () => {
 		mocks.meterRequest.findFirst.mockResolvedValue(null);
 		await expect(
-			lookupRequest({ owner: address, sessionId: "own-session" }, "same-key"),
+			lookupRequest(
+				{ id: "key", owner: address, sessionId: "own-session" },
+				"same-key",
+			),
 		).rejects.toMatchObject({ status: 404 });
 		expect(mocks.meterRequest.findFirst).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -250,5 +254,48 @@ describe("resource edits preserve financial snapshots", () => {
 				concurrency: 3,
 			}),
 		).rejects.toBeInstanceOf(AppError);
+	});
+});
+
+describe("model key request lookup", () => {
+	it.each(["PREPARING", "CLOSING", "REJECTED", "CLOSED"])(
+		"reports a %s allocation without inventing a zero-cost bill",
+		async (status) => {
+			mocks.routedInvocation.findUnique.mockResolvedValue({
+				sessionId: "fixed-route",
+				session: { status },
+			});
+			mocks.meterRequest.findFirst.mockResolvedValue(null);
+			await expect(
+				lookupRequest(
+					{ id: "key", owner: address, sessionId: null },
+					"original-request",
+				),
+			).rejects.toMatchObject({
+				code: ["REJECTED", "CLOSED"].includes(status)
+					? "request_not_executed"
+					: "request_preparing",
+				status: 409,
+			});
+			expect(mocks.meterRequest.findFirst).toHaveBeenCalledWith(
+				expect.objectContaining({
+					where: {
+						sessionId: "fixed-route",
+						idempotencyKey: "original-request",
+						session: { consumer: address },
+					},
+				}),
+			);
+		},
+	);
+	it("does not look up another key's invocation when the original key has no match", async () => {
+		mocks.routedInvocation.findUnique.mockResolvedValue(null);
+		await expect(
+			lookupRequest(
+				{ id: "key", owner: address, sessionId: null },
+				"original-request",
+			),
+		).rejects.toMatchObject({ code: "not_found", status: 404 });
+		expect(mocks.meterRequest.findFirst).not.toHaveBeenCalled();
 	});
 });

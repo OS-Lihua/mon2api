@@ -69,6 +69,8 @@ const requestSelect = {
 	outputTokens: true,
 	reservation: true,
 	cost: true,
+	providerCost: true,
+	session: { select: { fundingSource: true } },
 	usageSource: true,
 	upstreamId: true,
 	errorCode: true,
@@ -80,6 +82,7 @@ const keySelect = {
 	prefix: true,
 	sessionId: true,
 	revoked: true,
+	models: true,
 	createdAt: true,
 } satisfies Prisma.AccessKeySelect;
 const settlementSelect = {
@@ -143,10 +146,13 @@ function sessionDto(
 function requestDto(
 	row: Prisma.MeterRequestGetPayload<{ select: typeof requestSelect }>,
 ) {
-	const { upstreamId, createdAt, ...rest } = row;
+	const { upstreamId, createdAt, session, ...rest } = row;
 	return {
 		...rest,
 		cost: ledgerAmount(row.cost),
+		providerCost: ledgerAmount(
+			session?.fundingSource === "PREPAID" ? row.providerCost : row.cost,
+		),
 		reservation: ledgerAmount(row.reservation),
 		upstreamRequestId: upstreamId,
 		createdAt: createdAt.toISOString(),
@@ -215,17 +221,47 @@ export async function listRequests(
 	return page(rows.map(requestDto), query.limit);
 }
 export async function lookupRequest(
-	key: { sessionId: string; owner: string },
+	key: { id: string; sessionId: string | null; owner: string },
 	idempotencyKey: string,
 ) {
+	let sessionId = key.sessionId;
+	let allocationStatus: string | undefined;
+	if (!sessionId) {
+		const invocation = await db.routedInvocation.findUnique({
+			where: {
+				accessKeyId_idempotencyKey: { accessKeyId: key.id, idempotencyKey },
+			},
+			include: { session: { select: { status: true } } },
+		});
+		if (!invocation)
+			throw new AppError("not_found", "此 Key 尚未受理该幂等请求。", 404);
+		sessionId = invocation.sessionId;
+		allocationStatus = invocation.session.status;
+	}
 	const row = await db.meterRequest.findFirst({
 		where: {
-			sessionId: key.sessionId,
+			sessionId,
 			idempotencyKey,
 			session: { consumer: key.owner },
 		},
 		select: requestSelect,
 	});
+	if (
+		!row &&
+		!key.sessionId &&
+		["REJECTED", "CLOSED"].includes(allocationStatus ?? "")
+	)
+		throw new AppError(
+			"request_not_executed",
+			"资金预留已取消或释放，平台未调用上游；本次幂等键不会重复执行。",
+			409,
+		);
+	if (!row && !key.sessionId)
+		throw new AppError(
+			"request_preparing",
+			"请求已受理，尚无已执行的上游账单；请核对资金预留状态。",
+			409,
+		);
 	if (!row)
 		throw new AppError("not_found", "该密钥会话中尚无此请求记录。", 404);
 	return requestDto(row);

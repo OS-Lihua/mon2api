@@ -7,6 +7,7 @@ import { getAddress, keccak256, stringToHex } from "viem";
 import type { z } from "zod";
 import { db } from "~/server/db";
 import type { GatewayProxy } from "~/shared/gateway-config";
+import type { modelKeyInput } from "~/shared/model-routing";
 import { DEFAULT_NETWORK, networkMetadata } from "~/shared/network";
 import {
 	assetOf,
@@ -36,6 +37,7 @@ import { assertEscrowOwnerGuard } from "./escrow-version";
 import { requireGatewayAccess, sealProxy } from "./gateway-access";
 import { withGatewayTransport } from "./gateway-transport";
 import { ledgerAmount } from "./ledger";
+import { requireModels } from "./model-catalog";
 import { discoverModels } from "./model-discovery";
 import { chainConfig, demoEnabled, sessionPassword } from "./runtime";
 import type {
@@ -350,6 +352,59 @@ export async function createKey(user: Viewer, sessionId: string, name: string) {
 	});
 	return buyerConnection(key, lease.model);
 }
+export async function createModelKey(
+	user: Viewer,
+	input: z.infer<typeof modelKeyInput>,
+) {
+	const first = input.models[0];
+	if (!first)
+		throw new AppError("invalid_models", "至少选择一个允许使用的模型。", 400);
+	await requireModels(input.models);
+	const key = newApiKey();
+	await db.accessKey.create({
+		data: {
+			owner: user.address,
+			sessionId: null,
+			name: input.name,
+			models: input.models,
+			hash: keyHash(key),
+			prefix: `${key.slice(0, 10)}…${key.slice(-4)}`,
+		},
+	});
+	return { ...buyerConnection(key, first), models: input.models };
+}
+export async function updateKeyModels(
+	user: Viewer,
+	id: string,
+	models: string[],
+) {
+	if (!models.length)
+		throw new AppError("invalid_models", "至少选择一个允许使用的模型。", 400);
+	const key = await db.accessKey.findUnique({ where: { id } });
+	if (
+		!key ||
+		key.revoked ||
+		key.owner !== user.address ||
+		key.sessionId !== null
+	)
+		throw new AppError(
+			"not_found",
+			"模型密钥不存在、已撤销或不属于当前钱包。",
+			404,
+		);
+	await requireModels(models.filter((model) => !key.models.includes(model)));
+	const updated = await db.accessKey.updateMany({
+		where: { id, owner: user.address, sessionId: null, revoked: false },
+		data: { models },
+	});
+	if (!updated.count)
+		throw new AppError(
+			"not_found",
+			"模型密钥不存在、已撤销或不属于当前钱包。",
+			404,
+		);
+	return { ok: true as const };
+}
 export async function revokeKey(user: Viewer, id: string) {
 	const result = await db.accessKey.updateMany({
 		where: { id, owner: user.address },
@@ -437,7 +492,14 @@ export async function snapshot(
 		db.accessKey.findMany({
 			where: {
 				owner: user?.address || "__none__",
-				...(gatewayOnly ? { session: { listing: { kind: "gateway" } } } : {}),
+				...(gatewayOnly
+					? {
+							OR: [
+								{ sessionId: null },
+								{ session: { listing: { kind: "gateway" } } },
+							],
+						}
+					: {}),
 			},
 			orderBy: { createdAt: "desc" },
 		}),
@@ -544,6 +606,7 @@ export async function snapshot(
 			model: s.model,
 			consumer: s.consumer,
 			provider: s.provider,
+			fundingSource: s.fundingSource,
 			budget: ledgerAmount(s.budget),
 			spent: ledgerAmount(s.spent),
 			reserved: ledgerAmount(s.reserved),
@@ -563,6 +626,9 @@ export async function snapshot(
 			inputTokens: r.inputTokens,
 			outputTokens: r.outputTokens,
 			cost: ledgerAmount(r.cost),
+			providerCost: ledgerAmount(
+				r.session.fundingSource === "PREPAID" ? r.providerCost : r.cost,
+			),
 			usageSource: r.usageSource,
 			upstreamRequestId: r.upstreamId,
 			createdAt: r.createdAt.toISOString(),
@@ -573,6 +639,7 @@ export async function snapshot(
 			name: k.name,
 			prefix: k.prefix,
 			sessionId: k.sessionId,
+			models: k.models,
 			revoked: k.revoked,
 			createdAt: k.createdAt.toISOString(),
 		})),

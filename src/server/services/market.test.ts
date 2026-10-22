@@ -112,6 +112,11 @@ function lease(overrides: Partial<LeaseRow> = {}): LeaseRow {
 		consumer: viewer.address,
 		provider: listing.owner,
 		model: listing.model,
+		fundingSource: "WALLET",
+		upstreamModel: null,
+		providerInputRate: null,
+		providerOutputRate: null,
+		providerSpent: 0n,
 		inputRate: listing.inputRate,
 		outputRate: listing.outputRate,
 		termsHash: "terms",
@@ -314,7 +319,10 @@ describe("market snapshot accounting", () => {
 			expect.objectContaining({
 				where: {
 					owner: viewer.address,
-					session: { listing: { kind: "gateway" } },
+					OR: [
+						{ sessionId: null },
+						{ session: { listing: { kind: "gateway" } } },
+					],
 				},
 			}),
 		);

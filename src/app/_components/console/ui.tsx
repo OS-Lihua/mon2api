@@ -165,6 +165,7 @@ export function Modal({
 	busy?: boolean;
 }) {
 	const dialogRef = useRef<HTMLDialogElement>(null);
+	const errorRef = useRef<HTMLDivElement>(null);
 	const titleId = useId();
 	useEffect(() => {
 		const dialog = dialogRef.current;
@@ -183,6 +184,10 @@ export function Modal({
 				previousFocus.focus();
 		};
 	}, []);
+	useEffect(() => {
+		if (busy) dialogRef.current?.focus();
+		else if (error) errorRef.current?.focus();
+	}, [busy, error]);
 	return (
 		<dialog
 			aria-busy={busy}
@@ -191,6 +196,28 @@ export function Modal({
 			onCancel={(event) => {
 				event.preventDefault();
 				if (!busy) onClose();
+			}}
+			onKeyDown={(event) => {
+				if (event.key !== "Tab") return;
+				const dialog = event.currentTarget;
+				const controls = Array.from(
+					dialog.querySelectorAll<HTMLElement>(
+						'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href], [tabindex]:not([tabindex="-1"]):not(:disabled)',
+					),
+				).filter((element) => element.getClientRects().length > 0);
+				const first = controls[0];
+				const last = controls.at(-1);
+				const active = document.activeElement;
+				if (!first || !last) {
+					event.preventDefault();
+					dialog.focus();
+				} else if (event.shiftKey && (active === first || active === dialog)) {
+					event.preventDefault();
+					last.focus();
+				} else if (!event.shiftKey && (active === last || active === dialog)) {
+					event.preventDefault();
+					first.focus();
+				}
 			}}
 			ref={dialogRef}
 		>
@@ -208,7 +235,12 @@ export function Modal({
 			</div>
 			<div className="modal-body">
 				{error && (
-					<div className="notice error" role="alert">
+					<div
+						className="notice error"
+						ref={errorRef}
+						role="alert"
+						tabIndex={-1}
+					>
 						<CircleHelp size={14} />
 						<span>{error}</span>
 					</div>

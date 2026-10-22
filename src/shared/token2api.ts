@@ -44,6 +44,7 @@ export type SessionView = {
 	model: string;
 	consumer: string;
 	provider: string;
+	fundingSource?: string;
 	budget: number;
 	spent: number;
 	reserved: number;
@@ -63,6 +64,7 @@ export type RequestView = {
 	inputTokens: number | null;
 	outputTokens: number | null;
 	cost: number;
+	providerCost?: number;
 	usageSource: string;
 	upstreamRequestId: string | null;
 	createdAt: string;
@@ -72,7 +74,8 @@ export type KeyView = {
 	id: string;
 	name: string;
 	prefix: string;
-	sessionId: string;
+	sessionId: string | null;
+	models: string[];
 	revoked: boolean;
 	createdAt: string;
 };
@@ -104,7 +107,12 @@ export type Snapshot = {
 	keys: KeyView[];
 	settlements: SettlementView[];
 };
-export type BuyerConnection = { base_url: string; key: string; model: string };
+export type BuyerConnection = {
+	base_url: string;
+	key: string;
+	model: string;
+	models?: string[];
+};
 export type OpenSessionResult = {
 	connection?: BuyerConnection;
 	id: string;
@@ -137,4 +145,5 @@ export type RefundView = {
 	requestedAt: string;
 	txHash: string | null;
 	withdrawRequired: boolean;
+	destination?: "prepaid" | "claimable";
 };

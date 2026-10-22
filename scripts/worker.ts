@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { db } from "../src/server/db";
+import { recoverPrepaidReservations } from "../src/server/services/model-routing";
 import { processSettlementQueue } from "../src/server/services/settlement";
 
 let stopping = false;
@@ -12,6 +13,7 @@ process.on("SIGINT", () => {
 console.log("Token2API settlement worker: every 10 seconds.");
 while (!stopping) {
 	try {
+		await recoverPrepaidReservations();
 		const results = await processSettlementQueue();
 		for (const r of results)
 			console.log(JSON.stringify({ worker: "settlement", ...r }));

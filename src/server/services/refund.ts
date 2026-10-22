@@ -40,7 +40,10 @@ export async function refundStatus(
 		unit: billingUnit(assetOf(chainConfig())),
 		requestedAt: application.createdAt.toISOString(),
 		txHash: lease.closeTx,
-		withdrawRequired: closed,
+		withdrawRequired: closed && lease.fundingSource !== "PREPAID",
+		...(lease.fundingSource === "PREPAID"
+			? { destination: "prepaid" as const }
+			: {}),
 	};
 }
 

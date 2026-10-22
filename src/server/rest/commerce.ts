@@ -15,11 +15,16 @@ import {
 	confirmSession,
 	createKey,
 	createListing,
+	createModelKey,
 	openSession,
 	revokeKey,
 	toggleListing,
+	updateKeyModels,
 	updateListing,
 } from "~/server/services/market";
+import { modelCatalog } from "~/server/services/model-catalog";
+import { prepaidAccount } from "~/server/services/model-routing";
+import { preparePrepaidTransfer } from "~/server/services/prepaid-transfers";
 import { refundStatus, requestRefund } from "~/server/services/refund";
 import { closeSession, settleSession } from "~/server/services/settlement";
 import {
@@ -28,6 +33,13 @@ import {
 	openSessionInput,
 	sessionIdSchema,
 } from "~/server/services/token2api.schema";
+import {
+	keyModels,
+	modelProductResponse,
+	prepaidAccountResponse,
+	prepaidTransactionResponse,
+	prepaidTransferInput,
+} from "~/shared/model-routing";
 import type { Viewer } from "~/shared/token2api";
 import { createRestMutation, createRestQuery } from "./endpoint";
 
@@ -295,8 +307,42 @@ export const keysPost = mutation({
 	output: contract.buyerConnectionResponse,
 	status: 201,
 	action: (input, user) =>
-		createKey(signedIn(user), input.sessionId, input.name),
+		"models" in input
+			? createModelKey(signedIn(user), input)
+			: createKey(signedIn(user), input.sessionId, input.name),
 });
+export const keyModelsPost = (request: Request, id: string) =>
+	mutation({
+		route: "commerce:key-models",
+		input: z.object({ models: keyModels }).strict(),
+		output: contract.okResponse,
+		action: (input, user) =>
+			updateKeyModels(
+				signedIn(user),
+				parse(z.string().cuid(), id),
+				input.models,
+			),
+	})(request);
+export const prepaidGet = managedQuery(
+	"commerce:prepaid",
+	prepaidAccountResponse,
+	(user) => prepaidAccount(user),
+);
+export const prepaidTransferPost = mutation({
+	route: "commerce:prepaid-transfer",
+	input: prepaidTransferInput,
+	output: prepaidTransactionResponse,
+	action: (input, user) => preparePrepaidTransfer(signedIn(user), input),
+});
+export const modelCatalogGet = noStore(
+	createRestQuery({
+		route: "commerce:model-catalog",
+		handler: () =>
+			result(z.object({ data: z.array(modelProductResponse) }), async () => ({
+				data: await modelCatalog(),
+			})),
+	}),
+);
 export const revokePost = (request: Request, id: string) =>
 	mutation({
 		route: "commerce:revoke-key",

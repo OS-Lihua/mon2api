@@ -151,9 +151,9 @@ export function SessionTable({
 	if (!sessions.length)
 		return (
 			<Empty
-				description="在资源市场选择模型并锁定预算，即可开始调用。"
+				description="创建 Key、授权模型并充值后，平台会在调用时自动预留预算。"
 				icon={Wallet}
-				title="还没有预算会话"
+				title="还没有调用预留或原有预算会话"
 			/>
 		);
 	const viewer = data.viewer;
@@ -177,6 +177,11 @@ export function SessionTable({
 							<tr key={item.id}>
 								<td>
 									{item.listingName}
+									<small className="table-secondary">
+										{item.fundingSource === "PREPAID"
+											? "预付账户 · 自动预留"
+											: "原有预算会话"}
+									</small>
 									<small className="mono table-secondary" title={item.id}>
 										{short(item.id)}
 									</small>

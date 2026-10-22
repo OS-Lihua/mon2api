@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 import { transformSync } from "esbuild";
+import { z } from "zod";
 
 const slots = [];
 let cursor = 0;
@@ -99,7 +100,8 @@ const api = {
 		{
 			get(_target, name) {
 				return {
-					useQuery: () => (name === "snapshot" ? snapshot : {}),
+					useQuery: () =>
+						name === "snapshot" ? snapshot : { refetch: async () => ({}) },
 					useMutation: () => ({
 						mutateAsync: () =>
 							name === "confirmSession" ? confirmation : Promise.resolve({}),
@@ -110,9 +112,9 @@ const api = {
 	),
 };
 const placeholder = () => null;
-function element(type, props) {
+function element(type, props, key) {
 	if (type?.context) type.context.current = props.value;
-	return { type, props };
+	return { type, props, key };
 }
 const modules = {
 	react,
@@ -162,6 +164,7 @@ const modules = {
 	"~/shared/settlement-asset": { isNativeAsset: () => true },
 	"~/shared/ui-preview": { uiPreview: false },
 	"~/trpc/react": { api },
+	zod: { z },
 };
 const browserWindow = {
 	location: {
@@ -204,6 +207,7 @@ function loadSource(path) {
 modules["~/app/_components/console/routes"] = loadSource(
 	"src/app/_components/console/routes.ts",
 );
+modules["~/shared/model-routing"] = loadSource("src/shared/model-routing.ts");
 const pageContent = loadSource("src/app/_components/console/page-content.tsx");
 modules["~/app/_components/console/page-content"] = pageContent;
 const root = loadSource(
@@ -220,12 +224,28 @@ function render() {
 		for (const effect of effects) effect();
 		if (++count > 15) throw new Error("Render loop");
 	} while (changed);
-	return [
+	const result = [
 		tree,
 		pageContent.ConsolePageContent({
 			section: currentPath.split("/")[2] ?? "overview",
 		}),
 	];
+	assertSiblingKeys(result);
+	return result;
+}
+function assertSiblingKeys(tree) {
+	if (!tree || typeof tree !== "object") return;
+	if (Array.isArray(tree)) {
+		const keys = tree
+			.filter((node) => node?.key != null)
+			.map((node) => node.key);
+		assert.equal(
+			new Set(keys).size,
+			keys.length,
+			"Sibling React keys must be distinct",
+		);
+		for (const child of tree) assertSiblingKeys(child);
+	} else assertSiblingKeys(tree.props?.children);
 }
 function find(tree, predicate) {
 	if (!tree || typeof tree !== "object") return undefined;

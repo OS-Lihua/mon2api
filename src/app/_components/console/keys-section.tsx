@@ -2,6 +2,7 @@
 
 import { ArrowRight, Check, Copy, KeyRound, Plus } from "lucide-react";
 import { useState } from "react";
+import type { ModelView } from "~/shared/model-routing";
 import type { BuyerConnection, KeyView, Snapshot } from "~/shared/token2api";
 import {
 	CollectionToolbar,
@@ -11,13 +12,20 @@ import {
 	usePagination,
 } from "./collection";
 import { date, type Section, short } from "./format";
+import { ModelPicker } from "./model-picker";
 import { Badge, Empty, Modal, Panel, TableScroll } from "./ui";
 
 export function KeysSection({
 	data,
 	busy,
 	copied,
-	hasSessions,
+	models,
+	modelsLoading,
+	modelsError,
+	onRetryModels,
+	onUpdateModels,
+	onEditOpen,
+	error,
 	model,
 	newKey,
 	navigate,
@@ -28,7 +36,13 @@ export function KeysSection({
 	data: Snapshot;
 	busy: boolean;
 	copied: boolean;
-	hasSessions: boolean;
+	models: ModelView[];
+	modelsLoading: boolean;
+	modelsError: string | null;
+	onRetryModels: () => void;
+	onUpdateModels: (id: string, models: string[]) => Promise<boolean>;
+	onEditOpen: () => void;
+	error: string | null;
 	model: string | undefined;
 	newKey: BuyerConnection | null;
 	navigate: (section: Section) => void;
@@ -39,10 +53,12 @@ export function KeysSection({
 	const [search, setSearch] = useState("");
 	const [status, setStatus] = useState("all");
 	const [revoking, setRevoking] = useState<KeyView | null>(null);
+	const [editing, setEditing] = useState<KeyView | null>(null);
+	const [selectedModels, setSelectedModels] = useState<string[]>([]);
 	const keys = data.keys
 		.filter(
 			(item) =>
-				`${item.name} ${item.prefix} ${item.sessionId}`
+				`${item.name} ${item.prefix} ${item.sessionId ?? ""} ${item.models.join(" ")}`
 					.toLowerCase()
 					.includes(search.trim().toLowerCase()) &&
 				(status === "all" ||
@@ -57,12 +73,15 @@ export function KeysSection({
 		<>
 			{newKey && (
 				<div className="key-reveal" role="status">
-					<p>预算已开通。API Key 仅显示一次，请立即保存。</p>
+					<p>
+						{newKey.models ? "模型 Key 已创建。" : "预算已开通。"}API Key
+						仅显示一次，请立即保存。
+					</p>
 					{(
 						[
 							["Base URL", newKey.base_url],
 							["API Key", newKey.key],
-							["模型名", newKey.model],
+							["允许的模型", newKey.models?.join("、") ?? newKey.model],
 						] as const
 					).map(([label, value]) => (
 						<div key={label}>
@@ -92,6 +111,7 @@ export function KeysSection({
 										base_url: newKey.base_url,
 										api_key: newKey.key,
 										model: newKey.model,
+										...(newKey.models ? { allowed_models: newKey.models } : {}),
 									},
 									null,
 									2,
@@ -109,7 +129,7 @@ export function KeysSection({
 				</div>
 			)}
 			<Panel
-				subtitle={`绑定预算会话 · 当前返回 ${data.keys.length} 个密钥· 撤销后停止新请求`}
+				subtitle={`当前返回 ${data.keys.length} 个密钥 · 模型 Key 共用账户余额 · 撤销后停止新请求`}
 				title="应用密钥"
 			>
 				<CollectionToolbar>
@@ -119,7 +139,7 @@ export function KeysSection({
 							setSearch(value);
 							pagination.setPage(1);
 						}}
-						placeholder="名称、密钥前缀或会话 ID"
+						placeholder="名称、密钥前缀或模型 ID"
 						value={search}
 					/>
 					<FilterField
@@ -144,7 +164,7 @@ export function KeysSection({
 								<tr>
 									<th>密钥名称</th>
 									<th>密钥前缀</th>
-									<th>预算会话</th>
+									<th>允许的模型</th>
 									<th>创建时间</th>
 									<th>状态</th>
 									<th>操作</th>
@@ -155,12 +175,19 @@ export function KeysSection({
 									<tr key={item.id}>
 										<td>{item.name}</td>
 										<td className="mono">{item.prefix}••••••••</td>
-										<td className="mono" title={item.sessionId}>
-											{short(item.sessionId)}
+										<td className="key-models" title={item.models.join("、")}>
+											{item.sessionId
+												? (data.sessions.find(
+														(session) => session.id === item.sessionId,
+													)?.model ?? "原预算模型")
+												: item.models.slice(0, 2).join("、")}
+											{!item.sessionId &&
+												item.models.length > 2 &&
+												` 等 ${item.models.length} 个模型`}
 											<small className="table-secondary">
-												{data.sessions.find(
-													(session) => session.id === item.sessionId,
-												)?.listingName ?? "关联预算会话"}
+												{item.sessionId
+													? `原预算会话 ${short(item.sessionId)}`
+													: "统一预付余额 · 平台路由"}
 											</small>
 										</td>
 										<td>{date(item.createdAt)}</td>
@@ -170,14 +197,30 @@ export function KeysSection({
 											</Badge>
 										</td>
 										<td>
-											<button
-												className="button small danger"
-												disabled={item.revoked || busy}
-												onClick={() => setRevoking(item)}
-												type="button"
-											>
-												撤销密钥
-											</button>
+											<div className="table-actions">
+												{!item.sessionId && (
+													<button
+														className="button small"
+														disabled={item.revoked || busy}
+														onClick={() => {
+															onEditOpen();
+															setSelectedModels(item.models);
+															setEditing(item);
+														}}
+														type="button"
+													>
+														模型权限
+													</button>
+												)}
+												<button
+													className="button small danger"
+													disabled={item.revoked || busy}
+													onClick={() => setRevoking(item)}
+													type="button"
+												>
+													撤销密钥
+												</button>
+											</div>
 										</td>
 									</tr>
 								))}
@@ -203,21 +246,18 @@ export function KeysSection({
 					</Empty>
 				) : (
 					<Empty
-						description={
-							hasSessions
-								? "创建密钥后，完整内容只显示一次，请立即保存。"
-								: "先在资源市场创建预算会话，再为应用创建独立密钥。"
-						}
+						description="创建 Key 并选择允许使用的模型。费用从统一预付余额扣除；完整密钥仅显示一次。"
 						icon={KeyRound}
-						title={hasSessions ? "为应用创建密钥" : "先创建预算会话"}
+						title="为应用创建密钥"
 					>
 						<button
 							className="button primary"
-							onClick={() => (hasSessions ? onCreateKey() : navigate("market"))}
+							disabled={!data.viewer || busy}
+							onClick={onCreateKey}
 							type="button"
 						>
-							{hasSessions ? <Plus size={16} /> : <ArrowRight size={16} />}
-							{hasSessions ? "创建第一个密钥" : "查看资源市场"}
+							<Plus size={16} />
+							创建第一个密钥
 						</button>
 					</Empty>
 				)}
@@ -227,6 +267,58 @@ export function KeysSection({
 					onChange={pagination.setPage}
 				/>
 			</Panel>
+			{editing && (
+				<Modal
+					busy={busy}
+					error={error}
+					onClose={() => !busy && setEditing(null)}
+					title={`模型权限 · ${editing.name}`}
+				>
+					<form
+						onSubmit={(event) => {
+							event.preventDefault();
+							void onUpdateModels(editing.id, selectedModels).then(
+								(updated) => {
+									if (updated) setEditing(null);
+								},
+							);
+						}}
+					>
+						<ModelPicker
+							asset={data.network.asset}
+							disabled={busy}
+							error={modelsError}
+							loading={modelsLoading}
+							models={models}
+							onChange={setSelectedModels}
+							onRetry={onRetryModels}
+							selected={selectedModels}
+						/>
+						<div className="form-actions">
+							<button
+								className="button"
+								disabled={busy}
+								onClick={() => setEditing(null)}
+								type="button"
+							>
+								取消
+							</button>
+							<button
+								className="button primary"
+								disabled={
+									busy ||
+									!selectedModels.length ||
+									modelsLoading ||
+									!!modelsError
+								}
+								type="submit"
+							>
+								{busy ? "正在保存…" : "保存权限"}
+							</button>
+						</div>
+					</form>
+				</Modal>
+			)}
 			{revoking && (
 				<Modal onClose={() => setRevoking(null)} title="撤销 API 密钥">
 					<p>确认撤销「{revoking.name}」？</p>
@@ -256,12 +348,24 @@ export function KeysSection({
 				</Modal>
 			)}
 			<div style={{ height: 22 }} />
-			<Panel subtitle="兼容 OpenAI Chat Completions" title="快速接入">
+			<Panel
+				action={
+					<button
+						className="text-link"
+						onClick={() => navigate("lab")}
+						type="button"
+					>
+						前往调用实验室 <ArrowRight size={12} />
+					</button>
+				}
+				subtitle="兼容 OpenAI Chat Completions"
+				title="快速接入"
+			>
 				<div className="panel-body">
 					<pre className="code-block mono">{`curl ${baseUrl}/chat/completions \\\n  -H "Authorization: Bearer $TOKEN2API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -H "Idempotency-Key: example-request-0001" \\\n  -d '{\n    "model": "${model ?? "YOUR_MODEL_ID"}",\n    "messages": [{"role":"user","content":"Hello"}],\n    "stream": true\n  }'`}</pre>
 					<p className="code-hint">
 						Base URL 使用当前平台地址。API
-						密钥绑定预算会话与资源，请保存在服务端。 每次新调用更换
+						密钥仅能调用已授权的模型，请保存在服务端。每次新调用更换
 						Idempotency-Key；核对同一次调用时复用原键，响应丢失后不要用新键重试。
 					</p>
 				</div>

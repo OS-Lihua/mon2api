@@ -1,6 +1,6 @@
 import { ensureChainBinding } from "./runtime";
 import "server-only";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, Settlement } from "@prisma/client";
 import { keccak256, stringToHex } from "viem";
 import { db } from "~/server/db";
 import { AppError } from "./auth";
@@ -27,6 +27,22 @@ export async function settleSession(
 	)
 		throw new AppError("not_found", "会话不存在。", 404);
 	let lastHash: string | null = null;
+	const prepaid = lease.fundingSource === "PREPAID";
+	const recover = (job: Settlement) =>
+		prepaid
+			? findSettlement(
+					sessionId,
+					job.nonce,
+					job.receiptsHash,
+					ledgerAmount(job.cumulative),
+					ledgerAmount(job.providerCumulative),
+				)
+			: findSettlement(
+					sessionId,
+					job.nonce,
+					job.receiptsHash,
+					ledgerAmount(job.cumulative),
+				);
 	// A chain close can follow an unrecorded successful batch. Recover that batch
 	// before classifying later earned usage as an operating loss.
 	for (;;) {
@@ -50,6 +66,9 @@ export async function settleSession(
 				orderBy: { id: "asc" },
 			});
 			const amount = requests.reduce((n, r) => n + r.cost, 0n);
+			const providerAmount = prepaid
+				? requests.reduce((n, r) => n + r.providerCost, 0n)
+				: 0n;
 			if (!amount) return null;
 			const previous = await tx.settlement.findFirst({
 				where: { sessionId },
@@ -61,6 +80,9 @@ export async function settleSession(
 						requests.map((r) => ({
 							id: r.id,
 							cost: ledgerAmount(r.cost),
+							...(prepaid
+								? { providerCost: ledgerAmount(r.providerCost) }
+								: {}),
 							input: r.inputTokens,
 							output: r.outputTokens,
 							source: r.usageSource,
@@ -74,6 +96,13 @@ export async function settleSession(
 					sessionId,
 					amount,
 					cumulative: current.settled + current.writtenOff + amount,
+					...(prepaid
+						? {
+								providerAmount,
+								providerCumulative:
+									(previous?.providerCumulative ?? 0n) + providerAmount,
+							}
+						: {}),
 					nonce: previous ? previous.nonce + 1 : 0,
 					receiptsHash,
 				},
@@ -86,12 +115,7 @@ export async function settleSession(
 		});
 		let state = await readSession(sessionId);
 		if (job && state.nonce > job.nonce) {
-			const txHash = await findSettlement(
-				sessionId,
-				job.nonce,
-				job.receiptsHash,
-				ledgerAmount(job.cumulative),
-			);
+			const txHash = await recover(job);
 			if (!txHash || state.spent < job.cumulative)
 				throw new AppError(
 					"settlement_conflict",
@@ -169,19 +193,22 @@ export async function settleSession(
 		// canonical receipt confirmations and exact UsageSettled event as a send.
 		let txHash: string | null;
 		try {
-			txHash = await sendSettlement(
-				sessionId,
-				ledgerAmount(job.cumulative),
-				job.nonce,
-				job.receiptsHash,
-			);
+			txHash = prepaid
+				? await sendSettlement(
+						sessionId,
+						ledgerAmount(job.cumulative),
+						job.nonce,
+						job.receiptsHash,
+						ledgerAmount(job.providerCumulative),
+					)
+				: await sendSettlement(
+						sessionId,
+						ledgerAmount(job.cumulative),
+						job.nonce,
+						job.receiptsHash,
+					);
 		} catch {
-			txHash = await findSettlement(
-				sessionId,
-				job.nonce,
-				job.receiptsHash,
-				ledgerAmount(job.cumulative),
-			);
+			txHash = await recover(job);
 			if (!txHash)
 				throw new AppError(
 					"settlement_retry",

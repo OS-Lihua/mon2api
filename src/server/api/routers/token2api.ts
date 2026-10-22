@@ -12,6 +12,7 @@ import {
 	walletLogin,
 	walletSignatureSchema,
 } from "~/server/services/auth";
+import { createKeyInput } from "~/server/services/commerce.schema";
 import {
 	connectorSetup,
 	createConnectorLaunch,
@@ -31,15 +32,24 @@ import {
 	confirmSession,
 	createKey,
 	createListing,
+	createModelKey,
 	discoverDirectModels,
 	openSession,
 	revokeKey,
 	snapshot,
 	toggleListing,
+	updateKeyModels,
 	updateListing,
 	withdraw,
 } from "~/server/services/market";
 import { runChat } from "~/server/services/metering";
+import {
+	modelCatalog,
+	operatorModels,
+	saveModel,
+	saveModelRoute,
+} from "~/server/services/model-catalog";
+import { prepaidAccount, runModelChat } from "~/server/services/model-routing";
 import {
 	listEndpointPolicies,
 	operatorResources,
@@ -48,6 +58,7 @@ import {
 	setEndpointStatus,
 } from "~/server/services/operator";
 import { operatorResourcesInput } from "~/server/services/operator.schema";
+import { preparePrepaidTransfer } from "~/server/services/prepaid-transfers";
 import { refundStatus, requestRefund } from "~/server/services/refund";
 import { closeSession, settleSession } from "~/server/services/settlement";
 import {
@@ -62,6 +73,13 @@ import {
 	endpointPolicyInput,
 	endpointStatusInput,
 } from "~/shared/gateway-config";
+import {
+	modelChatInput,
+	modelProductInput,
+	modelRouteInput,
+	prepaidTransferInput,
+	updateKeyModelsInput,
+} from "~/shared/model-routing";
 
 async function call<T>(action: () => Promise<T>): Promise<T> {
 	try {
@@ -95,6 +113,47 @@ const mutation = publicProcedure.use(async ({ ctx, next }) => {
 	return next();
 });
 export const token2apiRouter = createTRPCRouter({
+	modelCatalog: publicProcedure.query(() => call(modelCatalog)),
+	operatorModels: publicProcedure.query(() =>
+		call(async () => operatorModels(await requireViewer())),
+	),
+	saveModel: mutation
+		.input(modelProductInput)
+		.mutation(({ input }) =>
+			call(async () => saveModel(await requireViewer(), input)),
+		),
+	saveModelRoute: mutation
+		.input(modelRouteInput)
+		.mutation(({ input }) =>
+			call(async () => saveModelRoute(await requireViewer(), input)),
+		),
+	prepaidAccount: publicProcedure
+		.input(z.object({ address: addressSchema }).strict())
+		.query(({ input }) =>
+			call(async () => {
+				const user = await requireViewer();
+				if (input.address.toLowerCase() !== user.address.toLowerCase())
+					throw new AppError("forbidden", "只能读取当前钱包的预付余额。", 403);
+				return prepaidAccount(user);
+			}),
+		),
+	preparePrepaidTransfer: mutation
+		.input(prepaidTransferInput)
+		.mutation(({ input }) =>
+			call(async () => preparePrepaidTransfer(await requireViewer(), input)),
+		),
+	updateKeyModels: mutation
+		.input(updateKeyModelsInput)
+		.mutation(({ input }) =>
+			call(async () =>
+				updateKeyModels(await requireViewer(), input.id, input.models),
+			),
+		),
+	modelChat: mutation
+		.input(chatInput.omit({ sessionId: true }).merge(modelChatInput).strict())
+		.mutation(({ input }) =>
+			call(async () => runModelChat((await requireViewer()).address, input)),
+		),
 	operatorStatus: publicProcedure.query(() =>
 		call(async () => operatorStatus(await viewer())),
 	),
@@ -218,15 +277,12 @@ export const token2apiRouter = createTRPCRouter({
 			),
 		),
 	createKey: mutation
-		.input(
-			z.object({
-				sessionId: sessionIdSchema,
-				name: z.string().trim().min(1).max(64),
-			}),
-		)
+		.input(createKeyInput)
 		.mutation(({ input }) =>
 			call(async () =>
-				createKey(await requireViewer(), input.sessionId, input.name),
+				"models" in input
+					? createModelKey(await requireViewer(), input)
+					: createKey(await requireViewer(), input.sessionId, input.name),
 			),
 		),
 	revokeKey: mutation

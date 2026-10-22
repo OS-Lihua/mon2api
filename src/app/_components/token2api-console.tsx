@@ -41,17 +41,12 @@ import {
 } from "~/app/_components/chain-glyph";
 import {
 	type ChainContext,
-	lockBudget,
 	selfCloseSession,
+	sendPrepaidTransfer,
 	withdrawBalance,
 } from "~/app/_components/console/chain-actions";
 import type { ConnectorDraft } from "~/app/_components/console/connector-modals";
-import {
-	activeSession,
-	onlineListings,
-	type Section,
-	sameAddress,
-} from "~/app/_components/console/format";
+import { type Section, sameAddress } from "~/app/_components/console/format";
 import type { ChatMessage } from "~/app/_components/console/lab-section";
 import { OverviewSection } from "~/app/_components/console/overview-section";
 import { ConsolePagesContext } from "~/app/_components/console/page-content";
@@ -62,6 +57,7 @@ import {
 import { Badge, Loading } from "~/app/_components/console/ui";
 import { useToken2ApiWallet } from "~/app/_components/wallet-provider";
 import { connectorStartCommand } from "~/shared/connector-distribution";
+import { modelKeyInput } from "~/shared/model-routing";
 import { parseMicroAmount, formatAmount as usd } from "~/shared/money";
 import {
 	DEFAULT_NETWORK,
@@ -71,11 +67,10 @@ import {
 import { isNativeAsset } from "~/shared/settlement-asset";
 import type {
 	BuyerConnection,
-	ListingView,
 	RefundView,
 	SessionView,
 } from "~/shared/token2api";
-import { previewSnapshot, uiPreview } from "~/shared/ui-preview";
+import { previewModels, previewSnapshot, uiPreview } from "~/shared/ui-preview";
 import { api } from "~/trpc/react";
 
 // Overview is the landing section; every other section and all dialogs load on demand.
@@ -103,15 +98,17 @@ const loadSessionModals = () =>
 	import("~/app/_components/console/session-modals");
 const loadConnectorModals = () =>
 	import("~/app/_components/console/connector-modals");
+const PrepaidAccountPanel = dynamic(() =>
+	import("~/app/_components/console/prepaid-account").then(
+		(module) => module.PrepaidAccountPanel,
+	),
+);
 const sectionLoading = () => <Loading label="正在打开工作区…" />;
 const MarketSection = dynamic(loadMarket, { loading: sectionLoading });
 const PoolSection = dynamic(loadPool, { loading: sectionLoading });
 const LabSection = dynamic(loadLab, { loading: sectionLoading });
 const BillingSection = dynamic(loadBilling, { loading: sectionLoading });
 const KeysSection = dynamic(loadKeys, { loading: sectionLoading });
-const RentModal = dynamic(() =>
-	loadSessionModals().then((module) => module.RentModal),
-);
 const RefundModal = dynamic(() =>
 	loadSessionModals().then((module) => module.RefundModal),
 );
@@ -142,7 +139,7 @@ const deferredChunks = [
 
 const navigation = [
 	{ id: "overview", label: "概览", icon: LayoutDashboard },
-	{ id: "market", label: "资源市场", icon: Globe2 },
+	{ id: "market", label: "模型市场", icon: Globe2 },
 	{ id: "pool", label: "我的资源", icon: Layers3 },
 	{ id: "lab", label: "调用实验室", icon: FlaskConical },
 	{ id: "billing", label: "账单与结算", icon: Blocks },
@@ -168,14 +165,14 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 	const [error, setError] = useState<string | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 	const [listingModal, setListingModal] = useState(false);
-	const [rentListing, setRentListing] = useState<ListingView | null>(null);
-	const [budget, setBudget] = useState("");
 	const [keyModal, setKeyModal] = useState(false);
 	const [refundSession, setRefundSession] = useState<SessionView | null>(null);
 	const [refundInfo, setRefundInfo] = useState<RefundView | null>(null);
 	const [withdrawModal, setWithdrawModal] = useState(false);
 	const [keyName, setKeyName] = useState("My application");
-	const [selectedSession, setSelectedSession] = useState("");
+	const [allowedModels, setAllowedModels] = useState<string[]>([]);
+	const [selectedKey, setSelectedKey] = useState("");
+	const [selectedModel, setSelectedModel] = useState("");
 	const [newConnector, setNewConnector] = useState<ConnectorDraft | null>(null);
 	const [launch, setLaunch] = useState<{
 		id: string;
@@ -204,11 +201,12 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 	const rotateConnector = api.token2api.rotateConnector.useMutation();
 	const createListing = api.token2api.createListing.useMutation();
 	const toggleListing = api.token2api.toggleListing.useMutation();
-	const openSession = api.token2api.openSession.useMutation();
 	const confirmSession = api.token2api.confirmSession.useMutation();
 	const createKey = api.token2api.createKey.useMutation();
 	const revokeKey = api.token2api.revokeKey.useMutation();
-	const chat = api.token2api.chat.useMutation();
+	const chat = api.token2api.modelChat.useMutation();
+	const updateModels = api.token2api.updateKeyModels.useMutation();
+	const prepareTransfer = api.token2api.preparePrepaidTransfer.useMutation();
 	const settle = api.token2api.settle.useMutation();
 	const requestRefund = api.token2api.requestRefund.useMutation();
 	const withdraw = api.token2api.withdraw.useMutation();
@@ -216,6 +214,27 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 	const asset = data?.network.asset ?? DEFAULT_NETWORK.asset;
 	const nativeSymbol = data ? networkMetadata(data.network).nativeSymbol : "";
 	const viewer = data?.viewer;
+	const catalogQuery = api.token2api.modelCatalog.useQuery(undefined, {
+		enabled: !uiPreview,
+		refetchInterval: 15_000,
+	});
+	const catalog = uiPreview ? previewModels : (catalogQuery.data ?? []);
+	const prepaidQuery = api.token2api.prepaidAccount.useQuery(
+		{ address: viewer?.address ?? `0x${"00".repeat(20)}` },
+		{ enabled: !!viewer && !uiPreview, refetchInterval: 15_000, retry: false },
+	);
+	const modelKeys =
+		data?.keys.filter((key) => !key.revoked && key.sessionId === null) ?? [];
+	const labKey =
+		modelKeys.find((key) => key.id === selectedKey) ?? modelKeys[0];
+	const labModels = catalog.filter((model) =>
+		labKey?.models.includes(model.id),
+	);
+	const labModel =
+		labModels.find((model) => model.id === selectedModel)?.id ??
+		labModels[0]?.id ??
+		"";
+
 	const refundQuery = api.token2api.refundStatus.useQuery(
 		{ sessionId: refundSession?.id ?? `0x${"00".repeat(32)}` },
 		{
@@ -245,9 +264,10 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 		setNewConnector(null);
 		setLaunch(null);
 		setMessages([]);
-		setSelectedSession("");
+		setSelectedKey("");
+		setSelectedModel("");
+		setAllowedModels([]);
 		setConversationId("");
-		setRentListing(null);
 		setKeyModal(false);
 		setListingModal(false);
 		setError(null);
@@ -267,16 +287,17 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 		!viewer.demo &&
 		(!isConnected || !sameAddress(connectedAddress, viewer.address));
 
-	const sessions =
-		data?.sessions.filter(
-			(session) =>
-				activeSession(session) &&
-				sameAddress(session.consumer, viewer?.address),
-		) ?? [];
-	const sessionId = sessions.some((item) => item.id === selectedSession)
-		? selectedSession
-		: (sessions[0]?.id ?? "");
-	const selected = sessions.find((item) => item.id === sessionId);
+	const previousLab = useRef({ keyId: labKey?.id, model: labModel });
+	useEffect(() => {
+		if (
+			previousLab.current.keyId === labKey?.id &&
+			previousLab.current.model === labModel
+		)
+			return;
+		previousLab.current = { keyId: labKey?.id, model: labModel };
+		setMessages([]);
+		setConversationId("");
+	}, [labKey?.id, labModel]);
 	const closeMobileMenu = () => {
 		setMobileOpen(false);
 		window.requestAnimationFrame(() => menuButtonRef.current?.focus());
@@ -384,6 +405,7 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 			);
 		} finally {
 			await snapshot.refetch();
+			if (isCurrent() && viewer && !uiPreview) await prepaidQuery.refetch();
 			if (isCurrent()) {
 				setBusy(null);
 				busyRef.current = false;
@@ -394,37 +416,6 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 		data && viewer
 			? { getWallet, network: data.network, address: viewer.address, isCurrent }
 			: null;
-	const rent = (event: FormEvent) => {
-		event.preventDefault();
-		void run("rent", async (isCurrent) => {
-			const context = chainContext(isCurrent);
-			if (!rentListing || !context || !viewer) return;
-			const amount = parseMicroAmount(budget);
-			if (amount <= 0) throw new Error("锁定金额必须大于零。");
-			if (!viewer.demo) await getWallet(context.network, viewer.address);
-			if (!isCurrent()) return;
-			const result = await openSession.mutateAsync({
-				listingId: rentListing.id,
-				budget: amount,
-			});
-			if (!isCurrent()) return;
-			if (result.mode === "wallet") {
-				const hash = await lockBudget(context, result.transaction);
-				const confirmed = await confirmSession.mutateAsync({
-					id: result.id,
-					txHash: hash,
-				});
-				if (isCurrent() && confirmed.connection)
-					setNewKey(confirmed.connection);
-			}
-			if (!isCurrent()) return;
-			if (result.connection) setNewKey(result.connection);
-			setSelectedSession(result.id);
-			setRentListing(null);
-			navigate("keys");
-			setNotice(`${asset} 预算已开通。请保存下方 Base URL、API Key 和模型名。`);
-		});
-	};
 	const resetConversation = () => {
 		setMessages([]);
 		setConversationId("");
@@ -433,7 +424,7 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 	};
 	const submitChat = (event: FormEvent) => {
 		event.preventDefault();
-		if (!prompt.trim() || !sessionId) return;
+		if (!prompt.trim() || !labKey || !labModel) return;
 		void run("chat", async (isCurrent) => {
 			const content = prompt.trim();
 			const previousReply = messages.at(-1);
@@ -449,8 +440,10 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 			const currentConversation = history.length
 				? conversationId
 				: crypto.randomUUID();
+			if (uiPreview) throw new Error("UI 预览不调用真实模型或扣费。");
 			const result = await chat.mutateAsync({
-				sessionId,
+				keyId: labKey.id,
+				model: labModel,
 				messages: nextMessages.slice(-19).map(({ role, content: text }) => ({
 					role,
 					content: text,
@@ -483,10 +476,16 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 	const submitKey = (event: FormEvent) => {
 		event.preventDefault();
 		void run("key", async (isCurrent) => {
-			const result = await createKey.mutateAsync({ sessionId, name: keyName });
+			const input = modelKeyInput.parse({
+				name: keyName,
+				models: allowedModels,
+			});
+			if (uiPreview) throw new Error("UI 预览不创建真实 Key。");
+			const result = await createKey.mutateAsync(input);
 			if (!isCurrent()) return;
 			setNewKey(result);
 			setKeyModal(false);
+			setNotice("Key 已创建，请保存完整密钥；模型权限可随时调整。");
 		});
 	};
 	const submitListing = (event: FormEvent<HTMLFormElement>) => {
@@ -564,7 +563,9 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 		void run("self-close", async (isCurrent) => {
 			const context = chainContext(isCurrent);
 			if (!context) return;
-			setNotice(await selfCloseSession(context, session.id));
+			setNotice(
+				await selfCloseSession(context, session.id, session.fundingSource),
+			);
 		});
 	const copy = async (value: string) => {
 		try {
@@ -605,37 +606,71 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 		setRefundSession(null);
 		setRefundInfo(null);
 	};
-	const openRent = (listing: ListingView) => {
+	const openKey = (models: string[] = []) => {
 		setError(null);
-		setBudget("");
-		if (uiPreview) {
-			setRentListing(listing);
-			return;
-		}
-		if (!data?.network.ready) {
-			setNotice("当前市场的结算服务暂不可用，请稍后重试。");
-			return;
-		}
-		if (!viewer) {
-			setNotice("先连接钱包并签名登录，再创建预算会话。");
-			window.scrollTo({ top: 0, behavior: "smooth" });
-			return;
-		}
-		setRentListing(listing);
+		setAllowedModels(models);
+		setKeyModal(true);
 	};
+	const transferPrepaid = async (
+		kind: "deposit" | "withdraw",
+		amount: number,
+	) => {
+		let completed = false;
+		await run("prepaid", async (isCurrent) => {
+			const context = chainContext(isCurrent);
+			if (!context || uiPreview)
+				throw new Error("请连接真实钱包后操作预付余额。");
+			const plan = await prepareTransfer.mutateAsync({ kind, amount });
+			if (!isCurrent()) return;
+			await sendPrepaidTransfer(context, plan, amount, kind);
+			if (!isCurrent()) return;
+			await prepaidQuery.refetch();
+			completed = true;
+			setNotice(
+				kind === "deposit"
+					? "充值已确认，所有模型 Key 共用此余额。"
+					: "未用预付余额已提取，请在钱包核对到账。",
+			);
+		});
+		return completed;
+	};
+	const accountPanel = data ? (
+		<PrepaidAccountPanel
+			account={uiPreview ? null : (prepaidQuery.data ?? null)}
+			busy={!!busy}
+			error={error}
+			key={`prepaid:${identity}`}
+			loading={prepaidQuery.isLoading}
+			network={data.network}
+			onOpen={() => setError(null)}
+			onRetry={() => void prepaidQuery.refetch()}
+			onTransfer={transferPrepaid}
+			preview={uiPreview}
+			queryError={prepaidQuery.error?.message ?? null}
+			signedIn={!!viewer}
+		/>
+	) : null;
 	const pages: Record<Section, ReactNode> | null = data
 		? {
 				overview: (
 					<OverviewSection
-						busy={!!busy}
 						data={data}
 						nativeSymbol={nativeSymbol}
 						navigate={navigate}
-						onRent={openRent}
-						sessions={sessions}
 					/>
 				),
-				market: <MarketSection busy={!!busy} data={data} onRent={openRent} />,
+				market: (
+					<MarketSection
+						asset={asset}
+						busy={!!busy}
+						error={catalogQuery.error?.message ?? null}
+						loading={!uiPreview && catalogQuery.isLoading}
+						models={catalog}
+						onCreateKey={openKey}
+						onRetry={() => void catalogQuery.refetch()}
+						signedIn={!!viewer}
+					/>
+				),
 				pool: (
 					<PoolSection
 						busy={!!busy}
@@ -671,9 +706,14 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 				lab: (
 					<LabSection
 						asset={asset}
+						balance={prepaidQuery.data?.available ?? null}
 						busy={busy}
-						error={chat.error?.message ?? null}
+						error={error ?? chat.error?.message ?? null}
+						keyId={labKey?.id ?? ""}
+						keys={modelKeys}
 						messages={messages}
+						modelId={labModel}
+						models={labModels}
 						navigate={navigate}
 						onNewConversation={resetConversation}
 						onOpenBilling={() => {
@@ -681,73 +721,94 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 							setBillingTarget(true);
 						}}
 						onPromptChange={setPrompt}
-						onSelectSession={(value) => {
-							setSelectedSession(value);
+						onSelectKey={(value) => {
+							setSelectedKey(value);
+							resetConversation();
+						}}
+						onSelectModel={(value) => {
+							setSelectedModel(value);
 							resetConversation();
 						}}
 						onSubmit={submitChat}
 						prompt={prompt}
-						sessionId={sessionId}
-						sessions={sessions}
 					/>
 				),
 				billing: (
-					<BillingSection
-						busy={!!busy}
-						data={data}
-						focusRequests={billingTarget}
-						onConfirm={(id) =>
-							void run("confirm", async (isCurrent) => {
-								const confirmed = await confirmSession.mutateAsync({
-									id,
-								});
-								if (!isCurrent()) return;
-								if (confirmed.connection) {
-									setNewKey(confirmed.connection);
-									navigate("keys");
-								}
-								setNotice("链上预算已确认，可以开始调用或创建 API 密钥。");
-							})
-						}
-						onFocused={() => setBillingTarget(false)}
-						onRefund={(session) => {
-							setError(null);
-							setRefundSession(session);
-							setRefundInfo(null);
-						}}
-						onSelfClose={selfClose}
-						onSettle={(id) =>
-							void run("settle", async () => {
-								await settle.mutateAsync({ sessionId: id });
-								setNotice("该会话的待结算费用已提交链上。");
-							})
-						}
-						onWithdraw={openWithdraw}
-					/>
+					<>
+						{accountPanel}
+						<BillingSection
+							busy={!!busy}
+							data={data}
+							focusRequests={billingTarget}
+							onConfirm={(id) =>
+								void run("confirm", async (isCurrent) => {
+									const confirmed = await confirmSession.mutateAsync({
+										id,
+									});
+									if (!isCurrent()) return;
+									if (confirmed.connection) {
+										setNewKey(confirmed.connection);
+										navigate("keys");
+									}
+									setNotice("链上预算已确认，可以开始调用或创建 API 密钥。");
+								})
+							}
+							onFocused={() => setBillingTarget(false)}
+							onRefund={(session) => {
+								setError(null);
+								setRefundSession(session);
+								setRefundInfo(null);
+							}}
+							onSelfClose={selfClose}
+							onSettle={(id) =>
+								void run("settle", async () => {
+									await settle.mutateAsync({ sessionId: id });
+									setNotice("该会话的待结算费用已提交链上。");
+								})
+							}
+							onWithdraw={openWithdraw}
+						/>
+					</>
 				),
 				keys: (
-					<KeysSection
-						busy={!!busy}
-						copied={copied}
-						data={data}
-						hasSessions={sessions.length > 0}
-						key={identity}
-						model={selected?.model}
-						navigate={navigate}
-						newKey={newKey}
-						onCopy={(value) => void copy(value)}
-						onCreateKey={() => {
-							setError(null);
-							setKeyModal(true);
-						}}
-						onRevoke={(id) =>
-							void run("revoke", async () => {
-								await revokeKey.mutateAsync({ id });
-								setNewKey(null);
-								setNotice("密钥已撤销，不能再用于新请求。");
-							})
-						}
-					/>
+					<>
+						{accountPanel}
+						<KeysSection
+							busy={!!busy}
+							copied={copied}
+							data={data}
+							error={error}
+							key={identity}
+							model={labModel || newKey?.model}
+							models={catalog}
+							modelsError={catalogQuery.error?.message ?? null}
+							modelsLoading={!uiPreview && catalogQuery.isLoading}
+							navigate={navigate}
+							newKey={newKey}
+							onCopy={(value) => void copy(value)}
+							onCreateKey={() => openKey()}
+							onEditOpen={() => setError(null)}
+							onRetryModels={() => void catalogQuery.refetch()}
+							onRevoke={(id) =>
+								void run("revoke", async () => {
+									await revokeKey.mutateAsync({ id });
+									setNewKey(null);
+									setNotice("密钥已撤销，不能再用于新请求。");
+								})
+							}
+							onUpdateModels={async (id, models) => {
+								let updated = false;
+								await run("key-models", async (isCurrent) => {
+									await updateModels.mutateAsync({ id, models });
+									if (isCurrent()) {
+										updated = true;
+										setNotice("Key 的模型权限已更新。");
+									}
+								});
+								return updated;
+							}}
+						/>
+					</>
 				),
 			}
 		: null;
@@ -778,11 +839,8 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 		) : section === "keys" ? (
 			<button
 				className="button primary"
-				disabled={!sessions.length || !!busy}
-				onClick={() => {
-					setError(null);
-					setKeyModal(true);
-				}}
+				disabled={!viewer || !!busy}
+				onClick={() => openKey()}
 				type="button"
 			>
 				<Plus size={13} />
@@ -848,7 +906,7 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 							<span>{label}</span>
 							{id === "market" && data && (
 								<span className="nav-count">
-									{onlineListings(data.listings)}
+									{catalog.filter((model) => model.available).length}
 								</span>
 							)}
 						</Link>
@@ -1062,7 +1120,8 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 								</>
 							)}
 						</div>
-					) : !data.network.escrow ? (
+					) : !data.network.escrow &&
+						!["keys", "market", "billing", "lab"].includes(section) ? (
 						<div className="market-empty">
 							<div aria-hidden="true" className="market-empty-art">
 								<span>
@@ -1168,19 +1227,6 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 					onSubmit={doWithdraw}
 				/>
 			)}
-			{rentListing && data && !walletMismatch && (
-				<RentModal
-					budget={budget}
-					busy={busy}
-					error={error}
-					listing={rentListing}
-					nativeSymbol={nativeSymbol}
-					network={data.network}
-					onBudgetChange={setBudget}
-					onClose={() => setRentListing(null)}
-					onSubmit={rent}
-				/>
-			)}
 			{newConnector && newConnector.model === "" && (
 				<ConnectorSetupModal
 					asset={asset}
@@ -1233,12 +1279,15 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 					busy={busy}
 					error={error}
 					keyName={keyName}
+					loading={!uiPreview && catalogQuery.isLoading}
+					models={catalog}
 					onClose={() => setKeyModal(false)}
 					onKeyNameChange={setKeyName}
-					onSelectSession={setSelectedSession}
+					onModelsChange={setAllowedModels}
+					onRetry={() => void catalogQuery.refetch()}
 					onSubmit={submitKey}
-					sessionId={sessionId}
-					sessions={sessions}
+					queryError={catalogQuery.error?.message ?? null}
+					selectedModels={allowedModels}
 				/>
 			)}
 		</div>

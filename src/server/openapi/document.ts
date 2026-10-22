@@ -40,7 +40,7 @@ registry.registerPath({
 	method: "get",
 	path: "/models",
 	operationId: "listModels",
-	summary: "List the model bound to this API key",
+	summary: "List enabled models allowed by this API key",
 	responses: {
 		200: {
 			description: "OpenAI-compatible model list",
@@ -58,7 +58,7 @@ registry.registerPath({
 	operationId: "createChatCompletion",
 	summary: "Generate a metered text completion",
 	description:
-		"Text only. JSON.stringify(messages) must encode to at most 24000 UTF-8 bytes, including JSON syntax and escaping. Raw request bodies are limited to 160 KiB (163840 bytes), counted from the stream regardless of Content-Length, with a 10 second total read deadline before JSON parsing. Upstream response bodies, including SSE framing and error bodies, are capped at 2 MiB before SDK parsing; cumulative response text is capped at 64 KiB of UTF-8. Exceeding either cap aborts upstream reading and retains the reservation in REVIEW. API key binds one lease/model. Idempotency-Key is required for every chat request; reuse the same key on retries. Duplicate keys return 409 without another upstream call. A stream can emit an Error frame after HTTP 200. Unknown usage retains its reservation in REVIEW. No automatic retry.",
+		"Text only. JSON.stringify(messages) must encode to at most 24000 UTF-8 bytes, including JSON syntax and escaping. Raw request bodies are limited to 160 KiB (163840 bytes), counted from the stream regardless of Content-Length, with a 10 second total read deadline before JSON parsing. Upstream response bodies, including SSE framing and error bodies, are capped at 2 MiB before SDK parsing; cumulative response text is capped at 64 KiB of UTF-8. Exceeding either cap aborts upstream reading and retains the reservation in REVIEW. Model keys carry an explicit model allowlist and use one shared confirmed prepaid balance. The platform chooses one eligible upstream and fixes its provider, resource, retail price and supplier price for the request. Legacy session keys retain their original lease/model binding. Idempotency-Key is required for every chat request; reuse the same key on retries. Duplicate keys return 409 without another upstream call. A stream can emit an Error frame after HTTP 200. Unknown usage retains its reservation in REVIEW. No automatic retry.",
 	request: {
 		headers: z.object({
 			"Idempotency-Key": z.string().min(8).max(128),

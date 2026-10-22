@@ -11,31 +11,32 @@ datasource db {
 }
 
 model Listing {
-  id             String   @id @default(cuid())
-  owner          String
-  name           String
-  description    String
-  model          String
-  kind           String
-  transport      String   @default("direct")
-  connectorHash  String?  @unique
-  connectorLaunchHash String? @unique
+  id                       String         @id @default(cuid())
+  owner                    String
+  name                     String
+  description              String
+  model                    String
+  kind                     String
+  transport                String         @default("direct")
+  connectorHash            String?        @unique
+  connectorLaunchHash      String?        @unique
   connectorLaunchExpiresAt DateTime?
-  connectorSeenAt DateTime?
-  connectorCatalog Json?
-  connectorCatalogAt DateTime?
-  inputRate      Int
-  outputRate     Int
-  concurrency    Int      @default(2)
-  enabled        Boolean  @default(true)
-  status         String   @default("READY")
-  baseUrl        String?
-  secret         String?
-  proxyUrl       String?
-  proxySecret    String?
-  createdAt      DateTime @default(now())
-  sessions       Lease[]
-  connectorJobs  ConnectorJob[]
+  connectorSeenAt          DateTime?
+  connectorCatalog         Json?
+  connectorCatalogAt       DateTime?
+  inputRate                Int
+  outputRate               Int
+  concurrency              Int            @default(2)
+  enabled                  Boolean        @default(true)
+  status                   String         @default("READY")
+  baseUrl                  String?
+  secret                   String?
+  proxyUrl                 String?
+  proxySecret              String?
+  createdAt                DateTime       @default(now())
+  sessions                 Lease[]
+  connectorJobs            ConnectorJob[]
+  modelRoutes              ModelRoute[]
 
   @@index([owner])
   @@index([baseUrl])
@@ -57,29 +58,36 @@ model EndpointPolicy {
 }
 
 model Lease {
-  id          String         @id
-  listingId   String
-  listing     Listing        @relation(fields: [listingId], references: [id])
-  consumer    String
-  provider    String
-  model       String
-  inputRate   Int
-  outputRate  Int
-  termsHash   String
-  budget      BigInt
-  spent       BigInt            @default(0)
-  reserved    BigInt            @default(0)
-  settled     BigInt            @default(0)
+  id                 String            @id
+  listingId          String
+  listing            Listing           @relation(fields: [listingId], references: [id])
+  consumer           String
+  provider           String
+  model              String
+  inputRate          Int
+  outputRate         Int
+  // Existing wallet-funded leases keep their original provider and prices.
+  fundingSource      String            @default("WALLET")
+  upstreamModel      String?
+  providerInputRate  Int?
+  providerOutputRate Int?
+  providerSpent      BigInt            @default(0)
+  termsHash          String
+  budget             BigInt
+  spent              BigInt            @default(0)
+  reserved           BigInt            @default(0)
+  settled            BigInt            @default(0)
   // Earned usage that cannot be collected after a confirmed chain close.
-  writtenOff  BigInt            @default(0)
-  status      String         @default("DRAFT")
-  expiresAt   DateTime
-  openTx      String?
-  closeTx     String?
-  createdAt   DateTime       @default(now())
-  requests    MeterRequest[]
-  keys        AccessKey[]
-  settlements Settlement[]
+  writtenOff         BigInt            @default(0)
+  status             String            @default("DRAFT")
+  expiresAt          DateTime
+  openTx             String?
+  closeTx            String?
+  createdAt          DateTime          @default(now())
+  requests           MeterRequest[]
+  keys               AccessKey[]
+  settlements        Settlement[]
+  invocation         RoutedInvocation?
 
   @@index([consumer, status])
   @@index([provider])
@@ -88,22 +96,23 @@ model Lease {
 }
 
 model MeterRequest {
-  id             String      @id @default(cuid())
+  id             String        @id @default(cuid())
   sessionId      String
-  session        Lease       @relation(fields: [sessionId], references: [id])
+  session        Lease         @relation(fields: [sessionId], references: [id])
   idempotencyKey String
   reservation    BigInt
-  cost           BigInt         @default(0)
+  cost           BigInt        @default(0)
+  providerCost   BigInt        @default(0)
   inputTokens    Int?
   outputTokens   Int?
-  status         String      @default("RUNNING")
-  usageSource    String      @default("missing")
+  status         String        @default("RUNNING")
+  usageSource    String        @default("missing")
   upstreamId     String?
   errorCode      String?
   settlementId   String?
-  settlement     Settlement? @relation(fields: [settlementId], references: [id])
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  settlement     Settlement?   @relation(fields: [settlementId], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
   connectorJob   ConnectorJob?
 
   @@unique([sessionId, idempotencyKey])
@@ -111,32 +120,36 @@ model MeterRequest {
 }
 
 model AccessKey {
-  id        String   @id @default(cuid())
-  owner     String
-  sessionId String
-  session   Lease    @relation(fields: [sessionId], references: [id])
-  name      String
-  hash      String   @unique
-  prefix    String
-  revoked   Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id          String             @id @default(cuid())
+  owner       String
+  sessionId   String?
+  session     Lease?             @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  models      String[]           @default([])
+  name        String
+  hash        String             @unique
+  prefix      String
+  revoked     Boolean            @default(false)
+  createdAt   DateTime           @default(now())
+  invocations RoutedInvocation[]
 
   @@index([owner])
   @@index([sessionId])
 }
 
 model Settlement {
-  id           String         @id @default(cuid())
-  sessionId    String
-  session      Lease          @relation(fields: [sessionId], references: [id])
-  nonce        Int
-  amount       BigInt
-  cumulative   BigInt
-  receiptsHash String
-  status       String         @default("READY")
-  txHash       String?
-  createdAt    DateTime       @default(now())
-  requests     MeterRequest[]
+  id                 String         @id @default(cuid())
+  sessionId          String
+  session            Lease          @relation(fields: [sessionId], references: [id])
+  nonce              Int
+  amount             BigInt
+  cumulative         BigInt
+  providerAmount     BigInt         @default(0)
+  providerCumulative BigInt         @default(0)
+  receiptsHash       String
+  status             String         @default("READY")
+  txHash             String?
+  createdAt          DateTime       @default(now())
+  requests           MeterRequest[]
 
   @@unique([sessionId, nonce])
 }
@@ -201,4 +214,46 @@ model ConnectorJob {
   updatedAt   DateTime     @updatedAt
 
   @@index([listingId, status, createdAt])
+}
+
+model ModelProduct {
+  id          String             @id
+  name        String
+  inputRate   Int
+  outputRate  Int
+  enabled     Boolean            @default(true)
+  updatedBy   String
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  routes      ModelRoute[]
+  invocations RoutedInvocation[]
+}
+
+model ModelRoute {
+  id        String       @id @default(cuid())
+  modelId   String
+  model     ModelProduct @relation(fields: [modelId], references: [id])
+  listingId String
+  listing   Listing      @relation(fields: [listingId], references: [id])
+  priority  Int          @default(100)
+  enabled   Boolean      @default(true)
+  createdAt DateTime     @default(now())
+
+  @@unique([modelId, listingId])
+  @@index([modelId, enabled, priority])
+}
+
+// A key's idempotency scope remains stable when routing selects another resource.
+model RoutedInvocation {
+  id             String       @id @default(cuid())
+  accessKeyId    String
+  accessKey      AccessKey    @relation(fields: [accessKeyId], references: [id])
+  modelId        String
+  model          ModelProduct @relation(fields: [modelId], references: [id])
+  sessionId      String       @unique
+  session        Lease        @relation(fields: [sessionId], references: [id])
+  idempotencyKey String
+  createdAt      DateTime     @default(now())
+
+  @@unique([accessKeyId, idempotencyKey])
 }

@@ -14,6 +14,7 @@ import {
 import {
 	date,
 	requestUsagePending,
+	sameAddress,
 	short,
 	statusLabel,
 	statusTone,
@@ -168,13 +169,13 @@ export function BillingSection({
 				>
 					<div className="panel-body settlement-rules">
 						<ol className="funding-steps">
-							<li>锁定预算，调用前预留费用。</li>
-							<li>确认用量，按固定报价核销并结算。</li>
-							<li>申请退款，核对后转入可提现余额。</li>
+							<li>向统一预付账户充值，调用前自动预留费用。</li>
+							<li>确认用量，按本次固定的平台报价核销并结算。</li>
+							<li>未使用预留退回预付账户；原有会话退款转入可提现余额。</li>
 						</ol>
 						<p>
-							平台服务费 {(data.network.feeBps / 100).toFixed(1)}
-							%。网络手续费另计。
+							商家服务费 {(data.network.feeBps / 100).toFixed(1)}
+							%，按供应商费用收取。调用者支付平台统一报价，网络手续费另计。
 						</p>
 						<p className="mono escrow-address">
 							托管合约 / {data.network.escrow || "未配置"}
@@ -230,7 +231,7 @@ export function BillingSection({
 							description={
 								data.sessions.length
 									? "调整名称或状态筛选后重试。"
-									: "先在资源市场选择资源并锁定预算。"
+									: "创建 Key、授权模型并充值后，调用会自动建立预留记录。"
 							}
 							title={
 								data.sessions.length ? "没有匹配的预算会话" : "还没有预算会话"
@@ -328,6 +329,21 @@ export function BillingSection({
 												{requestUsagePending(item)
 													? "待核对"
 													: usd(item.cost, true)}
+												{sameAddress(
+													data.sessions.find(
+														(session) => session.id === item.sessionId,
+													)?.provider,
+													data.viewer?.address,
+												) && (
+													<small className="table-secondary">
+														供应商费用（未扣服务费）
+														{requestUsagePending(item)
+															? "待核对"
+															: item.providerCost === undefined
+																? "暂不可用"
+																: usd(item.providerCost, true)}
+													</small>
+												)}
 											</td>
 											<td>{item.usageSource || "—"}</td>
 											<td>

@@ -3047,3 +3047,209 @@ input[aria-invalid="true"] {
 		min-height: 44px;
 	}
 }
+
+.model-picker {
+	border: 0;
+	min-width: 0;
+	margin: 18px 0;
+	padding: 0;
+}
+.model-picker legend {
+	color: var(--ink);
+	font-size: 13px;
+	font-weight: 600;
+}
+.model-picker > p {
+	margin: 8px 0 14px;
+	line-height: 1.7;
+}
+.model-picker-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
+	margin: 12px 0;
+	color: var(--muted);
+	font-size: 12px;
+}
+.model-picker-count {
+	margin-right: auto;
+}
+.model-picker-list {
+	display: grid;
+	gap: 8px;
+	max-height: 340px;
+	overflow: auto;
+	padding: 3px;
+}
+.model-option {
+	display: grid;
+	grid-template-columns: 18px minmax(0, 1fr) auto;
+	align-items: start;
+	gap: 12px;
+	border: 1px solid var(--line);
+	border-radius: var(--radius-control);
+	padding: 14px;
+	cursor: pointer;
+}
+.model-option:hover {
+	background: var(--frost);
+}
+.model-option:focus-within {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+.model-checkbox {
+	width: 16px;
+	height: 16px;
+	margin: 3px 0;
+	accent-color: var(--accent);
+}
+.model-option strong,
+.model-option code,
+.model-option small {
+	display: block;
+	overflow-wrap: anywhere;
+}
+.model-option strong {
+	font-size: 13px;
+}
+.model-option code,
+.model-option small {
+	margin-top: 6px;
+	color: var(--muted);
+	font-size: 12px;
+	line-height: 1.6;
+}
+.key-models {
+	max-width: 290px;
+	overflow-wrap: anywhere;
+}
+.prepaid-account-body {
+	display: grid;
+	gap: 18px;
+	padding: 20px;
+}
+.prepaid-account-caption {
+	display: block;
+	margin-bottom: 8px;
+	color: var(--muted);
+	font-size: 12px;
+}
+.prepaid-account-total > strong {
+	font-size: 30px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	overflow-wrap: anywhere;
+}
+.prepaid-account-total small {
+	font-size: 13px;
+	color: var(--muted);
+	font-weight: 500;
+}
+.prepaid-account-breakdown {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px 20px;
+}
+.prepaid-account-breakdown > div {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	gap: 6px 12px;
+	color: var(--muted);
+	font-size: 12px;
+}
+.prepaid-account-breakdown strong {
+	color: var(--ink);
+	font-weight: 500;
+	font-variant-numeric: tabular-nums;
+	overflow-wrap: anywhere;
+}
+.prepaid-account-body > p {
+	margin: 0;
+	font-size: 12px;
+	line-height: 1.8;
+}
+.onboarding-steps {
+	margin: 0;
+	padding-left: 20px;
+	display: grid;
+	gap: 14px;
+	line-height: 1.8;
+}
+.model-admin-body {
+	display: grid;
+	gap: 18px;
+}
+.model-admin-product {
+	border: 1px solid var(--line);
+	border-radius: var(--radius-panel);
+	padding: 18px;
+	min-width: 0;
+}
+.model-admin-heading {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
+}
+.model-admin-heading > div {
+	flex: 1;
+	min-width: 180px;
+}
+.model-admin-heading code,
+.model-admin-routes code {
+	display: block;
+	margin-top: 6px;
+	color: var(--muted);
+	overflow-wrap: anywhere;
+	font-size: 12px;
+}
+.model-admin-heading p {
+	margin: 8px 0 0;
+	color: var(--muted);
+	line-height: 1.6;
+	font-size: 12px;
+}
+.model-admin-routes {
+	list-style: none;
+	margin: 18px 0 0;
+	padding: 0;
+	display: grid;
+	gap: 10px;
+}
+.model-admin-routes > li {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
+	padding-top: 14px;
+	border-top: 1px solid var(--line);
+}
+.model-admin-routes > li > div {
+	flex: 1;
+	min-width: 180px;
+}
+.model-admin-routes small {
+	display: block;
+	margin-top: 6px;
+	color: var(--muted);
+	font-size: 12px;
+	line-height: 1.6;
+}
+@media (max-width: 700px) {
+	.model-option {
+		grid-template-columns: 18px minmax(0, 1fr);
+	}
+	.model-option > .badge {
+		grid-column: 2;
+		justify-self: start;
+	}
+	.prepaid-account-breakdown {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.prepaid-account-body {
+		padding: 16px;
+	}
+}

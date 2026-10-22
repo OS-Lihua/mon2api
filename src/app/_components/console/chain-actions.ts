@@ -1,7 +1,15 @@
-import { getAddress, isAddress, isHex, zeroAddress } from "viem";
+import {
+	encodeFunctionData,
+	getAddress,
+	isAddress,
+	isHex,
+	zeroAddress,
+} from "viem";
 import { z } from "zod";
 import { escrowAbi, nativeEscrowAbi, tokenAbi } from "~/lib/abi";
+import { prepaidAbi } from "~/lib/prepaid-abi";
 import type { getConnectedWallet } from "~/lib/wallet";
+import { prepaidTransactionResponse } from "~/shared/model-routing";
 import { isNativeAsset, toChainAmount } from "~/shared/settlement-asset";
 import type { NetworkInfo, OpenSessionResult } from "~/shared/token2api";
 
@@ -24,6 +32,90 @@ export type ChainContext = {
 
 function guard(isCurrent: () => boolean) {
 	if (!isCurrent()) throw new StaleIdentityError();
+}
+
+export async function sendPrepaidTransfer(
+	context: ChainContext,
+	planInput: unknown,
+	expectedAmount: number,
+	kind: "deposit" | "withdraw",
+) {
+	const plan = prepaidTransactionResponse.parse(planInput);
+	if (
+		plan.chainId !== context.network.chainId ||
+		plan.amount !== expectedAmount
+	)
+		throw new Error("充值或提取计划与当前网络、金额不一致。");
+	const native = isNativeAsset(context.network.asset);
+	const amount = toChainAmount(
+		expectedAmount,
+		context.network.asset,
+		context.network.tokenDecimals,
+	);
+	const escrow = getAddress(context.network.escrow);
+	const expected = [];
+	if (kind === "deposit" && !native) {
+		for (const allowance of [0n, amount])
+			expected.push({
+				to: context.network.token,
+				data: encodeFunctionData({
+					abi: tokenAbi,
+					functionName: "approve",
+					args: [escrow, allowance],
+				}),
+				value: "0",
+			});
+	}
+	expected.push({
+		to: escrow,
+		data: encodeFunctionData({
+			abi: prepaidAbi,
+			functionName: kind === "deposit" ? "depositPrepaid" : "withdrawPrepaid",
+			args: [amount],
+		}),
+		value: kind === "deposit" && native ? amount.toString() : "0",
+	});
+	if (plan.transactions.length !== expected.length)
+		throw new Error("资金交易数量无效。");
+	// Validate the entire plan before the first signature, including spender and amounts.
+	for (const [index, transaction] of plan.transactions.entries()) {
+		const target = expected[index];
+		if (
+			!target ||
+			!sameTarget(transaction.to, target.to) ||
+			transaction.data.toLowerCase() !== target.data.toLowerCase() ||
+			transaction.value !== target.value
+		)
+			throw new Error("资金交易目标、方法或金额无效。");
+	}
+	for (const transaction of plan.transactions) {
+		const wallet = await context.getWallet(context.network, context.address);
+		guard(context.isCurrent);
+		if (wallet.account.toLowerCase() !== context.address.toLowerCase())
+			throw new Error("钱包地址与登录身份不一致。");
+		if (!isHex(transaction.data)) throw new Error("资金交易数据无效。");
+		const hash = await wallet.wallet.sendTransaction({
+			account: wallet.account,
+			to: getAddress(transaction.to),
+			data: transaction.data,
+			value: BigInt(transaction.value),
+		});
+		const receipt = await wallet.publicClient.waitForTransactionReceipt({
+			hash,
+			confirmations: context.network.mode === "local" ? 1 : 6,
+		});
+		if (receipt.status !== "success")
+			throw new Error("资金交易未成功，请核对钱包交易记录后再操作。");
+		guard(context.isCurrent);
+		await context.getWallet(context.network, context.address);
+	}
+}
+function sameTarget(left: string, right: string) {
+	return (
+		isAddress(left) &&
+		isAddress(right) &&
+		left.toLowerCase() === right.toLowerCase()
+	);
 }
 
 /**
@@ -148,7 +240,10 @@ export async function withdrawBalance(
 export async function selfCloseSession(
 	{ getWallet, network, address, isCurrent }: ChainContext,
 	sessionId: string,
+	fundingSource?: string,
 ) {
+	const destination =
+		fundingSource === "PREPAID" ? "统一预付账户" : "可提现余额";
 	const { account, publicClient } = await getWallet(network, address);
 	guard(isCurrent);
 	if (account.toLowerCase() !== address.toLowerCase())
@@ -163,7 +258,7 @@ export async function selfCloseSession(
 	});
 	guard(isCurrent);
 	if (chainSession[8])
-		return "链上会话已关闭。未使用预算已转入可提现余额，可点击提取余额取回。";
+		return `链上会话已关闭。未使用预算已退回${destination}，可在对应余额面板提取。`;
 	const closeAfter = chainSession[7];
 	const send = async (functionName: "requestClose" | "closeSession") => {
 		const verifiedWallet = await getWallet(network, address);
@@ -190,5 +285,5 @@ export async function selfCloseSession(
 	const receipt = await send("closeSession");
 	if (receipt.status !== "success") throw new Error("链上会话关闭失败。");
 	guard(isCurrent);
-	return "链上会话已关闭。剩余预算已转入可提现余额，请点击提取余额。";
+	return `链上会话已关闭。未使用预算已退回${destination}，可在对应余额面板提取。`;
 }

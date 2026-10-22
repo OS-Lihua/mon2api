@@ -28,7 +28,7 @@ export async function operatorStatus(user: Viewer | null) {
 			user.address.toLowerCase() === owner.toLowerCase(),
 	};
 }
-async function requireOperator(user: Viewer) {
+export async function requireOperator(user: Viewer) {
 	if (!(await operatorStatus(user)).authorized)
 		throw new AppError(
 			"forbidden",
@@ -126,6 +126,20 @@ export async function operatorResources(
 				: { proxyUrl: entry.url }),
 		};
 	}
+	if (input.gatewayOnly) filter = { ...filter, kind: "gateway" };
+	if (input.q)
+		filter = {
+			AND: [
+				filter,
+				{
+					OR: [
+						{ name: { contains: input.q, mode: "insensitive" } },
+						{ model: { contains: input.q, mode: "insensitive" } },
+						{ id: { contains: input.q } },
+					],
+				},
+			],
+		};
 	const rows = await db.listing.findMany({
 		where: filter,
 		orderBy: { id: "asc" },
@@ -136,6 +150,9 @@ export async function operatorResources(
 			name: true,
 			owner: true,
 			model: true,
+			kind: true,
+			inputRate: true,
+			outputRate: true,
 			transport: true,
 			baseUrl: true,
 			proxyUrl: true,

@@ -37,6 +37,29 @@ export async function resolveReview(
 				"核对费用超出授权预留额，不能自动转嫁给用户。",
 				409,
 			);
+		const prepaid = request.session.fundingSource === "PREPAID";
+		let providerCost = 0;
+		if (prepaid) {
+			const { providerInputRate, providerOutputRate } = request.session;
+			if (providerInputRate === null || providerOutputRate === null)
+				throw new AppError(
+					"invalid_price_snapshot",
+					"缺少供应商报价快照，保留待核对状态。",
+					409,
+				);
+			providerCost = calculateCost(
+				inputTokens,
+				outputTokens,
+				providerInputRate,
+				providerOutputRate,
+			);
+		}
+		if (providerCost > cost)
+			throw new AppError(
+				"invalid_price_snapshot",
+				"供应商费用超出本次费用，保留待核对状态。",
+				409,
+			);
 		const transition = await tx.meterRequest.updateMany({
 			where: { id, status: "REVIEW" },
 			data: {
@@ -44,6 +67,7 @@ export async function resolveReview(
 				inputTokens,
 				outputTokens,
 				cost,
+				providerCost,
 				usageSource: "operator_verified",
 				errorCode: `evidence:${evidence}`,
 			},
@@ -55,6 +79,7 @@ export async function resolveReview(
 			data: {
 				reserved: { decrement: request.reservation },
 				spent: { increment: cost },
+				...(prepaid ? { providerSpent: { increment: providerCost } } : {}),
 			},
 		});
 		await tx.ledgerEntry.createMany({

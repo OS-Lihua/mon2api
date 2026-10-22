@@ -24,6 +24,7 @@ import { useToken2ApiWallet } from "~/app/_components/wallet-provider";
 import { endpointPolicyInput } from "~/shared/gateway-config";
 import { uiPreview } from "~/shared/ui-preview";
 import { api } from "~/trpc/react";
+import { ModelRoutingAdmin } from "./model-routing-admin";
 
 export function Token2ApiAdmin() {
 	const { address, isConnected } = useToken2ApiWallet();
@@ -66,15 +67,21 @@ export function Token2ApiAdmin() {
 				<div className="page-heading">
 					<div>
 						<span className="workspace-caption">TOKEN2API · 管理后台</span>
-						<h1>接入管理</h1>
+						<h1>平台管理</h1>
 						<p className="workspace-description">
-							审核可接入的网关和代理地址，查看关联资源。
+							配置模型报价与上游路由，审核接入地址和关联资源。
 						</p>
 					</div>
 					<ShieldCheck size={30} strokeWidth={1.4} />
 				</div>
-				{authorized ? (
-					<EndpointManager key={viewer.address} />
+				{authorized && snapshot.data ? (
+					<>
+						<ModelRoutingAdmin
+							asset={snapshot.data.network.asset}
+							key={`models:${viewer.address}`}
+						/>
+						<EndpointManager key={viewer.address} />
+					</>
 				) : (
 					<Panel
 						subtitle="使用当前托管合约的 owner 钱包连接并签名登录。"

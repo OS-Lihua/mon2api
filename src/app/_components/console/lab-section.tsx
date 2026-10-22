@@ -11,10 +11,11 @@ import {
 } from "lucide-react";
 import { type FormEvent, useEffect, useRef } from "react";
 import { ConsoleSelect } from "~/app/_components/console-select";
+import type { ModelView } from "~/shared/model-routing";
 import { formatAmount as usd } from "~/shared/money";
 import type { SettlementAsset } from "~/shared/settlement-asset";
-import type { SessionView } from "~/shared/token2api";
-import { remainingBudget, type Section, short } from "./format";
+import type { KeyView } from "~/shared/token2api";
+import type { Section } from "./format";
 import { Badge, Empty, Panel } from "./ui";
 
 export type ChatMessage = {
@@ -28,13 +29,17 @@ export type ChatMessage = {
 export function LabSection({
 	asset,
 	busy,
-	sessions,
-	sessionId,
+	keys,
+	keyId,
+	models,
+	modelId,
+	balance,
 	messages,
 	prompt,
 	navigate,
 	onPromptChange,
-	onSelectSession,
+	onSelectKey,
+	onSelectModel,
 	onNewConversation,
 	onOpenBilling,
 	onSubmit,
@@ -42,19 +47,23 @@ export function LabSection({
 }: {
 	asset: SettlementAsset;
 	busy: string | null;
-	sessions: SessionView[];
-	sessionId: string;
+	keys: KeyView[];
+	keyId: string;
+	models: ModelView[];
+	modelId: string;
+	balance: number | null;
 	messages: ChatMessage[];
 	prompt: string;
 	navigate: (section: Section) => void;
 	onPromptChange: (value: string) => void;
-	onSelectSession: (id: string) => void;
+	onSelectKey: (id: string) => void;
+	onSelectModel: (model: string) => void;
 	onNewConversation: () => void;
 	onOpenBilling: () => void;
 	onSubmit: (event: FormEvent) => void;
 	error: string | null;
 }) {
-	const selected = sessions.find((item) => item.id === sessionId);
+	const selected = keys.find((item) => item.id === keyId);
 	const messagesRef = useRef<HTMLDivElement>(null);
 	const messageCount = messages.length;
 	useEffect(() => {
@@ -68,56 +77,61 @@ export function LabSection({
 			<Panel className="chat-settings" title="调用配置">
 				<div className="panel-body">
 					<div className="field">
-						<label htmlFor="lab-session">预算会话</label>
+						<label htmlFor="lab-key">API Key</label>
 						<ConsoleSelect
 							disabled={!!busy}
-							id="lab-session"
-							onValueChange={onSelectSession}
-							options={sessions.map((item) => ({
-								value: item.id,
-								label: item.listingName,
-								description: `${item.model} · ${short(item.id)}`,
+							id="lab-key"
+							onValueChange={onSelectKey}
+							options={keys.map((key) => ({
+								value: key.id,
+								label: key.name,
+								description: key.prefix,
 								icon: Wallet,
 							}))}
-							placeholder={
-								sessions.length ? "选择使用中的会话" : "暂无可用的预算会话"
-							}
-							value={sessionId}
+							placeholder="选择模型 Key"
+							value={keyId}
 						/>
 					</div>
 					<div className="field">
 						<label htmlFor="lab-model">模型</label>
-						<input
+						<ConsoleSelect
+							disabled={!!busy || !selected}
 							id="lab-model"
-							readOnly
-							value={selected?.model ?? "尚未选择资源"}
+							onValueChange={onSelectModel}
+							options={models.map((model) => ({
+								value: model.id,
+								label: model.name,
+								description: `${model.id}${model.available ? "" : " · 暂无可用上游"}`,
+							}))}
+							placeholder="选择此 Key 已授权的模型"
+							value={modelId}
 						/>
 					</div>
 					<div className="field">
-						<span className="field-label">可用预算</span>
+						<span className="field-label">账户可用余额</span>
 						<div
 							className="stat-value"
 							style={{ fontSize: 24, margin: "3px 0" }}
 						>
-							{selected ? usd(remainingBudget(selected), true) : "—"}
+							{balance === null ? "—" : usd(balance, true)}
 							<small>{asset}</small>
 						</div>
-						<small>费用先预留，再按实际用量核销。</small>
-						{selected && selected.reserved > 0 && (
-							<small className="pending-amount">
-								已预留 {usd(selected.reserved, true)} {asset}
-								，包含执行中或待核对用量。
-							</small>
-						)}
-					</div>
-					{!sessions.length && (
+						<small>费用先预留，再按统一模型报价核销。上游由平台选择。</small>
 						<button
-							className="button primary"
-							onClick={() => navigate("market")}
-							style={{ width: "100%", marginTop: 17 }}
+							className="text-link"
+							onClick={() => navigate("billing")}
 							type="button"
 						>
-							先创建预算会话 <ArrowRight size={12} />
+							余额与充值 <ArrowRight size={12} />
+						</button>
+					</div>
+					{!keys.length && (
+						<button
+							className="button primary"
+							onClick={() => navigate("keys")}
+							type="button"
+						>
+							先创建模型 Key <ArrowRight size={12} />
 						</button>
 					)}
 				</div>
@@ -137,8 +151,8 @@ export function LabSection({
 				className="chat-window"
 				subtitle={
 					selected
-						? `${selected.listingName} / ${selected.model}`
-						: "选择会话后发送第一条消息"
+						? `${selected.name} / ${modelId || "选择模型"}`
+						: "选择 Key 和已授权模型后发送消息"
 				}
 				title="对话终端"
 			>
@@ -256,7 +270,7 @@ export function LabSection({
 						消息内容
 					</label>
 					<textarea
-						disabled={!selected || !!busy}
+						disabled={!selected || !modelId || !!busy}
 						id="prompt"
 						maxLength={8000}
 						onChange={(event) => onPromptChange(event.target.value)}
@@ -277,7 +291,7 @@ export function LabSection({
 						<span>{prompt.length} / 8,000 字符 · Ctrl / ⌘ + Enter 发送</span>
 						<button
 							className="button primary"
-							disabled={!selected || !prompt.trim() || !!busy}
+							disabled={!selected || !modelId || !prompt.trim() || !!busy}
 							type="submit"
 						>
 							{busy === "chat" ? (

@@ -14,6 +14,7 @@ import {
 import { mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
 import { z } from "zod";
 import { escrowAbi, nativeEscrowAbi, tokenAbi } from "~/lib/abi";
+import { prepaidAbi } from "~/lib/prepaid-abi";
 import { db } from "~/server/db";
 import { networkMetadata } from "~/shared/network";
 import {
@@ -155,8 +156,13 @@ const transactionHex = z.custom<Hex>(
 class EscrowTransactionReverted extends Error {}
 
 /** Allocate a nonce and commit the signed bytes before any broadcast. */
-async function prepareOwnerTransaction(id: string, data: Hex) {
+async function prepareOwnerTransaction(
+	id: string,
+	data: Hex,
+	precondition?: (tx: Prisma.TransactionClient) => Promise<void>,
+) {
 	return serializedChain(async (tx) => {
+		await precondition?.(tx);
 		const existing = await tx.chainTransaction.findUnique({ where: { id } });
 		if (existing && !["REVERTED", "CONSUMED"].includes(existing.status))
 			return existing;
@@ -357,16 +363,161 @@ export async function chainBalances(address: string) {
 		walletBalance: walletBalance.toString(),
 	};
 }
+
+/** Confirm deposits before admission and also honor withdrawals already mined at the tip. */
+export async function readPrepaidBalance(address: string) {
+	const { config, publicClient } = clients();
+	const escrow = getAddress(config.escrow);
+	const tip = await publicClient.getBlockNumber();
+	if (config.mode !== "local" && tip < 5n)
+		throw new Error("Waiting for canonical prepaid confirmations.");
+	const blockNumber = tip > 5n && config.mode !== "local" ? tip - 5n : tip;
+	const [version, fee] = await Promise.all([
+		publicClient.readContract({
+			address: escrow,
+			abi: prepaidAbi,
+			functionName: "prepaidVersion",
+			blockNumber,
+		}),
+		publicClient.readContract({
+			address: escrow,
+			abi: escrowAbi,
+			functionName: "feeBps",
+			blockNumber,
+		}),
+	]);
+	if (version !== 1n || fee !== 500) {
+		throw new Error("Prepaid account version is unavailable.");
+	}
+	const args = [getAddress(address)] as const;
+	const [confirmed, latest] = await Promise.all([
+		publicClient.readContract({
+			address: escrow,
+			abi: prepaidAbi,
+			functionName: "prepaidBalance",
+			args,
+			blockNumber,
+		}),
+		publicClient.readContract({
+			address: escrow,
+			abi: prepaidAbi,
+			functionName: "prepaidBalance",
+			args,
+		}),
+	]);
+	const amount = confirmed < latest ? confirmed : latest;
+	return {
+		balance: amount.toString(),
+		micro: fromChainAmount(amount, assetOf(config), decimalsOf(config)),
+	};
+}
+
+/** The lease is the durable reservation job; signed nonce/bytes are saved before broadcast. */
+export async function sendPrepaidReserve(lease: {
+	id: string;
+	consumer: string;
+	provider: string;
+	termsHash: string;
+	budget: bigint;
+	expiresAt: Date;
+}) {
+	const { config, publicClient } = clients();
+	const state = await readSession(lease.id);
+	let hash: Hex | undefined;
+	if (state.consumer.toLowerCase() === lease.consumer.toLowerCase()) {
+		hash = (await findSessionOpen(lease.id))?.receipt.transactionHash;
+	} else {
+		const transaction = await prepareOwnerTransaction(
+			`prepaid-open:${lease.id}`,
+			encodeFunctionData({
+				abi: prepaidAbi,
+				functionName: "reservePrepaidSession",
+				args: [
+					transactionHex.parse(lease.id),
+					getAddress(lease.consumer),
+					getAddress(lease.provider),
+					transactionHex.parse(lease.termsHash),
+					toChainAmount(lease.budget, assetOf(config), decimalsOf(config)),
+					BigInt(Math.floor(lease.expiresAt.getTime() / 1000)),
+				],
+			}),
+			async (tx) => {
+				const current = await tx.lease.findUnique({ where: { id: lease.id } });
+				if (
+					current?.fundingSource !== "PREPAID" ||
+					!["PREPARING", "ACTIVE", "CLOSING"].includes(current.status)
+				)
+					throw new Error("Prepaid reservation is no longer active.");
+			},
+		);
+		hash = await broadcastOwnerTransaction(transaction);
+		const receipt = await publicClient.waitForTransactionReceipt({
+			hash,
+			confirmations: config.mode === "local" ? 1 : 6,
+		});
+		if (receipt.status !== "success") {
+			await recordOwnerTransaction(hash, "REVERTED");
+			throw new EscrowTransactionReverted("Prepaid reservation reverted.");
+		}
+	}
+	if (!hash) throw new Error("Prepaid reservation receipt is not confirmed.");
+	const opened = await findSessionOpen(lease.id, hash);
+	const args = opened?.event.args;
+	if (
+		!opened ||
+		!args ||
+		args.consumer.toLowerCase() !== lease.consumer.toLowerCase() ||
+		args.provider.toLowerCase() !== lease.provider.toLowerCase() ||
+		args.termsHash.toLowerCase() !== lease.termsHash.toLowerCase() ||
+		args.budget !==
+			toChainAmount(lease.budget, assetOf(config), decimalsOf(config)) ||
+		args.expiresAt !== BigInt(Math.floor(lease.expiresAt.getTime() / 1000)) ||
+		!(await publicClient.readContract({
+			address: getAddress(config.escrow),
+			abi: prepaidAbi,
+			functionName: "prepaidSession",
+			args: [transactionHex.parse(lease.id)],
+			blockNumber: opened.receipt.blockNumber,
+		}))
+	) {
+		throw new Error("Prepaid reservation does not match its saved lease.");
+	}
+	await recordOwnerTransaction(hash, "CONFIRMED");
+	return hash;
+}
+
+/** Serialize cancellation with nonce preparation so an unrecorded send cannot race release. */
+export async function rejectUnsentPrepaidReservation(sessionId: string) {
+	await serializedChain(async (tx) => {
+		const job = await tx.chainTransaction.findUnique({
+			where: { id: `prepaid-open:${sessionId}` },
+		});
+		if (!job || job.status === "REVERTED") {
+			await tx.lease.updateMany({
+				where: { id: sessionId, fundingSource: "PREPAID", status: "PREPARING" },
+				data: { status: "REJECTED" },
+			});
+		}
+	});
+}
+
 export async function sendSettlement(
 	id: string,
 	cumulative: number,
 	nonce: number,
 	receiptsHash: string,
+	providerCumulative?: number,
 ) {
 	const { config } = clients();
 	const current = await readSession(id);
 	if (current.nonce > nonce) {
-		const recovered = await findSettlement(id, nonce, receiptsHash, cumulative);
+		const recovered = await findSettlement(
+			id,
+			nonce,
+			receiptsHash,
+			cumulative,
+			providerCumulative,
+		);
 		if (recovered && current.spent >= cumulative) {
 			await recordOwnerTransaction(recovered, "CONFIRMED");
 			return recovered;
@@ -375,16 +526,32 @@ export async function sendSettlement(
 	}
 	const transaction = await prepareOwnerTransaction(
 		`settle:${id}:${nonce}`,
-		encodeFunctionData({
-			abi: escrowAbi,
-			functionName: "settle",
-			args: [
-				id as Hex,
-				toChainAmount(cumulative, assetOf(config), decimalsOf(config)),
-				BigInt(nonce),
-				receiptsHash as Hex,
-			],
-		}),
+		providerCumulative !== undefined
+			? encodeFunctionData({
+					abi: prepaidAbi,
+					functionName: "settlePrepaid",
+					args: [
+						transactionHex.parse(id),
+						toChainAmount(cumulative, assetOf(config), decimalsOf(config)),
+						toChainAmount(
+							providerCumulative,
+							assetOf(config),
+							decimalsOf(config),
+						),
+						BigInt(nonce),
+						transactionHex.parse(receiptsHash),
+					],
+				})
+			: encodeFunctionData({
+					abi: escrowAbi,
+					functionName: "settle",
+					args: [
+						id as Hex,
+						toChainAmount(cumulative, assetOf(config), decimalsOf(config)),
+						BigInt(nonce),
+						receiptsHash as Hex,
+					],
+				}),
 	);
 	const hash = await broadcastOwnerTransaction(transaction);
 	try {
@@ -394,6 +561,7 @@ export async function sendSettlement(
 			nonce,
 			receiptsHash,
 			cumulative,
+			providerCumulative,
 		);
 		await recordOwnerTransaction(hash, "CONFIRMED");
 		return confirmed;
@@ -525,6 +693,7 @@ export async function confirmSettlement(
 	nonce: number,
 	receiptsHash: string,
 	cumulative: number,
+	providerCumulative?: number,
 ): Promise<Hex> {
 	const { config, publicClient } = clients();
 	const receipt = await publicClient.waitForTransactionReceipt({
@@ -552,6 +721,34 @@ export async function confirmSettlement(
 		)
 	)
 		throw new Error("Settlement receipt does not match the committed bill.");
+	if (providerCumulative !== undefined) {
+		const split = parseEventLogs({
+			abi: prepaidAbi,
+			eventName: "PrepaidUsageSettled",
+			logs: receipt.logs,
+			strict: true,
+		});
+		if (
+			!split.some(
+				(event) =>
+					event.address.toLowerCase() === config.escrow.toLowerCase() &&
+					event.args.id.toLowerCase() === id.toLowerCase() &&
+					event.args.nonce === BigInt(nonce) &&
+					event.args.receiptsHash.toLowerCase() ===
+						receiptsHash.toLowerCase() &&
+					event.args.providerCumulative ===
+						toChainAmount(
+							providerCumulative,
+							assetOf(config),
+							decimalsOf(config),
+						),
+			)
+		) {
+			throw new Error(
+				"Prepaid provider allocation does not match the committed bill.",
+			);
+		}
+	}
 	return receipt.transactionHash;
 }
 
@@ -605,6 +802,7 @@ export async function findSettlement(
 	nonce: number,
 	receiptsHash: string,
 	cumulative: number,
+	providerCumulative?: number,
 ): Promise<Hex | null> {
 	const { config, publicClient } = clients();
 	const logs = await publicClient.getContractEvents({
@@ -623,6 +821,13 @@ export async function findSettlement(
 				toChainAmount(cumulative, assetOf(config), decimalsOf(config)),
 	)?.transactionHash;
 	return hash
-		? confirmSettlement(hash, id, nonce, receiptsHash, cumulative)
+		? confirmSettlement(
+				hash,
+				id,
+				nonce,
+				receiptsHash,
+				cumulative,
+				providerCumulative,
+			)
 		: null;
 }

@@ -11,8 +11,8 @@ export const consoleRoutes: Record<
 	},
 	market: {
 		href: "/console/market",
-		title: "资源市场",
-		description: "比较模型与报价，选择适合你的调用资源。",
+		title: "模型市场",
+		description: "查看平台统一模型报价，为应用 Key 授权可用模型。",
 	},
 	pool: {
 		href: "/console/pool",
@@ -22,7 +22,7 @@ export const consoleRoutes: Record<
 	lab: {
 		href: "/console/lab",
 		title: "调用实验室",
-		description: "选择预算会话，发送请求并核对调用用量。",
+		description: "选择 Key 与已授权模型，发送请求并核对费用。",
 	},
 	billing: {
 		href: "/console/billing",
@@ -32,7 +32,7 @@ export const consoleRoutes: Record<
 	keys: {
 		href: "/console/keys",
 		title: "API 密钥",
-		description: "为应用管理独立密钥，每个密钥绑定一个预算会话。",
+		description: "创建应用 Key、选择允许使用的模型，并管理统一预付余额。",
 	},
 };
 

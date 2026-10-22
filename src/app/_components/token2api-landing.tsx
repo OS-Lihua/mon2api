@@ -164,7 +164,7 @@ function NetworkDiagram() {
 			<div className={styles.settlementHub}>
 				<Image alt="" height={44} src="/icon.svg" width={44} />
 				<strong>Token2API</strong>
-				<span>预算托管 · 按量结算</span>
+				<span>统一余额 · 按量结算</span>
 			</div>
 			<div className={styles.settlementAssets}>
 				<span>
@@ -188,17 +188,17 @@ const faqs = [
 	{
 		question: "Token2API 是什么？",
 		answer:
-			"Token2API 是面向 AI 资源交易的多链结算平台。买方锁定预算后，通过统一 API 调用模型；提供者接入自己的网关，按已确认用量收款。平台记录用量、固定报价，并在预算内完成链上结算与分账。",
+			"Token2API 是面向 AI 资源交易的多链结算平台。调用者创建 Key、授权模型并充值，通过统一 API 调用；平台选择上游，按统一模型报价计费。提供者接入自己的网关或 pool connector，按已确认用量收款。",
 	},
 	{
 		question: "可以使用现有的 OpenAI SDK 吗？",
 		answer:
-			"可以。Token2API 提供兼容 OpenAI 的文本 Chat Completions 接口，支持普通响应和流式响应。将 baseURL 改为部署地址的 /v1，并使用会话绑定的平台 API Key。每次新调用需要唯一的 Idempotency-Key；重试同一次调用时复用原键。",
+			"可以。Token2API 提供兼容 OpenAI 的文本 Chat Completions 接口，支持普通响应和流式响应。将 baseURL 改为部署地址的 /v1，并使用已授权对应模型的平台 API Key。每次新调用需要唯一的 Idempotency-Key；重试同一次调用时复用原键。",
 	},
 	{
 		question: "如何控制调用费用？",
 		answer:
-			"创建预算会话时会固定资源、提供者和价格快照。请求先预留费用，再按上游报告的用量核销，收费不会超过会话预算。用量不确定时进入待核对状态，并保留对应预留金额。",
+			"所有 Key 共用当前钱包的预付余额，每个 Key 明确授权可用模型。平台在每次调用前预留最大费用，并固定本次上游与报价；核销不会超过预留。用量不确定时进入待核对状态，并保留资金。",
 	},
 	{
 		question: "支持哪些链和结算资产？",
@@ -213,7 +213,7 @@ const faqs = [
 	{
 		question: "提供者如何收款，未用预算如何退回？",
 		answer:
-			"提供者在当前市场按结算资产报价。平台按确认用量累计结算，收入进入提供者的可提现余额。买方申请退款后停止新调用，待结算和用量核对完成，再把未用预算转入买方的可提现余额；双方均使用原钱包提取。",
+			"提供者按资源报价结算，扣除服务费后进入可提现余额。调用者按平台统一模型报价付费；未使用的调用预留在结算、核对后退回预付账户，可继续调用或用原钱包提取。原有预算会话仍按原退款规则处理。",
 	},
 ];
 const languages: (keyof typeof snippets)[] = ["TypeScript", "Python"];
@@ -379,16 +379,16 @@ export function Token2ApiLanding() {
 							<h1 id="hero-title">
 								AI 资源，
 								<br />
-								<span>按预算调用。</span>
+								<span>按模型调用。</span>
 							</h1>
 							<p className={styles.heroDescription}>
-								比较资源、锁定报价，用统一 API 接入应用。
+								创建 Key、授权模型，用统一 API 接入应用。
 								<br />
 								按实际用量结算，费用、收入与退款都有账可查。
 							</p>
 							<div className={styles.heroActions}>
 								<Link className={styles.primaryButton} href="/console/market">
-									浏览资源市场 <ArrowUpRight size={19} />
+									查看模型报价 <ArrowUpRight size={19} />
 								</Link>
 								<Link className={styles.textButton} href="/console/pool">
 									接入我的资源 <ArrowRight size={17} />
@@ -435,9 +435,9 @@ export function Token2ApiLanding() {
 					{[
 						{
 							title: "调用者",
-							text: "比较模型与价格，锁定预算，获取应用密钥。",
+							text: "查看统一报价，创建 Key 并授权可用模型。",
 							href: "/console/market",
-							action: "选择调用资源",
+							action: "创建应用密钥",
 							icon: Code2,
 						},
 						{
@@ -449,7 +449,7 @@ export function Token2ApiLanding() {
 						},
 						{
 							title: "管理员",
-							text: "审核接入地址，查看关联资源与操作结果。",
+							text: "管理模型报价与路由，审核接入地址和资源。",
 							href: "/admin",
 							action: "进入接入管理",
 							icon: ShieldCheck,
@@ -569,14 +569,14 @@ export function Token2ApiLanding() {
 								strokeWidth={1.4}
 							/>
 							<h3>
-								先定资产与预算，
+								统一余额与报价，
 								<br />
 								再开始调用。
 							</h3>
 							<p>
-								固定结算资产、资源与价格快照。
+								按模型授权，平台选择可用上游。
 								<br />
-								按用量计费，不超过会话预算。
+								调用前预留，按确认用量计费。
 							</p>
 							<div aria-hidden="true" className={styles.budgetVisual}>
 								<div />
@@ -596,7 +596,7 @@ export function Token2ApiLanding() {
 							<p>
 								核对用量、费用与链上结算记录。
 								<br />
-								提供者提取收入，买方取回未用预算。
+								商家提取收入，调用者取回可用余额。
 							</p>
 						</SpotlightCard>
 					</div>
@@ -619,23 +619,23 @@ export function Token2ApiLanding() {
 							{[
 								{
 									icon: Layers3,
-									title: "确认网络与资源",
-									text: "核对当前市场的结算网络与资产，再选择模型和提供者。",
+									title: "创建 Key 并授权",
+									text: "核对网络与结算资产，创建 Key，勾选允许调用的模型。",
 								},
 								{
 									icon: Wallet,
-									title: "锁定预算",
-									text: "连接钱包，确认报价并锁定预算。稳定币需先授权，手续费另计。",
+									title: "充值预付账户",
+									text: "连接钱包，确认报价并充值预付账户。稳定币需先授权，手续费另计。",
 								},
 								{
 									icon: Code2,
 									title: "接入应用",
-									text: "预算确认后，保存 Base URL、API Key 和模型名，用 SDK 调用。",
+									text: "保存 Base URL 和 Key，用授权模型 ID 调用。平台自动选择上游。",
 								},
 								{
 									icon: CheckCheck,
 									title: "结算与提取",
-									text: "查看用量和结算记录。提供者提取收入，买方申请退回未用预算。",
+									text: "核对调用费用，未用预留自动退回预付账户，商家按资源报价收款。",
 								},
 							].map((step, index) => (
 								<li key={step.title}>
@@ -662,7 +662,7 @@ export function Token2ApiLanding() {
 							<span>调用与结算相连。</span>
 						</h2>
 						<p>
-							使用 OpenAI SDK 接入已开通的预算会话，
+							使用 OpenAI SDK 接入已授权的模型，
 							<br />
 							调用继续用 API，资金操作由钱包确认。
 						</p>
@@ -674,7 +674,7 @@ export function Token2ApiLanding() {
 								<Check size={16} /> 支持流式响应与用量记录
 							</li>
 							<li>
-								<Check size={16} /> 每个密钥绑定独立预算会话
+								<Check size={16} /> 每个 Key 单独授权可用模型
 							</li>
 						</ul>
 						<a
@@ -738,7 +738,7 @@ export function Token2ApiLanding() {
 						/>
 						<div className={styles.codeFooter}>
 							<span>
-								<span className={styles.statusDot} /> 配置部署地址、会话 Key
+								<span className={styles.statusDot} /> 配置部署地址、模型 Key
 								与模型 ID 后使用
 							</span>
 							<span aria-live="polite" className={styles.copyStatus}>
@@ -769,8 +769,8 @@ export function Token2ApiLanding() {
 				<section aria-labelledby="cta-title" className={styles.ctaSection}>
 					<div className={`${styles.container} ${styles.ctaInner}`}>
 						<div>
-							<h2 id="cta-title">为下一次调用，锁定一笔预算。</h2>
-							<p>先核对网络与资产，再选资源、确认报价并开始调用。</p>
+							<h2 id="cta-title">一个 Key，调用需要的模型。</h2>
+							<p>创建 Key、勾选模型并充值，上游路由由平台完成。</p>
 						</div>
 						<Link className={styles.primaryButton} href="/console">
 							进入控制台 <MoveUpRight size={21} />

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { modelId, modelKeyInput } from "~/shared/model-routing";
 import { SETTLEMENT_ASSETS } from "~/shared/settlement-asset";
 import { codePointString } from "./token2api.contract";
 import {
@@ -44,12 +45,13 @@ export const confirmInput = z
 	.strict();
 export const statusInput = z.object({ enabled: z.boolean() }).strict();
 export const emptyInput = z.object({}).strict();
-export const createKeyInput = z
+export const sessionKeyInput = z
 	.object({
 		sessionId: sessionIdSchema,
 		name: z.string().trim().min(1).max(64),
 	})
 	.strict();
+export const createKeyInput = z.union([modelKeyInput, sessionKeyInput]);
 export const lookupQuery = z
 	.object({
 		idempotency_key: codePointString({ min: 8, max: 128 }),
@@ -64,7 +66,12 @@ export const viewerResponse = z
 export const okResponse = z.object({ ok: z.literal(true) }).strict();
 export const idResponse = z.object({ id: z.string().cuid() }).strict();
 export const buyerConnectionResponse = z
-	.object({ base_url: z.string().url(), key: z.string(), model: z.string() })
+	.object({
+		base_url: z.string().url(),
+		key: z.string(),
+		model: z.string(),
+		models: z.array(modelId).optional(),
+	})
 	.strict();
 export const challengeResponse = z.object({ message: z.string() }).strict();
 export const networkResponse = z
@@ -147,6 +154,11 @@ export const requestResponse = z
 		outputTokens: amount.nullable(),
 		reservation: amount,
 		cost: amount,
+		providerCost: amount
+			.optional()
+			.describe(
+				"Supplier gross cost before the service fee. Pending/REVIEW costs are not final.",
+			),
 		usageSource: z.string(),
 		upstreamRequestId: z.string().nullable(),
 		errorCode: z.string().nullable(),
@@ -158,7 +170,8 @@ export const keyResponse = z
 		id: z.string().cuid(),
 		name: z.string(),
 		prefix: z.string(),
-		sessionId: sessionIdSchema,
+		sessionId: sessionIdSchema.nullable(),
+		models: z.array(modelId),
 		revoked: z.boolean(),
 		createdAt: timestamp,
 	})
@@ -230,5 +243,6 @@ export const refundResponse = z
 		requestedAt: timestamp,
 		txHash: sessionIdSchema.nullable(),
 		withdrawRequired: z.boolean(),
+		destination: z.enum(["prepaid", "claimable"]).optional(),
 	})
 	.strict();
