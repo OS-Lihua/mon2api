@@ -147,6 +147,92 @@ try {
 		name: "Seller",
 		demo: true,
 	};
+	const operator = await import("../src/server/services/operator");
+	const administrator = {
+		address: account(4).address.toLowerCase(),
+		name: "Operator",
+		demo: false,
+	};
+	assert.equal((await operator.operatorStatus(administrator)).authorized, true);
+	await assert.rejects(
+		operator.listEndpointPolicies({ ...seller, demo: false }),
+		/管理员钱包/,
+	);
+	const gatewayPolicy = await operator.saveEndpointPolicy(administrator, {
+		kind: "GATEWAY",
+		url: "https://gateway.example/v1",
+		name: "Smoke gateway",
+		note: "Isolated policy fixture",
+	});
+	const proxyPolicy = await operator.saveEndpointPolicy(administrator, {
+		kind: "PROXY",
+		url: "https://proxy.example:8080",
+		name: "Smoke proxy",
+		note: "",
+	});
+	const direct = await market.createListing(seller, {
+		name: "Gateway policy fixture",
+		description: "No upstream request is sent",
+		kind: "gateway",
+		model: "test-model",
+		baseUrl: "https://gateway.example/v1",
+		apiKey: "fixture-upstream-secret",
+		proxy: {
+			url: "https://proxy.example:8080",
+			username: "fixture-user",
+			password: "fixture-proxy-secret",
+		},
+		inputRate: 1,
+		outputRate: 1,
+		concurrency: 1,
+	});
+	const directRow = await db.listing.findUniqueOrThrow({
+		where: { id: direct.id },
+	});
+	assert.ok(
+		directRow.proxySecret &&
+			!directRow.proxySecret.includes("fixture-proxy-secret"),
+	);
+	const policies = await operator.listEndpointPolicies(administrator);
+	assert.equal(
+		policies.find((entry) => entry.id === gatewayPolicy.id)?.resourceCount,
+		1,
+	);
+	const associated = await operator.operatorResources(administrator, {
+		endpointId: proxyPolicy.id,
+		limit: 25,
+	});
+	assert.equal(associated.data[0]?.id, direct.id);
+	assert.ok(!JSON.stringify(associated).includes("fixture-proxy-secret"));
+	await operator.setEndpointStatus(administrator, {
+		id: proxyPolicy.id,
+		enabled: false,
+	});
+	assert.equal(
+		(await db.listing.findUniqueOrThrow({ where: { id: direct.id } })).status,
+		"BLOCKED",
+	);
+	await assert.rejects(market.toggleListing(seller, direct.id, true), /白名单/);
+	await operator.setEndpointStatus(administrator, {
+		id: proxyPolicy.id,
+		enabled: true,
+	});
+	assert.equal(
+		(await db.listing.findUniqueOrThrow({ where: { id: direct.id } })).enabled,
+		false,
+	);
+	await market.toggleListing(seller, direct.id, true);
+	await operator.setEndpointStatus(administrator, {
+		id: gatewayPolicy.id,
+		enabled: false,
+	});
+	assert.equal(
+		(await db.listing.findUniqueOrThrow({ where: { id: direct.id } })).enabled,
+		false,
+	);
+	console.log(
+		"PASS: on-chain operator authority, real policy migration, encrypted proxy storage, related resources, endpoint revocation and explicit resource resume.",
+	);
 	const listing = await market.createListing(seller, {
 		name: "Native token fixture",
 		description: "Isolated simulated text resource",

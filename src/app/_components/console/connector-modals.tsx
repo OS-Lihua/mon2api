@@ -30,7 +30,7 @@ export function ConnectorLaunchModal({
 	onCopyStart: () => void;
 }) {
 	return (
-		<Modal error={error} onClose={onClose} title="连接本机资源">
+		<Modal busy={busy} error={error} onClose={onClose} title="连接本机资源">
 			<p>
 				复制后直接在终端粘贴运行，无需另行输入平台连接凭证。启动命令 5
 				分钟内有效，使用一次后失效。
@@ -115,6 +115,7 @@ export function ConnectorSetupModal({
 	const selected = models.includes(model) ? model : "";
 	return (
 		<Modal
+			busy={!!busy}
 			error={error || priceError || setup.error?.message}
 			onClose={onClose}
 			title="连接网关，自动读取模型"
@@ -262,6 +263,9 @@ export function ListingModal({
 	const [isLocal, setIsLocal] = useState(true);
 	const [upstreamUrl, setUpstreamUrl] = useState("");
 	const [upstreamKey, setUpstreamKey] = useState("");
+	const [proxyUrl, setProxyUrl] = useState("");
+	const [proxyUsername, setProxyUsername] = useState("");
+	const [proxyPassword, setProxyPassword] = useState("");
 	const [models, setModels] = useState<string[]>([]);
 	const [selectedModel, setSelectedModel] = useState("");
 	const [discoveryError, setDiscoveryError] = useState<string | null>(null);
@@ -278,10 +282,24 @@ export function ListingModal({
 		setDiscoveryError(null);
 		setModels([]);
 		setSelectedModel("");
+		if (proxyUrl.trim() && proxyPassword && !proxyUsername) {
+			setDiscoveryError("填写代理密码时也须填写用户名。");
+			return;
+		}
 		try {
 			const result = await discovery.mutateAsync({
 				baseUrl: upstreamUrl,
 				apiKey: upstreamKey,
+				...(proxyUrl.trim()
+					? {
+							proxy: {
+								url: proxyUrl.trim(),
+								...(proxyUsername
+									? { username: proxyUsername, password: proxyPassword }
+									: {}),
+							},
+						}
+					: {}),
 			});
 			if (current === generation.current) setModels(result.models);
 		} catch (error) {
@@ -293,6 +311,7 @@ export function ListingModal({
 	};
 	return (
 		<Modal
+			busy={!!busy}
 			className="resource-modal"
 			error={error || discoveryError}
 			onClose={onClose}
@@ -378,7 +397,7 @@ export function ListingModal({
 							/>
 							<small>
 								支持自定义 API 基础路径。网关需支持文本 Chat Completions 和
-								Token 用量，网关域名和端口需加入运营者允许列表。
+								Token 用量，完整基础地址须由管理员加入白名单。
 							</small>
 						</div>
 						<div className="field">
@@ -402,6 +421,61 @@ export function ListingModal({
 				)}
 				{!isLocal && (
 					<>
+						<details className="optional-proxy">
+							<summary>网络代理（可选，留空直连）</summary>
+							<div className="field">
+								<label htmlFor="listing-proxy">代理地址</label>
+								<input
+									id="listing-proxy"
+									name="proxyUrl"
+									onChange={(event) => {
+										setProxyUrl(event.target.value);
+										resetModels();
+									}}
+									placeholder="https://proxy.example.com:8080"
+									type="url"
+									value={proxyUrl}
+								/>
+								<small>
+									支持 HTTP/HTTPS 代理。带认证的远程代理须使用 HTTPS，HTTP
+									认证仅限回环地址。代理地址也须加入白名单，且须能从平台服务器访问。模型发现和调用统一走此代理。
+								</small>
+							</div>
+							<div className="field-row">
+								<div className="field">
+									<label htmlFor="listing-proxy-user">代理用户名（选填）</label>
+									<input
+										autoComplete="off"
+										disabled={!proxyUrl}
+										id="listing-proxy-user"
+										name="proxyUsername"
+										onChange={(event) => {
+											setProxyUsername(event.target.value);
+											resetModels();
+										}}
+										required={!!proxyPassword}
+										value={proxyUsername}
+									/>
+								</div>
+								<div className="field">
+									<label htmlFor="listing-proxy-password">
+										代理密码（选填）
+									</label>
+									<input
+										autoComplete="new-password"
+										disabled={!proxyUrl}
+										id="listing-proxy-password"
+										name="proxyPassword"
+										onChange={(event) => {
+											setProxyPassword(event.target.value);
+											resetModels();
+										}}
+										type="password"
+										value={proxyPassword}
+									/>
+								</div>
+							</div>
+						</details>
 						<div className="field">
 							<button
 								className="button"

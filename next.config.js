@@ -86,6 +86,11 @@ const config = {
 		];
 	},
 	output: "standalone",
+	outputFileTracingIncludes: {
+		// The Vercel launcher loads Next's Node environment before route handlers.
+		// Include the framework files that its minimal runtime trace currently misses.
+		"/*": ["./node_modules/next/dist/lib/framework/*.js"],
+	},
 	outputFileTracingExcludes: {
 		"/*": [
 			"./.runtime/**",

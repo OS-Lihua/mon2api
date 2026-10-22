@@ -58,7 +58,7 @@ registry.registerPath({
 	operationId: "createChatCompletion",
 	summary: "Generate a metered text completion",
 	description:
-		"Text only. JSON.stringify(messages) must encode to at most 24000 UTF-8 bytes, including JSON syntax and escaping. Raw request bodies are limited to 160 KiB (163840 bytes), counted from the stream regardless of Content-Length, with a 10 second total read deadline before JSON parsing. API key binds one lease/model. Idempotency-Key is required for every chat request; reuse the same key on retries. Duplicate keys return 409 without another upstream call. A stream can emit an Error frame after HTTP 200. Unknown usage retains its reservation in REVIEW. No automatic retry.",
+		"Text only. JSON.stringify(messages) must encode to at most 24000 UTF-8 bytes, including JSON syntax and escaping. Raw request bodies are limited to 160 KiB (163840 bytes), counted from the stream regardless of Content-Length, with a 10 second total read deadline before JSON parsing. Upstream response bodies, including SSE framing and error bodies, are capped at 2 MiB before SDK parsing; cumulative response text is capped at 64 KiB of UTF-8. Exceeding either cap aborts upstream reading and retains the reservation in REVIEW. API key binds one lease/model. Idempotency-Key is required for every chat request; reuse the same key on retries. Duplicate keys return 409 without another upstream call. A stream can emit an Error frame after HTTP 200. Unknown usage retains its reservation in REVIEW. No automatic retry.",
 	request: {
 		headers: z.object({
 			"Idempotency-Key": z.string().min(8).max(128),

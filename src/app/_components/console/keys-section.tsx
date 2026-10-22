@@ -2,9 +2,16 @@
 
 import { ArrowRight, Check, Copy, KeyRound, Plus } from "lucide-react";
 import { useState } from "react";
-import type { BuyerConnection, Snapshot } from "~/shared/token2api";
+import type { BuyerConnection, KeyView, Snapshot } from "~/shared/token2api";
+import {
+	CollectionToolbar,
+	FilterField,
+	Pagination,
+	SearchField,
+	usePagination,
+} from "./collection";
 import { date, type Section, short } from "./format";
-import { Badge, Empty, Panel, ShowAllToggle, TableScroll } from "./ui";
+import { Badge, Empty, Modal, Panel, TableScroll } from "./ui";
 
 export function KeysSection({
 	data,
@@ -29,7 +36,20 @@ export function KeysSection({
 	onCreateKey: () => void;
 	onRevoke: (id: string) => void;
 }) {
-	const [showAllKeys, setShowAllKeys] = useState(false);
+	const [search, setSearch] = useState("");
+	const [status, setStatus] = useState("all");
+	const [revoking, setRevoking] = useState<KeyView | null>(null);
+	const keys = data.keys
+		.filter(
+			(item) =>
+				`${item.name} ${item.prefix} ${item.sessionId}`
+					.toLowerCase()
+					.includes(search.trim().toLowerCase()) &&
+				(status === "all" ||
+					(status === "active" ? !item.revoked : item.revoked)),
+		)
+		.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+	const pagination = usePagination(keys);
 	const baseUrl =
 		newKey?.base_url ??
 		(typeof window === "undefined" ? "/v1" : `${window.location.origin}/v1`);
@@ -89,20 +109,35 @@ export function KeysSection({
 				</div>
 			)}
 			<Panel
-				action={
-					<ShowAllToggle
-						collapseLabel="收起密钥"
-						count={data.keys.length}
-						expanded={showAllKeys}
-						expandLabel={`查看全部 ${data.keys.length} 个密钥`}
-						limit={8}
-						onToggle={() => setShowAllKeys((value) => !value)}
-					/>
-				}
-				subtitle="绑定预算会话，撤销后停止新请求"
+				subtitle={`绑定预算会话 · 当前返回 ${data.keys.length} 个密钥· 撤销后停止新请求`}
 				title="应用密钥"
 			>
-				{data.keys.length ? (
+				<CollectionToolbar>
+					<SearchField
+						label="搜索 API 密钥"
+						onChange={(value) => {
+							setSearch(value);
+							pagination.setPage(1);
+						}}
+						placeholder="名称、密钥前缀或会话 ID"
+						value={search}
+					/>
+					<FilterField
+						id="keys-status"
+						label="密钥状态"
+						onChange={(value) => {
+							setStatus(value);
+							pagination.setPage(1);
+						}}
+						options={[
+							{ value: "all", label: "全部状态" },
+							{ value: "active", label: "有效密钥" },
+							{ value: "revoked", label: "已撤销" },
+						]}
+						value={status}
+					/>
+				</CollectionToolbar>
+				{keys.length ? (
 					<TableScroll>
 						<table>
 							<thead>
@@ -116,34 +151,56 @@ export function KeysSection({
 								</tr>
 							</thead>
 							<tbody>
-								{(showAllKeys ? data.keys : data.keys.slice(0, 8)).map(
-									(item) => (
-										<tr key={item.id}>
-											<td>{item.name}</td>
-											<td className="mono">{item.prefix}••••••••</td>
-											<td className="mono">{short(item.sessionId)}</td>
-											<td>{date(item.createdAt)}</td>
-											<td>
-												<Badge tone={item.revoked ? "neutral" : "green"}>
-													{item.revoked ? "已撤销" : "有效"}
-												</Badge>
-											</td>
-											<td>
-												<button
-													className="button small danger"
-													disabled={item.revoked || busy}
-													onClick={() => onRevoke(item.id)}
-													type="button"
-												>
-													撤销密钥
-												</button>
-											</td>
-										</tr>
-									),
-								)}
+								{pagination.items.map((item) => (
+									<tr key={item.id}>
+										<td>{item.name}</td>
+										<td className="mono">{item.prefix}••••••••</td>
+										<td className="mono" title={item.sessionId}>
+											{short(item.sessionId)}
+											<small className="table-secondary">
+												{data.sessions.find(
+													(session) => session.id === item.sessionId,
+												)?.listingName ?? "关联预算会话"}
+											</small>
+										</td>
+										<td>{date(item.createdAt)}</td>
+										<td>
+											<Badge tone={item.revoked ? "neutral" : "green"}>
+												{item.revoked ? "已撤销" : "有效"}
+											</Badge>
+										</td>
+										<td>
+											<button
+												className="button small danger"
+												disabled={item.revoked || busy}
+												onClick={() => setRevoking(item)}
+												type="button"
+											>
+												撤销密钥
+											</button>
+										</td>
+									</tr>
+								))}
 							</tbody>
 						</table>
 					</TableScroll>
+				) : data.keys.length ? (
+					<Empty
+						description="调整搜索或状态筛选后重试。"
+						title="没有匹配的密钥"
+					>
+						<button
+							className="button"
+							onClick={() => {
+								setSearch("");
+								setStatus("all");
+								pagination.setPage(1);
+							}}
+							type="button"
+						>
+							重置筛选
+						</button>
+					</Empty>
 				) : (
 					<Empty
 						description={
@@ -164,7 +221,40 @@ export function KeysSection({
 						</button>
 					</Empty>
 				)}
+				<Pagination
+					{...pagination}
+					label="API 密钥"
+					onChange={pagination.setPage}
+				/>
 			</Panel>
+			{revoking && (
+				<Modal onClose={() => setRevoking(null)} title="撤销 API 密钥">
+					<p>确认撤销「{revoking.name}」？</p>
+					<p className="code-hint">
+						撤销后，该密钥不能再发起新调用。已受理的调用、预算会话和结算继续处理。如需恢复调用，请创建新密钥。
+					</p>
+					<div className="form-actions">
+						<button
+							className="button"
+							onClick={() => setRevoking(null)}
+							type="button"
+						>
+							取消
+						</button>
+						<button
+							className="button danger"
+							disabled={busy}
+							onClick={() => {
+								onRevoke(revoking.id);
+								setRevoking(null);
+							}}
+							type="button"
+						>
+							确认撤销
+						</button>
+					</div>
+				</Modal>
+			)}
 			<div style={{ height: 22 }} />
 			<Panel subtitle="兼容 OpenAI Chat Completions" title="快速接入">
 				<div className="panel-body">

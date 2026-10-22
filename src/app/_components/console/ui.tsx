@@ -4,10 +4,11 @@ import {
 	CircleHelp,
 	ExternalLink,
 	Layers3,
+	LoaderCircle,
 	type LucideIcon,
 	X,
 } from "lucide-react";
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useId, useRef } from "react";
 import type { ListingView, NetworkInfo } from "~/shared/token2api";
 import { listingStatus, short, type Tone } from "./format";
 
@@ -49,6 +50,29 @@ export function Empty({
 			{description && <p>{description}</p>}
 			{children}
 		</div>
+	);
+}
+export function Loading({ label = "正在加载数据…" }: { label?: string }) {
+	return (
+		<div className="loading-state" role="status">
+			<LoaderCircle className="spin" size={20} />
+			<span>{label}</span>
+		</div>
+	);
+}
+export function QueryError({
+	onRetry,
+	message = "数据加载失败，请重试。",
+}: {
+	onRetry: () => void;
+	message?: string;
+}) {
+	return (
+		<Empty description={message} icon={CircleHelp} title="暂时无法读取数据">
+			<button className="button" onClick={onRetry} type="button">
+				重新加载
+			</button>
+		</Empty>
 	);
 }
 export function Panel({
@@ -107,10 +131,16 @@ export function ShowAllToggle({
 		</button>
 	);
 }
-export function TableScroll({ children }: { children: ReactNode }) {
+export function TableScroll({
+	children,
+	label = "可横向滚动的表格",
+}: {
+	children: ReactNode;
+	label?: string;
+}) {
 	return (
 		<section
-			aria-label="可横向滚动的表格"
+			aria-label={label}
 			className="table-scroll"
 			// biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard users need to scroll wide tables without interactive cells.
 			tabIndex={0}
@@ -125,34 +155,51 @@ export function Modal({
 	onClose,
 	children,
 	className = "",
+	busy = false,
 }: {
 	title: string;
 	error?: string | null;
 	onClose: () => void;
 	children: ReactNode;
 	className?: string;
+	busy?: boolean;
 }) {
 	const dialogRef = useRef<HTMLDialogElement>(null);
+	const titleId = useId();
 	useEffect(() => {
 		const dialog = dialogRef.current;
+		const previousFocus = document.activeElement;
+		const previousOverflow = document.body.style.overflow;
+		document.body.style.overflow = "hidden";
 		dialog?.showModal();
-		return () => dialog?.close();
+		const control = dialog?.querySelector<HTMLElement>(
+			"input:not([disabled]), textarea:not([disabled]), [role=combobox]:not([disabled])",
+		);
+		control?.focus();
+		return () => {
+			dialog?.close();
+			document.body.style.overflow = previousOverflow;
+			if (previousFocus instanceof HTMLElement && previousFocus.isConnected)
+				previousFocus.focus();
+		};
 	}, []);
 	return (
 		<dialog
-			aria-label={title}
+			aria-busy={busy}
+			aria-labelledby={titleId}
 			className={`modal ${className}`}
 			onCancel={(event) => {
 				event.preventDefault();
-				onClose();
+				if (!busy) onClose();
 			}}
 			ref={dialogRef}
 		>
 			<div className="modal-heading">
-				<h2>{title}</h2>
+				<h2 id={titleId}>{title}</h2>
 				<button
 					aria-label="关闭弹窗"
 					className="icon-button"
+					disabled={busy}
 					onClick={onClose}
 					type="button"
 				>

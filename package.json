@@ -42,6 +42,7 @@
 		"preview:local": "node scripts/dev.mjs --production",
 		"test:recovery": "tsx scripts/recovery-smoke.ts",
 		"connector": "tsx scripts/connector.ts",
+		"cli": "tsx scripts/cli.ts",
 		"connector:build": "node scripts/build-connector.mjs",
 		"test:connector": "node --conditions=react-server --import tsx scripts/connector-smoke.ts",
 		"test:stable": "node --conditions=react-server --import tsx scripts/native-smoke.ts --stable",
@@ -75,6 +76,7 @@
 		"react-dom": "^19.2.8",
 		"server-only": "^0.0.1",
 		"superjson": "^2.2.6",
+		"undici": "^8.12.3",
 		"viem": "^2.38.0",
 		"wagmi": "^2.19.5",
 		"zod": "^3.25.76"

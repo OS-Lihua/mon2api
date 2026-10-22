@@ -1,4 +1,4 @@
-import type { ListingView, SessionView } from "~/shared/token2api";
+import type { ListingView, RequestView, SessionView } from "~/shared/token2api";
 
 export type Section =
 	| "overview"
@@ -33,6 +33,12 @@ export const remainingBudget = (session: SessionView) =>
 	Math.max(0, session.budget - session.spent - session.reserved);
 export const onlineListings = (listings: ListingView[]) =>
 	listings.filter((item) => item.enabled && item.online).length;
+export const requestUsagePending = (request: RequestView) =>
+	["REVIEW", "PENDING_USAGE", "RUNNING"].includes(
+		request.status.toUpperCase(),
+	) ||
+	(request.status.toUpperCase() !== "FAILED" &&
+		(request.inputTokens === null || request.outputTokens === null));
 
 const statusLabels: Record<string, string> = {
 	active: "使用中",
@@ -56,6 +62,10 @@ const statusLabels: Record<string, string> = {
 	pending_usage: "待核对",
 	review: "待核对",
 	draft: "待确认",
+	blocked: "地址未获准",
+	discovering: "待选择模型",
+	submitted: "已提交",
+	processing: "处理中",
 };
 export const statusLabel = (status: string) =>
 	statusLabels[status.toLowerCase()] ?? status;
@@ -67,6 +77,7 @@ const warnStatuses = new Set([
 	"uncollectible",
 	"cooldown",
 	"offline",
+	"blocked",
 ]);
 const greenStatuses = new Set([
 	"ready",
@@ -86,6 +97,8 @@ export const statusTone = (status: string): Tone => {
 export const listingStatus = (item: ListingView) => {
 	if (item.enabled)
 		return { tone: statusTone(item.status), label: statusLabel(item.status) };
+	if (item.status === "BLOCKED")
+		return { tone: "warn" as const, label: "地址未获准" };
 	if (item.status === "AUTH_REQUIRED")
 		return { tone: statusTone(item.status), label: statusLabel(item.status) };
 	return {
@@ -100,5 +113,5 @@ export const listingKind = (
 	item.kind === "demo"
 		? labels.demo
 		: item.transport === "local"
-			? "本机连接器"
+			? "pool connector"
 			: labels.api;

@@ -1,0 +1,128 @@
+.admin-shell {
+	min-height: 100vh;
+}
+.admin-shell .content {
+	max-width: 1180px;
+}
+.admin-sections {
+	display: grid;
+	gap: 24px;
+}
+.admin-actions,
+.admin-endpoint-title,
+.admin-endpoint-footer {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex-wrap: wrap;
+}
+.admin-actions .text-link,
+.admin-shell .topbar .text-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+.admin-endpoints {
+	padding: 0 24px 8px;
+}
+.admin-endpoint {
+	padding: 20px 0;
+	border-top: 1px solid var(--line);
+}
+.admin-endpoint-title {
+	margin-bottom: 9px;
+}
+.admin-kind {
+	color: var(--muted);
+	font-size: 12px;
+}
+.admin-url {
+	overflow-wrap: anywhere;
+	color: var(--muted);
+	font-size: 12px;
+}
+.admin-endpoint p {
+	margin: 9px 0;
+	color: var(--muted);
+	font-size: 13px;
+}
+.admin-endpoint-footer {
+	justify-content: space-between;
+	margin-top: 16px;
+}
+.admin-endpoint-footer small,
+.admin-resource small {
+	color: var(--quiet);
+	font-size: 11px;
+	overflow-wrap: anywhere;
+}
+.admin-search {
+	width: 100%;
+	padding: 11px 13px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--white);
+}
+.admin-resource {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 18px 24px;
+	border-top: 1px solid var(--line);
+}
+.admin-resource .admin-kind {
+	display: block;
+	margin-top: 5px;
+}
+.admin-resource p {
+	margin: 6px 0;
+}
+.admin-message {
+	padding: 14px 18px;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	background: var(--accent-soft);
+	color: var(--ink);
+	font-size: 13px;
+}
+.admin-message.error {
+	background: var(--negative-soft);
+	color: var(--negative);
+}
+.admin-owner {
+	overflow-wrap: anywhere;
+	font-size: 12px;
+}
+.optional-proxy {
+	margin: 0 0 20px;
+	padding: 14px 16px;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+}
+.optional-proxy summary {
+	cursor: pointer;
+	font-size: 13px;
+	font-weight: 600;
+}
+.optional-proxy[open] summary {
+	margin-bottom: 16px;
+}
+.optional-proxy .field:last-child {
+	margin-bottom: 0;
+}
+@media (max-width: 640px) {
+	.admin-shell .topbar {
+		padding: 0 16px;
+	}
+	.admin-shell .content {
+		padding: 24px 16px;
+	}
+	.admin-endpoint-footer {
+		align-items: flex-start;
+	}
+	.admin-resource {
+		align-items: flex-start;
+		flex-direction: column;
+	}
+}

@@ -8,11 +8,13 @@ import {
 	discoverDirectModels,
 	openSession,
 	snapshot,
+	toggleListing,
 } from "./market";
 import { listingInput } from "./token2api.schema";
 
 const mocks = vi.hoisted(() => ({
 	db: {
+		endpointPolicy: { findMany: vi.fn() },
 		listing: { findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
 		lease: {
 			findMany: vi.fn(),
@@ -69,11 +71,7 @@ vi.mock("./chain", () => ({
 }));
 vi.mock("./runtime", () => ({
 	ensureChainBinding: vi.fn(),
-	validateConnectorUrl: (url: string) => {
-		if (new URL(url).origin !== "https://pool.example")
-			throw new Error("not allowed");
-		return url;
-	},
+
 	sessionPassword: () => "test-only-session-password-at-least-32-characters",
 	chainConfig: mocks.chainConfig,
 }));
@@ -101,6 +99,8 @@ const listing: Listing = {
 	status: "READY",
 	baseUrl: null,
 	secret: null,
+	proxyUrl: null,
+	proxySecret: null,
 	createdAt,
 };
 type LeaseRow = Prisma.LeaseGetPayload<{ include: { listing: true } }>;
@@ -131,6 +131,9 @@ function lease(overrides: Partial<LeaseRow> = {}): LeaseRow {
 
 beforeEach(() => {
 	vi.resetAllMocks();
+	mocks.db.endpointPolicy.findMany.mockResolvedValue([
+		{ kind: "GATEWAY", url: "https://pool.example/v1" },
+	]);
 	mocks.readEscrowPaused.mockResolvedValue(false);
 	mocks.clientAsset = "ETH";
 	mocks.db.$transaction.mockImplementation(async (action) => action(mocks.db));
@@ -157,6 +160,54 @@ beforeEach(() => {
 });
 
 describe("direct gateway discovery boundaries", () => {
+	it("encrypts proxy credentials at resource creation without changing the public response", async () => {
+		mocks.db.endpointPolicy.findMany.mockResolvedValue([
+			{ kind: "GATEWAY", url: "https://pool.example/v1" },
+			{ kind: "PROXY", url: "https://proxy.example:8080" },
+		]);
+		mocks.db.listing.create.mockResolvedValue({ id: "created-resource" });
+		const result = await createListing(
+			viewer,
+			listingInput.parse({
+				name: "Gateway",
+				description: "Proxy fixture",
+				kind: "gateway",
+				baseUrl: "https://pool.example/v1",
+				apiKey: "private-upstream",
+				model: "test-model",
+				inputRate: 1,
+				outputRate: 1,
+				proxy: {
+					url: "https://proxy.example:8080",
+					username: "proxy-user",
+					password: "private-password",
+				},
+			}),
+		);
+		expect(result).toEqual({ id: "created-resource" });
+		const data = mocks.db.listing.create.mock.calls[0]?.[0].data;
+		expect(data.proxyUrl).toBe("https://proxy.example:8080");
+		expect(JSON.stringify(data)).not.toContain("private-password");
+		expect(JSON.stringify(data)).not.toContain("private-upstream");
+		expect(
+			await unsealData(data.proxySecret, {
+				password: "test-only-session-password-at-least-32-characters",
+				ttl: 0,
+			}),
+		).toEqual({ username: "proxy-user", password: "private-password" });
+	});
+	it("refuses to reopen a resource whose endpoint no longer has approval", async () => {
+		mocks.db.listing.findUnique.mockResolvedValue({
+			...listing,
+			kind: "gateway",
+			owner: viewer.address,
+			baseUrl: "https://pool.example/v1",
+		});
+		mocks.db.endpointPolicy.findMany.mockResolvedValue([]);
+		await expect(toggleListing(viewer, "listing", true)).rejects.toMatchObject({
+			code: "connector_not_allowed",
+		});
+	});
 	it("validates the operator allowlist before forwarding an upstream key", async () => {
 		await expect(
 			discoverDirectModels({

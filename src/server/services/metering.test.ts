@@ -1,6 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { calculateCost } from "./metering";
-import { validateConnectorUrl } from "./runtime";
 import {
 	chatInput,
 	listingInput,
@@ -263,52 +262,5 @@ describe("market and chat validation", () => {
 		for (const body of [null, [], "text", 1, { model: "test-model" }]) {
 			expect(publicChatInput.safeParse(body).success).toBe(false);
 		}
-	});
-});
-
-describe("connector origin authorization", () => {
-	afterEach(() => {
-		vi.unstubAllEnvs();
-	});
-
-	it("accepts custom API prefixes only on operator-approved origins", () => {
-		vi.stubEnv(
-			"UPSTREAM_ALLOWED_ORIGINS",
-			" https://connector.example, http://127.0.0.1:9000 ",
-		);
-		expect(validateConnectorUrl("https://connector.example")).toBe(
-			"https://connector.example/v1",
-		);
-		expect(validateConnectorUrl("https://connector.example/v1/")).toBe(
-			"https://connector.example/v1",
-		);
-		expect(validateConnectorUrl("http://127.0.0.1:9000/v1")).toBe(
-			"http://127.0.0.1:9000/v1",
-		);
-		expect(
-			validateConnectorUrl("https://connector.example/proxy/openai/"),
-		).toBe("https://connector.example/proxy/openai");
-	});
-
-	it.each([
-		"https://connector.example.evil/v1",
-		"https://connector.example:444/v1",
-		"http://connector.example/v1",
-		"https://user:secret@connector.example/v1",
-		"https://connector.example/v1?key=secret",
-		"https://connector.example/v1#secret",
-		"https://connector.example/v1/chat/completions",
-		"file:///etc/passwd",
-		"not-a-url",
-	])("rejects unauthorized or credential-bearing connector URL %s", (url) => {
-		vi.stubEnv("UPSTREAM_ALLOWED_ORIGINS", "https://connector.example");
-		expect(() => validateConnectorUrl(url)).toThrow();
-	});
-
-	it("rejects every connector when no origin has been approved", () => {
-		vi.stubEnv("UPSTREAM_ALLOWED_ORIGINS", "");
-		expect(() =>
-			validateConnectorUrl("https://connector.example/v1"),
-		).toThrow();
 	});
 });

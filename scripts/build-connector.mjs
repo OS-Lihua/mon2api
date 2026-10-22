@@ -19,11 +19,12 @@ const packageDir = path.join(root, "packages", "connector");
 /** Build a self-contained Node CLI and a platform-hosted npm archive. */
 export async function buildConnector() {
 	await mkdir(path.join(packageDir, "dist"), { recursive: true });
-	const outfile = path.join(packageDir, "dist", "connector.mjs");
-	await build({
+	const bundled = await build({
 		absWorkingDir: root,
-		entryPoints: ["scripts/connector.ts"],
-		outfile,
+		entryPoints: ["scripts/connector.ts", "scripts/cli.ts"],
+		outdir: path.join(packageDir, "dist"),
+		outExtension: { ".js": ".mjs" },
+		metafile: true,
 		bundle: true,
 		platform: "node",
 		format: "esm",
@@ -34,7 +35,8 @@ export async function buildConnector() {
 		// Preserve third-party notices without publishing source maps or source files.
 		legalComments: "eof",
 	});
-	await chmod(outfile, 0o755);
+	for (const file of ["connector.mjs", "cli.mjs"])
+		await chmod(path.join(packageDir, "dist", file), 0o755);
 	await copyFile(path.join(root, "LICENSE"), path.join(packageDir, "LICENSE"));
 	/** @type {[string, string][]} */
 	const notices = [
@@ -52,6 +54,36 @@ export async function buildConnector() {
 				`${label}\n\n${await readFile(path.join(root, "node_modules", file), "utf8")}`,
 		),
 	);
+	// Include notices for every dependency bundled into either executable, including
+	// wallet-signing cryptography. Type-only server imports never enter the bundle.
+	const seen = new Set();
+	for (const input of Object.keys(bundled.metafile.inputs)) {
+		if (!input.includes("node_modules/")) continue;
+		let directory = path.dirname(path.resolve(root, input));
+		while (directory !== root && directory !== path.dirname(directory)) {
+			try {
+				const dependency = JSON.parse(
+					await readFile(path.join(directory, "package.json"), "utf8"),
+				);
+				if (typeof dependency.name === "string") {
+					const label = `${dependency.name}@${dependency.version}`;
+					if (!seen.has(label)) {
+						seen.add(label);
+						for (const file of (await readdir(directory)).sort()) {
+							if (/^(?:licen[cs]e|copying)(?:[.-].*)?$/i.test(file))
+								licenses.push(
+									`${label}\n\n${await readFile(path.join(directory, file), "utf8")}`,
+								);
+						}
+					}
+					break;
+				}
+			} catch {
+				/* Continue to the dependency root past type/module subdirectories. */
+			}
+			directory = path.dirname(directory);
+		}
+	}
 	await writeFile(
 		path.join(packageDir, "THIRD_PARTY_LICENSES.txt"),
 		licenses.join("\n\n----------------------------------------\n\n"),

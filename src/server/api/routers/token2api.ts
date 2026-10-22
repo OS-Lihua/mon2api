@@ -40,6 +40,14 @@ import {
 	withdraw,
 } from "~/server/services/market";
 import { runChat } from "~/server/services/metering";
+import {
+	listEndpointPolicies,
+	operatorResources,
+	operatorStatus,
+	saveEndpointPolicy,
+	setEndpointStatus,
+} from "~/server/services/operator";
+import { operatorResourcesInput } from "~/server/services/operator.schema";
 import { refundStatus, requestRefund } from "~/server/services/refund";
 import { closeSession, settleSession } from "~/server/services/settlement";
 import {
@@ -50,6 +58,10 @@ import {
 	openSessionInput,
 	sessionIdSchema,
 } from "~/server/services/token2api.schema";
+import {
+	endpointPolicyInput,
+	endpointStatusInput,
+} from "~/shared/gateway-config";
 
 async function call<T>(action: () => Promise<T>): Promise<T> {
 	try {
@@ -83,6 +95,27 @@ const mutation = publicProcedure.use(async ({ ctx, next }) => {
 	return next();
 });
 export const token2apiRouter = createTRPCRouter({
+	operatorStatus: publicProcedure.query(() =>
+		call(async () => operatorStatus(await viewer())),
+	),
+	endpointPolicies: publicProcedure.query(() =>
+		call(async () => listEndpointPolicies(await requireViewer())),
+	),
+	saveEndpointPolicy: mutation
+		.input(endpointPolicyInput)
+		.mutation(({ input }) =>
+			call(async () => saveEndpointPolicy(await requireViewer(), input)),
+		),
+	setEndpointStatus: mutation
+		.input(endpointStatusInput)
+		.mutation(({ input }) =>
+			call(async () => setEndpointStatus(await requireViewer(), input)),
+		),
+	operatorResources: publicProcedure
+		.input(operatorResourcesInput)
+		.query(({ input }) =>
+			call(async () => operatorResources(await requireViewer(), input)),
+		),
 	createConnectorLaunch: mutation
 		.input(connectorListingId)
 		.mutation(({ input }) =>

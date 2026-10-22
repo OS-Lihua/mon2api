@@ -3,7 +3,7 @@
 import { Activity, Blocks, Wallet, Zap } from "lucide-react";
 import { formatAmount as usd } from "~/shared/money";
 import type { Snapshot } from "~/shared/token2api";
-import { compact } from "./format";
+import { compact, requestUsagePending } from "./format";
 
 export function Stats({ data }: { data: Snapshot }) {
 	const tokens = data.metrics.inputTokens + data.metrics.outputTokens;
@@ -16,7 +16,7 @@ export function Stats({ data }: { data: Snapshot }) {
 			foot: null,
 		},
 		{
-			label: "Token 用量",
+			label: "已记录 Token 用量",
 			value: compact(tokens),
 			unit: "tokens",
 			icon: Zap,
@@ -26,7 +26,7 @@ export function Stats({ data }: { data: Snapshot }) {
 					: null,
 		},
 		{
-			label: "计费总额",
+			label: "已确认费用",
 			value: usd(
 				data.metrics.spent,
 				data.metrics.spent > 0 && data.metrics.spent < 10000,
@@ -74,7 +74,12 @@ export function Stats({ data }: { data: Snapshot }) {
 					{foot && <div className="stat-foot">{foot}</div>}
 				</section>
 			))}
-			<p className="sr-only">{scope}</p>
+			<p className="stats-scope">
+				{scope}
+				{data.requests.some(requestUsagePending)
+					? " 待核对用量不计为零费用。"
+					: ""}
+			</p>
 		</div>
 	);
 }

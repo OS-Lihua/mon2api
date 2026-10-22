@@ -145,6 +145,15 @@ vm.runInNewContext(output, {
 		return modules[name];
 	},
 	window: {
+		location: { hash: "" },
+		history: { pushState: () => {} },
+		addEventListener: () => {},
+		removeEventListener: () => {},
+		matchMedia: () => ({
+			matches: true,
+			addEventListener: () => {},
+			removeEventListener: () => {},
+		}),
 		setTimeout: () => 0,
 		clearTimeout: () => {},
 		requestAnimationFrame: (callback) => callback(),

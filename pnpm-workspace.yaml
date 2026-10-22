@@ -12,6 +12,9 @@ allowBuilds:
   sharp: true
   utf-8-validate: false
 
+minimumReleaseAgeExclude:
+  - undici@8.12.3
+
 # Security fixes for versions pinned by Next 15 and Prisma 6. Remove these
 # overrides when the upstream packages require patched versions themselves.
 overrides:
@@ -28,3 +31,7 @@ overrides:
   'uuid@>=8.0.0 <11.1.1': ^11.1.1
   decode-uri-component: ^0.5.0
   use-sync-external-store: ^1.6.0
+
+  # Restrict these patches to the vulnerable development dependency ranges.
+  'tmp@>=0.2.6 <0.2.7': 0.2.7
+  'vite@>=8.0.0 <8.1.6': 8.1.6

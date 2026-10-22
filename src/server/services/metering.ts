@@ -8,10 +8,12 @@ import type { ChatResult } from "~/shared/token2api";
 import { AppError } from "./auth";
 import { readEscrowPaused, readSession } from "./chain";
 import { resourceAvailable } from "./connector-availability";
+import { readProxy, requireGatewayAccess } from "./gateway-access";
+import { withGatewayTransport } from "./gateway-transport";
 import { runLocalConnector } from "./local-connector";
 import { lock } from "./market";
 import { EngineFailure, runEngine } from "./pool-engine";
-import { demoEnabled, sessionPassword, validateConnectorUrl } from "./runtime";
+import { demoEnabled, sessionPassword } from "./runtime";
 import type { chatInput } from "./token2api.schema";
 
 export function calculateCost(
@@ -100,8 +102,15 @@ export async function runChat(
 	const kind =
 		lease.listing.kind === "demo" ? ("demo" as const) : ("gateway" as const);
 	const baseUrl =
-		kind === "gateway" && lease.listing.baseUrl
-			? validateConnectorUrl(lease.listing.baseUrl)
+		kind === "gateway" && lease.listing.transport !== "local"
+			? await requireGatewayAccess(
+					lease.listing.baseUrl ?? "",
+					lease.listing.proxyUrl,
+				)
+			: undefined;
+	const proxy =
+		kind === "gateway" && lease.listing.transport !== "local"
+			? await readProxy(lease.listing)
 			: undefined;
 	const secretValue = lease.listing.secret
 		? await unsealData<unknown>(lease.listing.secret, {
@@ -226,7 +235,9 @@ export async function runChat(
 						onDelta,
 						executionSignal,
 					)
-				: await runEngine(engineInput, onDelta, executionSignal);
+				: await withGatewayTransport(proxy, (fetcher) =>
+						runEngine(engineInput, onDelta, executionSignal, fetcher),
+					);
 
 		const cost =
 			result.inputTokens !== null && result.outputTokens !== null

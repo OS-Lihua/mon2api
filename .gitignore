@@ -62,3 +62,5 @@ work/
 /packages/connector/LICENSE
 /packages/connector/THIRD_PARTY_LICENSES.txt
 /public/downloads/*.tgz
+.env*
+!.env.example

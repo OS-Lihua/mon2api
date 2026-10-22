@@ -96,13 +96,18 @@ export class ConnectorClient {
 		apiKey: string;
 		signal: AbortSignal;
 		log: (message: string) => void;
+		upstreamFetcher?: typeof fetch;
 	}) {
 		let models: string[] = [];
 		let catalogReadAt = 0;
 		while (!options.signal.aborted) {
 			try {
 				if (!options.model && Date.now() - catalogReadAt > 60_000) {
-					models = await discoverModels(options.upstream, options.apiKey);
+					models = await discoverModels(
+						options.upstream,
+						options.apiKey,
+						options.upstreamFetcher,
+					);
 					await this.call("catalog", { models }, connectorOk, options.signal);
 					catalogReadAt = Date.now();
 					options.log(
@@ -146,6 +151,7 @@ export class ConnectorClient {
 			apiKey: string;
 			signal: AbortSignal;
 			log: (message: string) => void;
+			upstreamFetcher?: typeof fetch;
 		},
 	) {
 		if (job.input.model !== options.model)
@@ -210,6 +216,7 @@ export class ConnectorClient {
 					text = next;
 				},
 				signal,
+				options.upstreamFetcher,
 			);
 			clearInterval(timer);
 			await pumping;

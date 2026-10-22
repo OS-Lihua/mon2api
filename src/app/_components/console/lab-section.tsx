@@ -9,13 +9,13 @@ import {
 	Sparkles,
 	Wallet,
 } from "lucide-react";
-import type { FormEvent } from "react";
+import { type FormEvent, useEffect, useRef } from "react";
 import { ConsoleSelect } from "~/app/_components/console-select";
 import { formatAmount as usd } from "~/shared/money";
 import type { SettlementAsset } from "~/shared/settlement-asset";
 import type { SessionView } from "~/shared/token2api";
 import { remainingBudget, type Section, short } from "./format";
-import { Empty, Panel } from "./ui";
+import { Badge, Empty, Panel } from "./ui";
 
 export type ChatMessage = {
 	id: string;
@@ -38,6 +38,7 @@ export function LabSection({
 	onNewConversation,
 	onOpenBilling,
 	onSubmit,
+	error,
 }: {
 	asset: SettlementAsset;
 	busy: string | null;
@@ -51,8 +52,17 @@ export function LabSection({
 	onNewConversation: () => void;
 	onOpenBilling: () => void;
 	onSubmit: (event: FormEvent) => void;
+	error: string | null;
 }) {
 	const selected = sessions.find((item) => item.id === sessionId);
+	const messagesRef = useRef<HTMLDivElement>(null);
+	const messageCount = messages.length;
+	useEffect(() => {
+		void messageCount;
+		void busy;
+		const container = messagesRef.current;
+		if (container) container.scrollTop = container.scrollHeight;
+	}, [messageCount, busy]);
 	return (
 		<div className="chat-layout">
 			<Panel className="chat-settings" title="调用配置">
@@ -60,6 +70,7 @@ export function LabSection({
 					<div className="field">
 						<label htmlFor="lab-session">预算会话</label>
 						<ConsoleSelect
+							disabled={!!busy}
 							id="lab-session"
 							onValueChange={onSelectSession}
 							options={sessions.map((item) => ({
@@ -88,10 +99,16 @@ export function LabSection({
 							className="stat-value"
 							style={{ fontSize: 24, margin: "3px 0" }}
 						>
-							{usd(selected ? remainingBudget(selected) : 0, true)}
+							{selected ? usd(remainingBudget(selected), true) : "—"}
 							<small>{asset}</small>
 						</div>
 						<small>费用先预留，再按实际用量核销。</small>
+						{selected && selected.reserved > 0 && (
+							<small className="pending-amount">
+								已预留 {usd(selected.reserved, true)} {asset}
+								，包含执行中或待核对用量。
+							</small>
+						)}
 					</div>
 					{!sessions.length && (
 						<button
@@ -125,13 +142,55 @@ export function LabSection({
 				}
 				title="对话终端"
 			>
-				<div aria-live="polite" className="chat-messages">
-					{!messages.length ? (
+				<div className="lab-status" role="status">
+					<Badge
+						tone={
+							busy === "chat" || error
+								? "warn"
+								: messages.length
+									? "green"
+									: "neutral"
+						}
+					>
+						{busy === "chat"
+							? "执行中"
+							: error
+								? "调用未完成"
+								: messages.length
+									? "已收到响应"
+									: "准备就绪"}
+					</Badge>
+					<span>整段响应 · 输出上限 512 Token</span>
+				</div>
+				<div
+					aria-busy={busy === "chat"}
+					aria-live="polite"
+					className="chat-messages"
+					ref={messagesRef}
+				>
+					{!messages.length && busy !== "chat" ? (
 						<Empty
-							description="发送消息，查看响应与用量。"
+							description="发送请求后等待完整响应，再核对用量与费用。"
 							icon={Sparkles}
 							title="开始对话"
-						/>
+						>
+							<div className="prompt-suggestions">
+								{[
+									"用三句话解释 Token2API 的预算与结算。",
+									"写一个简短的 TypeScript 函数示例。",
+								].map((value) => (
+									<button
+										className="button small"
+										disabled={!!busy}
+										key={value}
+										onClick={() => onPromptChange(value)}
+										type="button"
+									>
+										{value}
+									</button>
+								))}
+							</div>
+						</Empty>
 					) : (
 						messages.map((message) => (
 							<div className={`chat-message ${message.role}`} key={message.id}>
@@ -163,9 +222,32 @@ export function LabSection({
 						</div>
 					)}
 					{busy === "chat" && (
-						<div className="chat-message-label">
-							<LoaderCircle className="spin" size={13} />
-							正在等待上游响应…
+						<>
+							<div className="chat-message user">
+								<div className="chat-message-label">
+									<Wallet size={12} />
+									本次请求
+								</div>
+								<p>{prompt.trim()}</p>
+							</div>
+							<div className="chat-message-label">
+								<LoaderCircle className="spin" size={14} />
+								正在等待完整响应，用量与费用尚未确认。
+							</div>
+						</>
+					)}
+					{error && busy !== "chat" && (
+						<div className="notice warning">
+							<span>
+								请求未完成。消息已保留；用量可能仍在核对，请先查看账单再决定是否发起新调用。
+							</span>
+							<button
+								className="text-link"
+								onClick={onOpenBilling}
+								type="button"
+							>
+								查看调用账单
+							</button>
 						</div>
 					)}
 				</div>
@@ -178,11 +260,21 @@ export function LabSection({
 						id="prompt"
 						maxLength={8000}
 						onChange={(event) => onPromptChange(event.target.value)}
+						onKeyDown={(event) => {
+							if (
+								event.key === "Enter" &&
+								(event.ctrlKey || event.metaKey) &&
+								!event.nativeEvent.isComposing
+							) {
+								event.preventDefault();
+								event.currentTarget.form?.requestSubmit();
+							}
+						}}
 						placeholder="输入你的消息…"
 						value={prompt}
 					/>
 					<div className="chat-composer-bottom">
-						<span>输出上限 512 Token · 会话内使用同一资源</span>
+						<span>{prompt.length} / 8,000 字符 · Ctrl / ⌘ + Enter 发送</span>
 						<button
 							className="button primary"
 							disabled={!selected || !prompt.trim() || !!busy}
@@ -193,7 +285,7 @@ export function LabSection({
 							) : (
 								<Send size={12} />
 							)}
-							发送请求
+							{busy === "chat" ? "等待响应…" : "发送请求"}
 						</button>
 					</div>
 				</form>

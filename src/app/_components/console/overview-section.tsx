@@ -146,6 +146,7 @@ export function OverviewSection({
 				title="发现可用资源"
 			>
 				<ResourceTable
+					asset={asset}
 					busy={busy}
 					listings={data.listings.slice(0, 4)}
 					onRent={onRent}

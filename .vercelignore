@@ -1,0 +1,22 @@
+# Upload application source. Keep local credentials, state and build output off Vercel.
+.env*
+.runtime
+.runtime-*
+.codegraph
+.claude
+.agents
+.git
+.vercel
+.next
+node_modules
+work
+coverage
+build
+out
+contracts/artifacts
+packages/connector/dist
+public/downloads/*.tgz
+*.log
+*.pem
+*.key
+*.tsbuildinfo

@@ -174,6 +174,44 @@ afterAll(async () => {
 });
 
 describe("standalone connector distribution", () => {
+	it("hands private input to a real user even when a piped invocation supplies --interactive", async () => {
+		try {
+			await exec(
+				process.execPath,
+				[
+					path.resolve("packages/connector/dist/cli.mjs"),
+					"auth",
+					"login",
+					"--platform",
+					"http://127.0.0.1:1",
+					"--interactive",
+				],
+				{ cwd: emptyDir, timeout: 10_000 },
+			);
+			throw new Error("Expected a manual-input handoff");
+		} catch (error) {
+			if (
+				!(error instanceof Error) ||
+				!("stdout" in error) ||
+				typeof error.stdout !== "string"
+			)
+				throw error;
+			expect(JSON.parse(error.stdout)).toMatchObject({
+				ok: false,
+				error: {
+					code: "manual_input_required",
+					manualCommand: [
+						"token2api",
+						"auth",
+						"login",
+						"--platform",
+						"http://127.0.0.1:1",
+						"--interactive",
+					],
+				},
+			});
+		}
+	});
 	it("installs the platform-hosted package and runs from a directory without project files", async () => {
 		// Serve the actual archive, just as Next serves public/downloads in production.
 		const download = createServer(async (_req, res) =>
@@ -213,6 +251,28 @@ describe("standalone connector distribution", () => {
 			);
 			expect(stdout).toContain("token2api-connector start");
 			expect(stdout).not.toContain("pnpm connector");
+			const cli = await exec(
+				"npm",
+				[
+					"exec",
+					"--yes",
+					"--cache",
+					path.join(emptyDir, "cache"),
+					`--package=${origin}${connectorDownloadPath}`,
+					"--",
+					"token2api",
+					"schema",
+				],
+				{ cwd: emptyDir, timeout: 20_000 },
+			);
+			expect(JSON.parse(cli.stdout)).toMatchObject({
+				schemaVersion: 1,
+				ok: true,
+				data: {
+					schemas: { ResourceConfig: expect.any(Object) },
+					exitCodes: { manual_input_required: 6 },
+				},
+			});
 			expect(await fs.readdir(emptyDir)).toEqual(["cache"]);
 		} finally {
 			download.closeAllConnections();
@@ -228,6 +288,7 @@ describe("standalone connector distribution", () => {
 				"package/README.md",
 				"package/THIRD_PARTY_LICENSES.txt",
 				"package/dist/connector.mjs",
+				"package/dist/cli.mjs",
 				"package/package.json",
 			].sort(),
 		);

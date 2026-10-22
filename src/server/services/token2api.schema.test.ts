@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { localListingInput } from "./local-connector.schema";
 import {
 	chatInput,
 	listingInput,
@@ -21,6 +22,25 @@ describe("gateway resource credentials", () => {
 	};
 	it("accepts a gateway URL and inference key", () => {
 		expect(listingInput.parse(gateway)).toMatchObject(gateway);
+	});
+	it("allows an optional direct-gateway proxy and rejects it for local connectors", () => {
+		const proxy = {
+			url: "https://proxy.example:8080",
+			username: "user",
+			password: "secret",
+		};
+		expect(listingInput.parse({ ...gateway, proxy })).toMatchObject({ proxy });
+		expect(
+			localListingInput.safeParse({
+				name: gateway.name,
+				description: gateway.description,
+				kind: "gateway",
+				model: gateway.model,
+				inputRate: gateway.inputRate,
+				outputRate: gateway.outputRate,
+				proxy,
+			}).success,
+		).toBe(false);
 	});
 	it.each([
 		{ ...gateway, apiKey: undefined },

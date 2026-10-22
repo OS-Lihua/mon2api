@@ -379,20 +379,20 @@ export function Token2ApiLanding() {
 							<h1 id="hero-title">
 								AI 资源，
 								<br />
-								<span>多链结算。</span>
+								<span>按预算调用。</span>
 							</h1>
 							<p className={styles.heroDescription}>
-								用熟悉的资产，为 AI 调用结算。
+								比较资源、锁定报价，用统一 API 接入应用。
 								<br />
-								锁定预算、按量计费，收入与退款都有账可查。
+								按实际用量结算，费用、收入与退款都有账可查。
 							</p>
 							<div className={styles.heroActions}>
-								<Link className={styles.primaryButton} href="/console">
-									进入控制台 <ArrowUpRight size={19} />
+								<Link className={styles.primaryButton} href="/console#market">
+									浏览资源市场 <ArrowUpRight size={19} />
 								</Link>
-								<a className={styles.textButton} href="#how-it-works">
-									了解使用流程 <ArrowRight size={17} />
-								</a>
+								<Link className={styles.textButton} href="/console#pool">
+									接入我的资源 <ArrowRight size={17} />
+								</Link>
 							</div>
 							<div className={styles.heroBenefits}>
 								<span>
@@ -428,6 +428,44 @@ export function Token2ApiLanding() {
 						</span>
 					</div>
 				</div>
+				<section
+					aria-label="按任务进入工作区"
+					className={`${styles.container} ${styles.taskEntries}`}
+				>
+					{[
+						{
+							title: "调用者",
+							text: "比较模型与价格，锁定预算，获取应用密钥。",
+							href: "/console#market",
+							action: "选择调用资源",
+							icon: Code2,
+						},
+						{
+							title: "商家",
+							text: "接入网关或 pool connector，管理资源与收入。",
+							href: "/console#pool",
+							action: "管理我的资源",
+							icon: Layers3,
+						},
+						{
+							title: "管理员",
+							text: "审核接入地址，查看关联资源与操作结果。",
+							href: "/admin",
+							action: "进入接入管理",
+							icon: ShieldCheck,
+						},
+					].map(({ title, text, href, action, icon: Icon }) => (
+						<Link className={styles.taskEntry} href={href} key={title}>
+							<Icon aria-hidden="true" size={22} />
+							<h2>{title}</h2>
+							<p>{text}</p>
+							<span>
+								{action}
+								<ArrowUpRight size={16} />
+							</span>
+						</Link>
+					))}
+				</section>
 				<section
 					aria-labelledby="settlement-networks-title"
 					className={`${styles.container} ${styles.supportedNetworks}`}

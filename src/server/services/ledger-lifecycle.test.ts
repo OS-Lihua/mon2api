@@ -11,6 +11,7 @@ import {
 
 const mocks = vi.hoisted(() => ({
 	db: {
+		endpointPolicy: { findMany: vi.fn() },
 		$transaction: vi.fn(),
 		lease: {
 			findUnique: vi.fn(),
@@ -59,7 +60,6 @@ vi.mock("./runtime", () => ({
 	ensureChainBinding: vi.fn(),
 	demoEnabled: () => true,
 	sessionPassword: () => "unused",
-	validateConnectorUrl: (value: string) => value,
 }));
 vi.mock("./market", () => ({ lock: mocks.lock }));
 vi.mock("./chain", () => ({
@@ -396,6 +396,32 @@ async function interruptAndResolve() {
 	await resolveReview(row.id, 5, 10, "invoice-verified");
 }
 describe("metering lifecycle guards", () => {
+	it.each([false, true])(
+		"does not reserve or execute paid work when a gateway or proxy lacks approval (proxy=%s)",
+		async (usesProxy) => {
+			const direct = {
+				...listing,
+				kind: "gateway",
+				transport: "direct",
+				baseUrl: "https://gateway.example/v1",
+				proxyUrl: usesProxy ? "http://proxy.example:8080" : null,
+				proxySecret: null,
+			};
+			mocks.db.lease.findUnique.mockResolvedValue({
+				...lease,
+				listing: direct,
+			});
+			mocks.db.endpointPolicy.findMany.mockResolvedValue(
+				usesProxy ? [{ kind: "GATEWAY", url: direct.baseUrl }] : [],
+			);
+			await expect(runChat("consumer", args)).rejects.toMatchObject({
+				code: "connector_not_allowed",
+			});
+			expect(mocks.db.meterRequest.create).not.toHaveBeenCalled();
+			expect(mocks.runEngine).not.toHaveBeenCalled();
+			expect(lease.reserved).toBe(0n);
+		},
+	);
 	it("does not reserve money or call an upstream while the escrow is paused", async () => {
 		mocks.readEscrowPaused.mockResolvedValue(true);
 		await expect(runChat("consumer", args)).rejects.toMatchObject({
@@ -508,6 +534,25 @@ describe("metering lifecycle guards", () => {
 			status: "REVIEW",
 			errorCode: "usage_missing",
 		});
+	});
+	it("retains the reservation and does not charge or settle an oversized upstream response", async () => {
+		mocks.runEngine.mockRejectedValue(
+			new EngineFailure(
+				"invalid_response",
+				"Provider response exceeds the byte limit.",
+				502,
+				true,
+			),
+		);
+		await expect(runChat("consumer", args)).rejects.toMatchObject({
+			code: "invalid_response",
+			status: 502,
+		});
+		expect(lease).toMatchObject({ spent: 0n, reserved: 133n });
+		expect(requests[0]).toMatchObject({ status: "REVIEW", cost: 0n });
+		expect(entries.map((row) => row.kind)).toEqual(["RESERVE"]);
+		await settleSession(sessionId, "consumer");
+		expect(mocks.sendSettlement).not.toHaveBeenCalled();
 	});
 	it.each(["completed", "review", "failure"])(
 		"preserves operator evidence and charges once when a late %s arrives",

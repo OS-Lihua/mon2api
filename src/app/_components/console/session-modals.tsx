@@ -3,7 +3,7 @@
 import { KeyRound, LoaderCircle, Wallet } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { ConsoleSelect } from "~/app/_components/console-select";
-import { formatAmount as usd } from "~/shared/money";
+import { formatChainBalance, formatAmount as usd } from "~/shared/money";
 import { isNativeAsset } from "~/shared/settlement-asset";
 import type {
 	ListingView,
@@ -39,6 +39,7 @@ export function RentModal({
 	const asset = network.asset;
 	return (
 		<Modal
+			busy={!!busy}
 			error={error}
 			onClose={() => !busy && onClose()}
 			title="创建预算会话"
@@ -48,6 +49,12 @@ export function RentModal({
 					<strong>{listing.name}</strong>
 					<span className="rent-model mono">{listing.model}</span>
 					<dl>
+						<div>
+							<dt>提供者</dt>
+							<dd className="mono" title={listing.owner}>
+								{short(listing.owner)}
+							</dd>
+						</div>
 						<div>
 							<dt>结算网络</dt>
 							<dd>{network.name}</dd>
@@ -83,16 +90,19 @@ export function RentModal({
 				<div className="field">
 					<label htmlFor="rent-budget">锁定预算（{asset}）</label>
 					<input
+						aria-describedby="rent-budget-help"
+						disabled={!!busy}
 						id="rent-budget"
-						min="0.000001"
+						inputMode="decimal"
 						onChange={(event) => onBudgetChange(event.target.value)}
+						pattern="(?:0|[1-9][0-9]*)(?:[.][0-9]{1,6})?"
 						placeholder="输入要锁定的金额"
 						required
-						step="0.000001"
-						type="number"
+						title="金额最多六位小数，不使用科学计数法"
+						type="text"
 						value={budget}
 					/>
-					<small>
+					<small id="rent-budget-help">
 						会话固定此资源、提供者和 {asset}{" "}
 						挂牌价快照。每次调用先预留预算，关闭后可提取未使用的 {asset}
 						。网络手续费使用 {nativeSymbol}，另计。
@@ -158,6 +168,7 @@ export function RefundModal({
 	const asset = network.asset;
 	return (
 		<Modal
+			busy={!!busy}
 			error={error}
 			onClose={() => !busy && onClose()}
 			title={`退回未使用的 ${asset}`}
@@ -167,7 +178,9 @@ export function RefundModal({
 					{session.listingName} · {session.model}
 				</p>
 				<p>
-					可退额度：
+					{refund?.status === "AVAILABLE"
+						? "已转入可提现余额："
+						: "当前可退额度（待确认）："}
 					<strong>
 						{usd(refund?.amount ?? remainingBudget(session), true)} {asset}
 					</strong>
@@ -177,6 +190,12 @@ export function RefundModal({
 					{nativeSymbol}
 					。已消费费用和网络手续费不退；待核对用量继续保留预留。
 				</p>
+				{(refund?.reserved ?? session.reserved) > 0 && (
+					<p className="pending-amount">
+						继续预留：{usd(refund?.reserved ?? session.reserved, true)} {asset}
+						。这部分金额需核对用量后才能确定是否可退。
+					</p>
+				)}
 				{refund && (
 					<div className="notice info">
 						{refund.status === "AVAILABLE"
@@ -248,6 +267,7 @@ export function WithdrawModal({
 	const [recipient, setRecipient] = useState(address);
 	return (
 		<Modal
+			busy={!!busy}
 			error={error}
 			onClose={() => !busy && onClose()}
 			title={`提取 ${network.asset}`}
@@ -258,6 +278,20 @@ export function WithdrawModal({
 					onSubmit(recipient);
 				}}
 			>
+				<div className="withdraw-summary">
+					<span className="field-label">提取全部可提现余额</span>
+					<div className="stat-value">
+						{claimable === null
+							? "暂不可用"
+							: formatChainBalance(
+									claimable,
+									network.asset,
+									network.tokenDecimals,
+								)}
+						{claimable !== null && <small>{network.asset}</small>}
+					</div>
+					<p className="code-hint">结算网络：{network.name}</p>
+				</div>
 				<div className="field">
 					<label htmlFor="withdraw-recipient">收款地址</label>
 					<input
@@ -265,9 +299,11 @@ export function WithdrawModal({
 						disabled={!!busy}
 						id="withdraw-recipient"
 						onChange={(event) => setRecipient(event.target.value)}
+						pattern="0x[0-9a-fA-F]{40}"
 						placeholder="0x…"
 						required
 						spellCheck={false}
+						title="请输入完整的 0x 开头的 40 位十六进制地址"
 						value={recipient}
 					/>
 					<small>
@@ -324,6 +360,7 @@ export function KeyModal({
 }) {
 	return (
 		<Modal
+			busy={!!busy}
 			error={error}
 			onClose={() => !busy && onClose()}
 			title="创建 API 密钥"
@@ -332,6 +369,7 @@ export function KeyModal({
 				<div className="field">
 					<label htmlFor="key-name">密钥名称</label>
 					<input
+						disabled={!!busy}
 						id="key-name"
 						maxLength={60}
 						onChange={(event) => onKeyNameChange(event.target.value)}
@@ -342,6 +380,7 @@ export function KeyModal({
 				<div className="field">
 					<label htmlFor="key-session">绑定预算会话</label>
 					<ConsoleSelect
+						disabled={!!busy}
 						id="key-session"
 						onValueChange={onSelectSession}
 						options={sessions.map((item) => ({
@@ -369,7 +408,7 @@ export function KeyModal({
 					</button>
 					<button
 						className="button primary"
-						disabled={!sessionId || !!busy}
+						disabled={!sessionId || !keyName.trim() || !!busy}
 						type="submit"
 					>
 						{busy === "key" ? (

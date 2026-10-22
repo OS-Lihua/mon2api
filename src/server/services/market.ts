@@ -6,6 +6,7 @@ import { sealData } from "iron-session";
 import { getAddress, keccak256, stringToHex } from "viem";
 import type { z } from "zod";
 import { db } from "~/server/db";
+import type { GatewayProxy } from "~/shared/gateway-config";
 import { DEFAULT_NETWORK, networkMetadata } from "~/shared/network";
 import {
 	assetOf,
@@ -32,14 +33,11 @@ import {
 } from "./chain";
 import { connectorOnline, resourceAvailable } from "./connector-availability";
 import { assertEscrowOwnerGuard } from "./escrow-version";
+import { requireGatewayAccess, sealProxy } from "./gateway-access";
+import { withGatewayTransport } from "./gateway-transport";
 import { ledgerAmount } from "./ledger";
 import { discoverModels } from "./model-discovery";
-import {
-	chainConfig,
-	demoEnabled,
-	sessionPassword,
-	validateConnectorUrl,
-} from "./runtime";
+import { chainConfig, demoEnabled, sessionPassword } from "./runtime";
 import type {
 	listingInput,
 	listingUpdateInput,
@@ -55,18 +53,15 @@ const keyHash = (value: string) =>
 export async function discoverDirectModels(input: {
 	baseUrl: string;
 	apiKey: string;
+	proxy?: GatewayProxy;
 }) {
-	let baseUrl: string;
+	const baseUrl = await requireGatewayAccess(input.baseUrl, input.proxy?.url);
 	try {
-		baseUrl = validateConnectorUrl(input.baseUrl);
-	} catch {
-		throw new AppError(
-			"connector_not_allowed",
-			"请运营者先将上游 origin 加入 UPSTREAM_ALLOWED_ORIGINS。",
-		);
-	}
-	try {
-		return { models: await discoverModels(baseUrl, input.apiKey) };
+		return {
+			models: await withGatewayTransport(input.proxy, (fetcher) =>
+				discoverModels(baseUrl, input.apiKey, fetcher),
+			),
+		};
 	} catch {
 		throw new AppError(
 			"discovery_failed",
@@ -83,14 +78,7 @@ export async function createListing(
 		throw new AppError("demo_disabled", "真实环境不接受模拟资源。", 403);
 	let baseUrl: string | null = null;
 	if (input.kind === "gateway" && input.baseUrl) {
-		try {
-			baseUrl = validateConnectorUrl(input.baseUrl);
-		} catch {
-			throw new AppError(
-				"connector_not_allowed",
-				"请运营者先将上游 origin 加入 UPSTREAM_ALLOWED_ORIGINS。",
-			);
-		}
+		baseUrl = await requireGatewayAccess(input.baseUrl, input.proxy?.url);
 	}
 	const secret = input.apiKey
 		? await sealData(input.apiKey, { password: sessionPassword(), ttl: 0 })
@@ -107,6 +95,7 @@ export async function createListing(
 			concurrency: input.concurrency,
 			baseUrl,
 			secret,
+			...(await sealProxy(input.proxy)),
 		},
 		select: { id: true },
 	});
@@ -116,6 +105,13 @@ export async function toggleListing(
 	id: string,
 	enabled: boolean,
 ) {
+	if (enabled) {
+		const listing = await db.listing.findUnique({ where: { id } });
+		if (!listing || listing.owner !== user.address)
+			throw new AppError("not_found", "资源不存在或不属于此钱包。", 404);
+		if (listing.kind === "gateway" && listing.transport === "direct")
+			await requireGatewayAccess(listing.baseUrl ?? "", listing.proxyUrl);
+	}
 	const updated = await db.listing.updateMany({
 		where: { id, owner: user.address, status: { not: "DISCOVERING" } },
 		data: { enabled, status: enabled ? "READY" : "PAUSED" },
@@ -180,6 +176,8 @@ export async function openSession(
 	});
 	if (!listing || !resourceAvailable(listing))
 		throw new AppError("unavailable", "资源当前未上架。", 409);
+	if (listing.kind === "gateway" && listing.transport === "direct")
+		await requireGatewayAccess(listing.baseUrl ?? "", listing.proxyUrl);
 	const id = `0x${user.address.slice(2).toLowerCase()}${randomBytes(12).toString("hex")}`;
 	const expiresAt = Math.floor(Date.now() / 1000) + 3600;
 	const termsHash = keccak256(

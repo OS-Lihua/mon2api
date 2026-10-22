@@ -156,7 +156,7 @@ export function registerCommerce(
 			output: c.idResponse,
 			created: true,
 			description:
-				"Gateway origin must be operator-approved and support OpenAI Chat Completions with usage. baseUrl may include a custom API base path; a bare origin defaults to /v1. Discovery and inference use the same base path. Gateway credentials are encrypted and never returned. Demo resources are local-only. Creation is not replay-safe: do not automatically retry.",
+				"The exact normalized gateway API base URL must be operator-approved and support OpenAI Chat Completions with usage. A bare origin defaults to /v1; other API base paths require separate approval. Optional proxy: {url, username?, password?}; only HTTP/HTTPS origins without paths or embedded credentials are accepted, password requires username, authenticated remote proxies require HTTPS (HTTP authentication is permitted only for localhost, 127.0.0.1 or [::1]), and proxy origin requires separate approval. Discovery and inference use the same proxy and base path. Gateway and proxy credentials are encrypted and never returned. Proxy failures do not fall back to direct access. Demo resources are local-only. Creation is not replay-safe: do not automatically retry.",
 		},
 		{
 			method: "get",

@@ -46,7 +46,7 @@ import {
 } from "~/app/_components/console/format";
 import type { ChatMessage } from "~/app/_components/console/lab-section";
 import { OverviewSection } from "~/app/_components/console/overview-section";
-import { Badge } from "~/app/_components/console/ui";
+import { Badge, Loading } from "~/app/_components/console/ui";
 import { useToken2ApiWallet } from "~/app/_components/wallet-provider";
 import { connectorStartCommand } from "~/shared/connector-distribution";
 import { parseMicroAmount, formatAmount as usd } from "~/shared/money";
@@ -90,11 +90,12 @@ const loadSessionModals = () =>
 	import("~/app/_components/console/session-modals");
 const loadConnectorModals = () =>
 	import("~/app/_components/console/connector-modals");
-const MarketSection = dynamic(loadMarket);
-const PoolSection = dynamic(loadPool);
-const LabSection = dynamic(loadLab);
-const BillingSection = dynamic(loadBilling);
-const KeysSection = dynamic(loadKeys);
+const sectionLoading = () => <Loading label="正在打开工作区…" />;
+const MarketSection = dynamic(loadMarket, { loading: sectionLoading });
+const PoolSection = dynamic(loadPool, { loading: sectionLoading });
+const LabSection = dynamic(loadLab, { loading: sectionLoading });
+const BillingSection = dynamic(loadBilling, { loading: sectionLoading });
+const KeysSection = dynamic(loadKeys, { loading: sectionLoading });
 const RentModal = dynamic(() =>
 	loadSessionModals().then((module) => module.RentModal),
 );
@@ -164,6 +165,7 @@ export function Token2ApiConsole() {
 	const sidebarRef = useRef<HTMLElement>(null);
 	const headingRef = useRef<HTMLHeadingElement>(null);
 	const [busy, setBusy] = useState<string | null>(null);
+	const busyRef = useRef(false);
 	const [error, setError] = useState<string | null>(null);
 	const [notice, setNotice] = useState<string | null>(null);
 	const [listingModal, setListingModal] = useState(false);
@@ -252,6 +254,7 @@ export function Token2ApiConsole() {
 		setError(null);
 		setNotice(null);
 		setBusy(null);
+		busyRef.current = false;
 	}, [identity]);
 	useEffect(() => {
 		// Warm deferred chunks after first paint so later navigation does not wait on the network.
@@ -277,14 +280,38 @@ export function Token2ApiConsole() {
 	const selected = sessions.find((item) => item.id === sessionId);
 	const closeMobileMenu = () => {
 		setMobileOpen(false);
-		menuButtonRef.current?.focus();
+		window.requestAnimationFrame(() => menuButtonRef.current?.focus());
 	};
 	useEffect(() => {
+		const readSection = () => {
+			const target = navigation.find(
+				(item) => item.id === window.location.hash.slice(1),
+			);
+			if (target) {
+				setSection(target.id);
+				setError(null);
+			}
+		};
+		readSection();
+		window.addEventListener("hashchange", readSection);
+		return () => window.removeEventListener("hashchange", readSection);
+	}, []);
+	useEffect(() => {
+		const desktop = window.matchMedia("(min-width: 701px)");
+		const onResize = () => {
+			if (desktop.matches) setMobileOpen(false);
+		};
+		desktop.addEventListener("change", onResize);
+		return () => desktop.removeEventListener("change", onResize);
+	}, []);
+	useEffect(() => {
 		if (!mobileOpen) return;
+		const previousOverflow = document.body.style.overflow;
+		document.body.style.overflow = "hidden";
 		const onEscape = (event: KeyboardEvent) => {
 			if (event.key === "Escape") {
 				setMobileOpen(false);
-				menuButtonRef.current?.focus();
+				window.requestAnimationFrame(() => menuButtonRef.current?.focus());
 				return;
 			}
 			if (event.key !== "Tab" || !sidebarRef.current) return;
@@ -316,12 +343,15 @@ export function Token2ApiConsole() {
 			}
 		}, 220);
 		return () => {
+			document.body.style.overflow = previousOverflow;
 			window.clearTimeout(focusTimeout);
 			window.removeEventListener("keydown", onEscape);
 		};
 	}, [mobileOpen]);
 	const navigate = (value: Section) => {
 		setSection(value);
+		setError(null);
+		window.history.pushState(null, "", `#${value}`);
 		setBillingTarget(false);
 		setMobileOpen(false);
 		window.requestAnimationFrame(() => headingRef.current?.focus());
@@ -330,13 +360,14 @@ export function Token2ApiConsole() {
 		name: string,
 		action: (isCurrent: () => boolean) => Promise<void>,
 	) => {
-		if (busy) return;
+		if (busy || busyRef.current) return;
 		if (walletMismatch && name !== "login" && name !== "logout") {
 			setError("钱包与登录身份不一致，请在钱包菜单中重新连接并签名登录。");
 			return;
 		}
 		const generation = identityGeneration.current;
 		const isCurrent = () => identityGeneration.current === generation;
+		busyRef.current = true;
 		setBusy(name);
 		setError(null);
 		setNotice(null);
@@ -349,7 +380,10 @@ export function Token2ApiConsole() {
 			);
 		} finally {
 			await snapshot.refetch();
-			if (isCurrent()) setBusy(null);
+			if (isCurrent()) {
+				setBusy(null);
+				busyRef.current = false;
+			}
 		}
 	};
 	const chainContext = (isCurrent: () => boolean): ChainContext | null =>
@@ -390,6 +424,8 @@ export function Token2ApiConsole() {
 	const resetConversation = () => {
 		setMessages([]);
 		setConversationId("");
+		setError(null);
+		chat.reset();
 	};
 	const submitChat = (event: FormEvent) => {
 		event.preventDefault();
@@ -428,7 +464,7 @@ export function Token2ApiConsole() {
 					role: "assistant",
 					content: result.text,
 					finishReason: result.finishReason,
-					meta: `${result.inputTokens} 输入 · ${result.outputTokens} 输出 · ${usd(result.cost, true)} · ${result.usageSource}`,
+					meta: `${result.inputTokens} 输入 · ${result.outputTokens} 输出 · ${usd(result.cost, true)} ${asset} · ${result.usageSource}`,
 				},
 			]);
 			if (result.finishReason !== "stop")
@@ -474,6 +510,19 @@ export function Token2ApiConsole() {
 					concurrency: Number(form.get("concurrency")),
 					baseUrl: String(form.get("baseUrl")),
 					apiKey: String(form.get("apiKey")),
+					...(String(form.get("proxyUrl") ?? "").trim()
+						? {
+								proxy: {
+									url: String(form.get("proxyUrl")).trim(),
+									...(form.get("proxyUsername")
+										? {
+												username: String(form.get("proxyUsername")),
+												password: String(form.get("proxyPassword") ?? ""),
+											}
+										: {}),
+								},
+							}
+						: {}),
 				});
 			}
 			if (!isCurrent()) return;
@@ -517,6 +566,7 @@ export function Token2ApiConsole() {
 		try {
 			await navigator.clipboard.writeText(value);
 			setCopied(true);
+			setNotice("内容已复制到剪贴板。");
 			window.setTimeout(() => setCopied(false), 2000);
 		} catch {
 			setError("浏览器未允许剪贴板访问，请手动复制。");
@@ -552,6 +602,8 @@ export function Token2ApiConsole() {
 		setRefundInfo(null);
 	};
 	const openRent = (listing: ListingView) => {
+		setError(null);
+		setBudget("");
 		if (uiPreview) {
 			setRentListing(listing);
 			return;
@@ -582,7 +634,10 @@ export function Token2ApiConsole() {
 			<button
 				className="button primary"
 				disabled={!viewer || !data?.network.escrow || !!busy}
-				onClick={() => setListingModal(true)}
+				onClick={() => {
+					setError(null);
+					setListingModal(true);
+				}}
 				type="button"
 			>
 				<Plus size={13} />
@@ -592,7 +647,10 @@ export function Token2ApiConsole() {
 			<button
 				className="button primary"
 				disabled={!sessions.length || !!busy}
-				onClick={() => setKeyModal(true)}
+				onClick={() => {
+					setError(null);
+					setKeyModal(true);
+				}}
 				type="button"
 			>
 				<Plus size={13} />
@@ -602,6 +660,9 @@ export function Token2ApiConsole() {
 
 	return (
 		<div className="app-shell">
+			<a className="skip-link" href="#console-main">
+				跳到主要内容
+			</a>
 			<button
 				aria-hidden={!mobileOpen}
 				aria-label="关闭导航菜单"
@@ -703,7 +764,7 @@ export function Token2ApiConsole() {
 					</div>
 				</div>
 			</aside>
-			<div className="main-shell">
+			<div className="main-shell" inert={mobileOpen}>
 				<header className="topbar">
 					<button
 						aria-expanded={mobileOpen}
@@ -719,6 +780,9 @@ export function Token2ApiConsole() {
 						<strong>{titles[section]}</strong>
 					</div>
 					<div className="topbar-actions">
+						<a className="text-link" href="/admin">
+							管理后台
+						</a>
 						<span
 							className="topbar-status"
 							title={
@@ -748,12 +812,12 @@ export function Token2ApiConsole() {
 						</div>
 					</div>
 				</header>
-				<main className="content">
+				<main className="content" id="console-main">
 					<div
 						className={`page-heading ${section === "overview" ? "overview-heading" : ""}`}
 					>
 						<div>
-							<span className="workspace-caption">多链结算工作台</span>
+							<span className="workspace-caption">TOKEN2API / 工作区</span>
 							<h1 ref={headingRef} tabIndex={-1}>
 								{titles[section]}
 							</h1>
@@ -804,6 +868,12 @@ export function Token2ApiConsole() {
 							</button>
 						</div>
 					)}
+					{busy && busy !== "chat" && (
+						<div className="notice info" role="status">
+							<LoaderCircle className="spin" size={16} />
+							<span>正在处理操作，请等待结果。</span>
+						</div>
+					)}
 					{notice && (
 						<div className="notice" role="status">
 							<CheckCheck size={14} />
@@ -814,6 +884,22 @@ export function Token2ApiConsole() {
 								type="button"
 							>
 								<X size={13} />
+							</button>
+						</div>
+					)}
+					{data && snapshot.isError && (
+						<div className="notice error" role="alert">
+							<CircleHelp size={16} />
+							<span>
+								数据刷新失败，当前显示上次读取的记录。金额与操作结果请刷新后再核对。
+							</span>
+							<button
+								className="text-link"
+								disabled={snapshot.isFetching}
+								onClick={() => void snapshot.refetch()}
+								type="button"
+							>
+								重新加载
 							</button>
 						</div>
 					)}
@@ -920,6 +1006,7 @@ export function Token2ApiConsole() {
 								<PoolSection
 									busy={!!busy}
 									data={data}
+									navigate={navigate}
 									onConnect={(item) => {
 										if (item.status === "DISCOVERING")
 											setNewConnector({ id: item.id, token: "", model: "" });
@@ -938,6 +1025,11 @@ export function Token2ApiConsole() {
 												id: item.id,
 												enabled: !item.enabled,
 											});
+											setNotice(
+												item.enabled
+													? "资源已暂停，停止受理新调用。"
+													: "资源已上架，请在列表核对连接状态。",
+											);
 										})
 									}
 								/>
@@ -946,6 +1038,7 @@ export function Token2ApiConsole() {
 								<LabSection
 									asset={asset}
 									busy={busy}
+									error={chat.error?.message ?? null}
 									messages={messages}
 									navigate={navigate}
 									onNewConversation={resetConversation}
@@ -986,6 +1079,7 @@ export function Token2ApiConsole() {
 									}
 									onFocused={() => setBillingTarget(false)}
 									onRefund={(session) => {
+										setError(null);
 										setRefundSession(session);
 										setRefundInfo(null);
 									}}
@@ -1005,11 +1099,15 @@ export function Token2ApiConsole() {
 									copied={copied}
 									data={data}
 									hasSessions={sessions.length > 0}
+									key={identity}
 									model={selected?.model}
 									navigate={navigate}
 									newKey={newKey}
 									onCopy={(value) => void copy(value)}
-									onCreateKey={() => setKeyModal(true)}
+									onCreateKey={() => {
+										setError(null);
+										setKeyModal(true);
+									}}
 									onRevoke={(id) =>
 										void run("revoke", async () => {
 											await revokeKey.mutateAsync({ id });

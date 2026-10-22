@@ -31,11 +31,29 @@ model Listing {
   status         String   @default("READY")
   baseUrl        String?
   secret         String?
+  proxyUrl       String?
+  proxySecret    String?
   createdAt      DateTime @default(now())
   sessions       Lease[]
   connectorJobs  ConnectorJob[]
 
   @@index([owner])
+  @@index([baseUrl])
+  @@index([proxyUrl])
+}
+
+model EndpointPolicy {
+  id        String   @id @default(cuid())
+  kind      String
+  url       String
+  name      String
+  note      String   @default("")
+  enabled   Boolean  @default(true)
+  updatedBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([kind, url])
 }
 
 model Lease {

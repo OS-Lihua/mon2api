@@ -9,6 +9,19 @@ Tag format:
 
 ## Unreleased
 
+- 重整 Token2API 前端为 SaaS 数据工作台：统一蓝色主操作、灰白内容区、深蓝导航与语义状态色；复用搜索、筛选、分页、弹窗和金额格式化。资源市场增加表格/卡片比较、状态/接入类型筛选与价格排序；账单、密钥及商家资源增加查询和分页，显示资金预留与统计范围。后台增加审核弹窗、停用影响确认、查询重试及关联资源前后翻页。首页增加按角色进入工作区的入口；调用实验室明确整段响应状态、快捷键发送和失败核账路径。完善移动端导航、焦点恢复、输入校验和重复提交保护；未知用量不显示零费用或已结算。
+
+- 修复 Vercel 函数启动时缺少 Next.js framework 模块的问题，将运行时所需文件加入部署追踪，避免控制台数据接口在启动前返回 500。
+
+- 补充 Vercel 发布流程和生产配置要求，使用 `.vercelignore` 排除环境变量、本地运行状态、审计缓存和构建输出，避免 CLI 上传本机敏感文件。
+
+- 修复代理认证与流量限制：带认证的远程代理强制 HTTPS，并在运行时拦截已有不安全配置；推理响应在 SDK 解析前限制为 2 MiB，累计文本限制为 64 KiB，超限中止并保留 REVIEW 预算。tRPC 与 REST 共用 160 KiB 请求体上限及 10 秒读取期限，tRPC 每批最多 10 个操作。升级受影响的 tmp、Vite 开发依赖。
+
+- 独立安装包升级为 0.2.0，新增面向人和 AI 的 `token2api` 商家 CLI：钱包签名登录、模型发现、资源接入/查询/报价修改/上下架、本机凭证配置及接单；默认 JSON、命令 Schema、分页、预演和稳定退出码。隐私输入要求用户在真实终端手动完成，禁止命令行私钥；钱包及本机凭证支持本地加密保存，写入结果未知时不自动重试。
+
+- 新增 `/admin` 接入管理后台，按当前托管合约管理员钱包鉴权，管理网关和代理地址白名单、查看关联资源；停用地址停止新接单，不影响已有结算和资金退出。白名单改为数据库管理，升级后需审核并重新上架现有直连资源。
+- 平台直连网关支持可选 HTTP/HTTPS 代理及加密代理认证。模型发现和流式调用使用同一代理，默认直连；不跟随重定向，不在代理失败后切换直连或重发推理请求。
+
 - Default new deployment examples and the unconfigured console to Base with Circle-issued USDC; keep USDT and other explicitly configured settlement assets available. Remove the 1–100 budget cap and the prefilled amount, accept positive exact micro-unit budgets, and widen ledger amount columns to BIGINT without changing existing units or values. Keep numeric REST amounts within the exact JSON safe-integer range.
 
 - Discard late budget-confirmation credentials after a wallet identity change. Persist signed escrow transactions and nonce assignments before broadcast, wait for confirmations outside the signer lock, replay saved transactions after failures, and process up to four settlement sessions concurrently.

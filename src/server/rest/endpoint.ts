@@ -3,16 +3,13 @@ import "server-only";
 import type { z } from "zod";
 import { withCors } from "~/server/security/cors";
 import { limitCredential, limitRequest } from "~/server/security/rate-limit";
+import { BodyReadError, readRequestText } from "~/server/security/request-body";
 import {
 	jsonError,
 	jsonOk,
 	logAndReturnInternalError,
 } from "~/server/security/rest-response";
 import { AppError } from "~/server/services/auth";
-import {
-	BODY_READ_TIMEOUT_MS,
-	MAX_RAW_BODY_BYTES,
-} from "~/server/services/token2api.contract";
 
 type RestHandlerResult<TBody> =
 	| Response
@@ -85,7 +82,7 @@ async function parseBody<TSchema extends z.ZodTypeAny>(
 ): Promise<{ data: z.infer<TSchema> } | Response> {
 	let json: unknown;
 	try {
-		json = await readJsonBody(request);
+		json = JSON.parse(await readRequestText(request));
 	} catch (error) {
 		return jsonError(
 			request,
@@ -104,53 +101,6 @@ async function parseBody<TSchema extends z.ZodTypeAny>(
 			parsed.error.flatten(),
 		);
 	return { data: parsed.data };
-}
-
-class BodyReadError extends Error {
-	constructor(
-		message: string,
-		readonly status: 408 | 413,
-	) {
-		super(message);
-	}
-}
-
-async function readJsonBody(request: Request): Promise<unknown> {
-	if (!request.body) throw new SyntaxError("Missing JSON body");
-	const reader = request.body.getReader();
-	let timeout: ReturnType<typeof setTimeout> | undefined;
-	try {
-		const text = await Promise.race([
-			(async () => {
-				const decoder = new TextDecoder();
-				let bytes = 0;
-				let text = "";
-				while (true) {
-					const { done, value } = await reader.read();
-					if (done) return text + decoder.decode();
-					bytes += value.byteLength;
-					if (bytes > MAX_RAW_BODY_BYTES) {
-						throw new BodyReadError("Request body exceeds 160 KiB", 413);
-					}
-					text += decoder.decode(value, { stream: true });
-				}
-			})(),
-			new Promise<never>((_resolve, reject) => {
-				timeout = setTimeout(
-					() => reject(new BodyReadError("Request body read timed out", 408)),
-					BODY_READ_TIMEOUT_MS,
-				);
-			}),
-		]);
-		return JSON.parse(text);
-	} catch (error) {
-		// A source's cancel callback may never settle. Do not delay the error response.
-		void reader.cancel().catch(() => undefined);
-		throw error;
-	} finally {
-		clearTimeout(timeout);
-		reader.releaseLock();
-	}
 }
 
 async function guard(request: Request, run: () => Promise<Response>) {

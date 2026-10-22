@@ -1,6 +1,9 @@
 import OpenAI from "openai";
 import { gatewayApiBase } from "../../shared/gateway-url";
 
+export const MAX_GATEWAY_TEXT_BYTES = 64 * 1024;
+export const MAX_GATEWAY_RESPONSE_BYTES = 2 * 1024 * 1024;
+
 export type EngineInput = {
 	kind: "demo" | "gateway";
 	/** Operator-approved gateway API base URL, never caller request input. */
@@ -110,6 +113,7 @@ export async function runEngine(
 	input: EngineInput,
 	onDelta: DeltaHandler,
 	signal?: AbortSignal,
+	fetcher?: typeof fetch,
 ): Promise<EngineResult> {
 	if (signal?.aborted) throw aborted(false);
 	if (!Number.isSafeInteger(input.maxTokens) || input.maxTokens < 1) {
@@ -140,6 +144,36 @@ export async function runEngine(
 			false,
 		);
 	}
+	const transport = new AbortController();
+	let oversizedResponse = false;
+	const boundedFetch: typeof fetch = async (url, options) => {
+		const response = await (fetcher ?? fetch)(url, {
+			...options,
+			signal: options?.signal
+				? AbortSignal.any([options.signal, transport.signal])
+				: transport.signal,
+		});
+		if (!response.body) return response;
+		let bytes = 0;
+		const body = response.body.pipeThrough(
+			new TransformStream<Uint8Array, Uint8Array>({
+				transform(chunk, controller) {
+					bytes += chunk.byteLength;
+					if (bytes > MAX_GATEWAY_RESPONSE_BYTES) {
+						oversizedResponse = true;
+						transport.abort();
+						throw new Error("Provider response exceeds the byte limit.");
+					}
+					controller.enqueue(chunk);
+				},
+			}),
+		);
+		return new Response(body, {
+			status: response.status,
+			statusText: response.statusText,
+			headers: response.headers,
+		});
+	};
 	const client = new OpenAI({
 		apiKey: input.apiKey,
 		baseURL: baseUrl,
@@ -147,6 +181,7 @@ export async function runEngine(
 		timeout: 120_000,
 		// Do not let a redirect forward the bearer credential to another host.
 		fetchOptions: { redirect: "error" },
+		fetch: boundedFetch,
 	});
 	let upstreamRequestId: string | null = null;
 	let cancelStream: (() => void) | undefined;
@@ -170,6 +205,7 @@ export async function runEngine(
 			response.request_id ?? response.response.headers.get("x-request-id");
 		cancelStream = () => response.data.controller.abort();
 		let text = "";
+		let textBytes = 0;
 		let finishReason: EngineFinishReason | null = null;
 		let inputTokens: number | null = null;
 		let outputTokens: number | null = null;
@@ -210,6 +246,15 @@ export async function runEngine(
 				}
 				const delta = choice.delta.content;
 				if (delta) {
+					textBytes += Buffer.byteLength(delta, "utf8");
+					if (textBytes > MAX_GATEWAY_TEXT_BYTES)
+						throw new EngineFailure(
+							"invalid_response",
+							"Provider response text exceeds 64 KiB; usage requires review.",
+							502,
+							true,
+							upstreamRequestId,
+						);
 					text += delta;
 					await onDelta(delta);
 					if (signal?.aborted) throw aborted(true, upstreamRequestId);
@@ -245,6 +290,14 @@ export async function runEngine(
 			upstreamRequestId,
 		};
 	} catch (error) {
+		if (oversizedResponse)
+			throw new EngineFailure(
+				"invalid_response",
+				"Provider response exceeds 2 MiB; usage requires review.",
+				502,
+				true,
+				upstreamRequestId,
+			);
 		if (error instanceof EngineFailure) throw error;
 		if (signal?.aborted || error instanceof OpenAI.APIUserAbortError)
 			throw aborted(true, upstreamRequestId);
@@ -279,6 +332,7 @@ export async function runEngine(
 			upstreamRequestId,
 		);
 	} finally {
+		transport.abort();
 		cancelStream?.();
 	}
 }

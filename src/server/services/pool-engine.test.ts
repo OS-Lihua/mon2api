@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EngineFailure, type EngineInput, runEngine } from "./pool-engine";
+import {
+	EngineFailure,
+	type EngineInput,
+	MAX_GATEWAY_RESPONSE_BYTES,
+	MAX_GATEWAY_TEXT_BYTES,
+	runEngine,
+} from "./pool-engine";
 
 const input: EngineInput = {
 	kind: "gateway",
@@ -46,6 +52,104 @@ function mockSse(body: string, singleByteChunks = false) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("gateway engine through the official OpenAI SDK", () => {
+	it("rejects cumulative UTF-8 text above 64 KiB before emitting the excess and retains review", async () => {
+		const allowed = "汉".repeat(Math.floor(MAX_GATEWAY_TEXT_BYTES / 3));
+		const fetcher = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(
+				mockSse(
+					event(completion(allowed)) +
+						event(completion("汉", "stop")) +
+						event("[DONE]"),
+				),
+			);
+		const emit = vi.fn();
+		await expect(
+			runEngine(input, emit, undefined, fetcher),
+		).rejects.toMatchObject({
+			code: "invalid_response",
+			pendingReview: true,
+			status: 502,
+		});
+		expect(emit).toHaveBeenCalledExactlyOnceWith(allowed);
+		expect(fetcher).toHaveBeenCalledOnce();
+	});
+	it("accepts text at the exact byte limit with normal final usage", async () => {
+		const text = "x".repeat(MAX_GATEWAY_TEXT_BYTES);
+		const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+			mockSse(
+				event(completion(text, "stop")) +
+					event({
+						choices: [],
+						usage: { prompt_tokens: 1, completion_tokens: 128 },
+					}) +
+					event("[DONE]"),
+			),
+		);
+		await expect(
+			runEngine(input, () => {}, undefined, fetcher),
+		).resolves.toMatchObject({ text, pendingReview: false });
+	});
+	it.each([200, 429])(
+		"bounds a streaming HTTP %s body before SSE or error JSON parsing, cancels it and never retries",
+		async (status) => {
+			const cancel = vi.fn();
+			let bytes = 0;
+			const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+				new Response(
+					new ReadableStream<Uint8Array>({
+						pull(controller) {
+							bytes += 16384;
+							controller.enqueue(new Uint8Array(16384).fill(120));
+						},
+						cancel,
+					}),
+					{
+						status,
+						headers: {
+							"content-type":
+								status === 200 ? "text/event-stream" : "application/json",
+							"content-length": "1",
+						},
+					},
+				),
+			);
+			const emit = vi.fn();
+			await expect(
+				runEngine(input, emit, undefined, fetcher),
+			).rejects.toMatchObject({
+				code: "invalid_response",
+				pendingReview: true,
+				status: 502,
+			});
+			await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+			expect(bytes).toBeLessThanOrEqual(MAX_GATEWAY_RESPONSE_BYTES + 3 * 16384);
+			expect(emit).not.toHaveBeenCalled();
+			expect(fetcher).toHaveBeenCalledOnce();
+		},
+	);
+	it("cancels a still-open stream after excessive text", async () => {
+		const cancel = vi.fn();
+		const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				new ReadableStream<Uint8Array>({
+					start(controller) {
+						controller.enqueue(
+							new TextEncoder().encode(
+								event(completion("x".repeat(MAX_GATEWAY_TEXT_BYTES + 1))),
+							),
+						);
+					},
+					cancel,
+				}),
+				{ headers: { "content-type": "text/event-stream" } },
+			),
+		);
+		await expect(
+			runEngine(input, () => {}, undefined, fetcher),
+		).rejects.toMatchObject({ code: "invalid_response", pendingReview: true });
+		await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+	});
 	it("calls a custom API prefix without appending another version path", async () => {
 		const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
 			mockSse(

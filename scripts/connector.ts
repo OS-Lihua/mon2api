@@ -13,13 +13,13 @@ class ConnectorLaunchError extends Error {}
 async function secret(label: string): Promise<string> {
 	if (!process.stdin.isTTY)
 		throw new Error(
-			"请设置凭证环境变量，或使用 --credentials-stdin 提供凭证 JSON。",
+			"需要用户本人在终端输入凭证；不要把 Key 发给 AI。无人值守凭据必须由用户本人配置。",
 		);
 	const input = process.stdin;
 	const wasRaw = input.isRaw;
 	input.setRawMode(true);
 	input.resume();
-	process.stderr.write(`${label}: `);
+	process.stderr.write(`请用户本人手动输入${label}（不回显，不要交给 AI）：`);
 	return new Promise((resolve, reject) => {
 		let value = "";
 		const done = () => {

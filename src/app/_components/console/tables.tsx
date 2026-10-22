@@ -5,6 +5,7 @@ import { formatAmount as usd } from "~/shared/money";
 import type { ListingView, SessionView, Snapshot } from "~/shared/token2api";
 import {
 	listingKind,
+	remainingBudget,
 	sameAddress,
 	short,
 	statusLabel,
@@ -24,7 +25,9 @@ export function ResourceTable({
 	onToggle,
 	onConnect,
 	busy,
+	asset,
 }: {
+	asset: Snapshot["network"]["asset"];
 	listings: ListingView[];
 	onRent?: (listing: ListingView) => void;
 	onToggle?: (listing: ListingView) => void;
@@ -39,7 +42,7 @@ export function ResourceTable({
 					<tr>
 						<th>资源 / 模型</th>
 						<th>接入类型</th>
-						<th>输入 / 输出价格</th>
+						<th>输入 / 输出（{asset} / 百万 Token）</th>
 						<th>并发</th>
 						<th>状态</th>
 						<th>操作</th>
@@ -56,12 +59,17 @@ export function ResourceTable({
 									<div>
 										{item.name}
 										<small className="mono">{item.model}</small>
+										{onRent && (
+											<small className="mono" title={item.owner}>
+												提供者 {short(item.owner)}
+											</small>
+										)}
 									</div>
 								</div>
 							</td>
 							<td>
 								<span className="badge neutral">
-									{listingKind(item, { demo: "DEMO", api: "API" })}
+									{listingKind(item, { demo: "模拟资源", api: "网关直连" })}
 								</span>
 							</td>
 							<td className="mono">
@@ -74,7 +82,7 @@ export function ResourceTable({
 							<td>
 								<ListingStatusBadge item={item} />
 							</td>
-							<td>
+							<td className="resource-actions">
 								{onToggle ? (
 									<>
 										<button
@@ -104,9 +112,14 @@ export function ResourceTable({
 										className="text-link"
 										disabled={!item.enabled || !item.online || busy}
 										onClick={() => onRent?.(item)}
+										title={
+											!item.enabled || !item.online
+												? "资源暂不可用，请选择其他资源"
+												: "固定当前资源与报价，创建预算会话"
+										}
 										type="button"
 									>
-										使用资源 <ArrowUpRight size={11} />
+										锁定预算 <ArrowUpRight size={11} />
 									</button>
 								)}
 							</td>
@@ -125,7 +138,7 @@ export function SessionTable({
 	onSettle,
 	onClose,
 	busy,
-	showAll,
+	sessions,
 }: {
 	data: Snapshot;
 	onConfirm: (id: string) => void;
@@ -133,9 +146,9 @@ export function SessionTable({
 	onSettle: (id: string) => void;
 	onClose: (session: SessionView) => void;
 	busy: boolean;
-	showAll: boolean;
+	sessions: SessionView[];
 }) {
-	if (!data.sessions.length)
+	if (!sessions.length)
 		return (
 			<Empty
 				description="在资源市场选择模型并锁定预算，即可开始调用。"
@@ -150,15 +163,15 @@ export function SessionTable({
 				<thead>
 					<tr>
 						<th>资源 / 会话</th>
-						<th>预算</th>
-						<th>已消费 / 已结算 / 运营损失</th>
+						<th>预算 / 可用（{data.network.asset}）</th>
+						<th>已消费 / 已结算（{data.network.asset}）</th>
 						<th>状态</th>
 						<th>锁定交易</th>
 						<th>操作</th>
 					</tr>
 				</thead>
 				<tbody>
-					{(showAll ? data.sessions : data.sessions.slice(0, 5)).map((item) => {
+					{sessions.map((item) => {
 						const ownSession = sameAddress(item.consumer, viewer?.address);
 						return (
 							<tr key={item.id}>
@@ -168,10 +181,24 @@ export function SessionTable({
 										{short(item.id)}
 									</small>
 								</td>
-								<td className="mono">{usd(item.budget)}</td>
 								<td className="mono">
-									{usd(item.spent, true)} / {usd(item.settled, true)} /{" "}
-									{usd(item.writtenOff, true)}
+									{usd(item.budget)}
+									<small className="table-secondary">
+										可用 {usd(remainingBudget(item), true)}
+									</small>
+								</td>
+								<td className="mono">
+									{usd(item.spent, true)} / {usd(item.settled, true)}
+									{item.reserved > 0 && (
+										<small className="table-secondary pending-amount">
+											预留 {usd(item.reserved, true)} · 尚未确认为费用
+										</small>
+									)}
+									{item.writtenOff > 0 && (
+										<small className="table-secondary">
+											运营损失 {usd(item.writtenOff, true)}
+										</small>
+									)}
 								</td>
 								<td>
 									<Badge tone={statusTone(item.status)}>

@@ -4,7 +4,7 @@ import { discoveredModel, modelCatalog } from "~/shared/model-catalog";
 import { listingInput } from "./token2api.schema";
 
 export const localListingInput = listingInput.options[1]
-	.omit({ baseUrl: true, apiKey: true, concurrency: true })
+	.omit({ baseUrl: true, apiKey: true, proxy: true, concurrency: true })
 	.extend({ concurrency: z.literal(1).default(1) });
 export const connectorCreated = z
 	.object({ id: z.string().cuid(), token: connectorTokenSchema })
@@ -35,4 +35,5 @@ export const connectorSetupResponse = z
 export const directDiscoveryInput = listingInput.options[1].pick({
 	baseUrl: true,
 	apiKey: true,
+	proxy: true,
 });

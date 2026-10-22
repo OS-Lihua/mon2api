@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { proxyInput } from "~/shared/gateway-config";
 import { codePointString, MAX_MESSAGES_BYTES } from "./token2api.contract";
 export const addressSchema = z.string().regex(/^0x[\da-fA-F]{40}$/);
 export const sessionIdSchema = z.string().regex(/^0x[\da-fA-F]{64}$/);
@@ -38,6 +39,7 @@ const listingFields = z
 		concurrency: z.number().int().min(1).max(20).default(2),
 		baseUrl: z.string().url().optional(),
 		apiKey: codePointString({ min: 1, max: 2048 }).optional(),
+		proxy: proxyInput.optional(),
 	})
 	.strict();
 export const listingInput = z.discriminatedUnion("kind", [

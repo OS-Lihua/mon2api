@@ -52,6 +52,37 @@ function expectInputAgreement(input: unknown, valid: boolean) {
 }
 
 describe("Token2API OpenAPI", () => {
+	it("documents optional proxy input without exposing proxy configuration in resource responses", () => {
+		const validate = contract("CreateResource");
+		const input = {
+			name: "Gateway",
+			description: "Proxy transport",
+			kind: "gateway",
+			model: "model",
+			baseUrl: "https://gateway.example/v1",
+			apiKey: "upstream-key",
+			inputRate: 1,
+			outputRate: 1,
+			proxy: {
+				url: "https://proxy.example:8080",
+				username: "merchant",
+				password: "secret",
+			},
+		};
+		expect(listingInput.safeParse(input).success).toBe(true);
+		expect(validate(input), JSON.stringify(validate.errors)).toBe(true);
+		expect(
+			listingInput.safeParse({
+				...input,
+				proxy: { ...input.proxy, extra: true },
+			}).success,
+		).toBe(false);
+		expect(validate({ ...input, proxy: { ...input.proxy, extra: true } })).toBe(
+			false,
+		);
+		expect(resourceResponse.shape).not.toHaveProperty("proxy");
+		expect(resourceResponse.shape).not.toHaveProperty("proxySecret");
+	});
 	it("uses wallet cookies for management, bearer keys for usage lookup and no credentials for discovery", () => {
 		for (const path of [
 			"/merchant/resources",
