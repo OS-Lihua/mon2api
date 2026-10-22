@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { expect, it } from "vitest";
 
 const execute = promisify(execFile);
-it.each(["current", "switch", "navigation"])(
+it.each(["current", "switch", "navigation", "unconfigured"])(
 	"keeps a budget confirmation key within its initiating wallet (%s)",
 	async (scenario) => {
 		const { stdout } = await execute(process.execPath, [

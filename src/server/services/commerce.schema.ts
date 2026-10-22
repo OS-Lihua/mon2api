@@ -128,6 +128,7 @@ export const sessionResponse = z
 		listingId: z.string().cuid(),
 		consumer: addressSchema,
 		provider: addressSchema,
+		fundingSource: z.enum(["WALLET", "PREPAID"]).optional(),
 		model: z.string(),
 		inputRate: amount,
 		outputRate: amount,

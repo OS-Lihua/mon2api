@@ -51,6 +51,7 @@ const react = {
 };
 const switchWallet = process.argv[2] === "switch";
 const navigatePages = process.argv[2] === "navigation";
+const unconfigured = process.argv[2] === "unconfigured";
 let currentPath = "/console/billing";
 const routeHistory = [currentPath];
 let historyIndex = 0;
@@ -213,6 +214,7 @@ modules["~/app/_components/console/page-content"] = pageContent;
 const root = loadSource(
 	"src/app/_components/token2api-console.tsx",
 ).Token2ApiConsole;
+const childOutlet = { type: "outlet" };
 function render() {
 	let tree;
 	let count = 0;
@@ -220,15 +222,17 @@ function render() {
 		changed = false;
 		cursor = 0;
 		effects = [];
-		tree = root({ children: null });
+		tree = root({ children: childOutlet });
 		for (const effect of effects) effect();
 		if (++count > 15) throw new Error("Render loop");
 	} while (changed);
 	const result = [
 		tree,
-		pageContent.ConsolePageContent({
-			section: currentPath.split("/")[2] ?? "overview",
-		}),
+		find(tree, (node) => node === childOutlet)
+			? pageContent.ConsolePageContent({
+					section: currentPath.split("/")[2] ?? "overview",
+				})
+			: null,
 	];
 	assertSiblingKeys(result);
 	return result;
@@ -255,6 +259,50 @@ function find(tree, predicate) {
 	return find(tree.props?.children, predicate);
 }
 let tree = render();
+if (unconfigured) {
+	router.push("/console/keys");
+	tree = render();
+	const create = find(
+		tree,
+		(node) =>
+			node.type === "button" && node.props?.children?.includes?.("创建密钥"),
+	);
+	assert.ok(create);
+	create.props.onClick();
+	tree = render();
+	assert.ok(find(tree, (node) => Array.isArray(node.props?.selectedModels)));
+	data.network.escrow = "";
+	for (const section of [
+		"overview",
+		"keys",
+		"market",
+		"billing",
+		"lab",
+		"pool",
+	]) {
+		router.push(section === "overview" ? "/console" : `/console/${section}`);
+		tree = render();
+		assert.ok(
+			find(
+				tree,
+				(node) =>
+					node.type === "h2" && node.props.children === "结算市场待开通",
+			),
+		);
+		assert.equal(
+			find(tree, (node) => node === childOutlet),
+			undefined,
+			"Do not display old amounts with a fallback settlement asset",
+		);
+		assert.equal(
+			find(tree, (node) => Array.isArray(node.props?.selectedModels)),
+			undefined,
+			"Hide quote dialogs when deployment metadata is unavailable",
+		);
+	}
+	console.log("console identity scenario passed");
+	process.exit(0);
+}
 assert.equal(
 	find(tree, (node) => node.props?.["aria-current"] === "page").props.href,
 	"/console/billing",

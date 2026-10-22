@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Viewer } from "~/shared/token2api";
 import {
 	confirmSession,
+	createKey,
 	createListing,
 	discoverDirectModels,
 	openSession,
@@ -708,4 +709,14 @@ describe("native token activation credentials", () => {
 		});
 		expect(mocks.db.accessKey.create).not.toHaveBeenCalled();
 	});
+});
+
+it("does not issue legacy session keys for internal prepaid allocations", async () => {
+	mocks.db.lease.findUnique.mockResolvedValue(
+		lease({ fundingSource: "PREPAID", status: "ACTIVE" }),
+	);
+	await expect(
+		createKey(viewer, "session", "Unexpected legacy key"),
+	).rejects.toMatchObject({ code: "model_key_required", status: 409 });
+	expect(mocks.db.accessKey.create).not.toHaveBeenCalled();
 });

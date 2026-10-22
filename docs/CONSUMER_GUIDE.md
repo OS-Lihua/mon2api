@@ -102,6 +102,8 @@ curl -b "$COOKIE_JAR" "$BASE_URL/api/v1/consumer/settlements?limit=20"
 
 ## 原有预算会话兼容
 
+会话接口的 `fundingSource` 区分 `WALLET`（原钱包预算）与 `PREPAID`（平台自动建立的预付调用预留）。不能为内部预付预留创建旧式单会话 Key；使用原模型 Key 的模型权限。
+
 原有会话仍固定一位商家、一份资源和一份价格快照，不切换资金来源或报价。保留 `/consumer/sessions` 的创建、详情、确认、结算、关闭和退款接口；旧客户端也可继续用 `{"name":"Legacy app","sessionId":"会话 ID"}` 创建单会话 Key。
 
 `POST /consumer/sessions/{id}/refund` 使用 `{}` 申请退款，`GET` 查询。`PROCESSING` 为处理中，`PENDING_REVIEW` 继续保留预留。`AVAILABLE` 表示链上关闭已确认。原有钱包预算的退款进入 `claimable`，需由原钱包调用 `withdraw()`；新预付租约的退款返回统一预付账户，响应 `destination: "prepaid"` 且 `withdrawRequired: false`。不能把两类余额合并或直接转换。

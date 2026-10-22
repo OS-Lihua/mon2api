@@ -46,6 +46,7 @@ const sessionSelect = {
 	listingId: true,
 	consumer: true,
 	provider: true,
+	fundingSource: true,
 	model: true,
 	inputRate: true,
 	outputRate: true,

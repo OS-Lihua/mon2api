@@ -839,7 +839,7 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 		) : section === "keys" ? (
 			<button
 				className="button primary"
-				disabled={!viewer || !!busy}
+				disabled={!viewer || !data?.network.escrow || !!busy}
 				onClick={() => openKey()}
 				type="button"
 			>
@@ -1120,8 +1120,7 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 								</>
 							)}
 						</div>
-					) : !data.network.escrow &&
-						!["keys", "market", "billing", "lab"].includes(section) ? (
+					) : !data.network.escrow ? (
 						<div className="market-empty">
 							<div aria-hidden="true" className="market-empty-art">
 								<span>
@@ -1188,107 +1187,115 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 					)}
 				</main>
 			</div>
-			{refundSession && data && !walletMismatch && (
-				<RefundModal
-					busy={busy}
-					claimable={data.metrics.claimable}
-					error={error}
-					nativeSymbol={nativeSymbol}
-					network={data.network}
-					onClose={closeRefund}
-					onRequest={() =>
-						void run("refund", async (isCurrent) => {
-							const result = await requestRefund.mutateAsync({
-								sessionId: refundSession.id,
-							});
-							if (isCurrent()) {
-								setRefundInfo(result);
-								setNotice(
-									result.status === "AVAILABLE"
-										? "退款已可提取，请在钱包确认提现。"
-										: "退款申请已保存，处理期间停止新调用。",
-								);
+			{!!data?.network.escrow && (
+				<>
+					{refundSession && data && !walletMismatch && (
+						<RefundModal
+							busy={busy}
+							claimable={data.metrics.claimable}
+							error={error}
+							nativeSymbol={nativeSymbol}
+							network={data.network}
+							onClose={closeRefund}
+							onRequest={() =>
+								void run("refund", async (isCurrent) => {
+									const result = await requestRefund.mutateAsync({
+										sessionId: refundSession.id,
+									});
+									if (isCurrent()) {
+										setRefundInfo(result);
+										setNotice(
+											result.status === "AVAILABLE"
+												? result.destination === "prepaid"
+													? "未用预留已退回统一预付账户，可继续调用或提取。"
+													: "退款已可提取，请在钱包确认提现。"
+												: result.destination === "prepaid"
+													? "本次预留正在结算或核对，完成后退回预付账户。"
+													: "退款申请已保存，处理期间停止此会话的新调用。",
+										);
+									}
+								})
 							}
-						})
-					}
-					onWithdraw={openWithdraw}
-					refund={currentRefund}
-					session={refundSession}
-				/>
-			)}
-			{withdrawModal && data && viewer && !walletMismatch && (
-				<WithdrawModal
-					address={viewer.address}
-					busy={busy}
-					claimable={data.metrics.claimable}
-					error={error}
-					network={data.network}
-					onClose={() => setWithdrawModal(false)}
-					onSubmit={doWithdraw}
-				/>
-			)}
-			{newConnector && newConnector.model === "" && (
-				<ConnectorSetupModal
-					asset={asset}
-					busy={!!busy}
-					connection={newConnector}
-					copied={copied && !!launchCommand}
-					error={error}
-					launchCommand={launchCommand}
-					onClose={closeConnector}
-					onCopy={copy}
-					onCopyStart={copyConnectorStart}
-					onPublish={(input) =>
-						void run("publish", async (isCurrent) => {
-							await publishLocalDraft.mutateAsync({
-								id: newConnector.id,
-								...input,
-							});
-							if (!isCurrent()) return;
-							setNewConnector(null);
-							navigate("pool");
-							setNotice("模型已上架，连接器将按所选模型接单。");
-						})
-					}
-					onReset={() => resetConnector(newConnector.id)}
-				/>
-			)}
-			{newConnector && newConnector.model !== "" && (
-				<ConnectorLaunchModal
-					busy={!!busy}
-					connection={newConnector}
-					error={error}
-					launchCommand={launchCommand}
-					onClose={closeConnector}
-					onCopy={copy}
-					onCopyStart={copyConnectorStart}
-				/>
-			)}
-			{listingModal && !walletMismatch && (
-				<ListingModal
-					asset={asset}
-					busy={!!busy}
-					error={error}
-					onClose={() => !busy && setListingModal(false)}
-					onSubmit={submitListing}
-				/>
-			)}
-			{keyModal && !walletMismatch && (
-				<KeyModal
-					asset={asset}
-					busy={busy}
-					error={error}
-					keyName={keyName}
-					loading={!uiPreview && catalogQuery.isLoading}
-					models={catalog}
-					onClose={() => setKeyModal(false)}
-					onKeyNameChange={setKeyName}
-					onModelsChange={setAllowedModels}
-					onRetry={() => void catalogQuery.refetch()}
-					onSubmit={submitKey}
-					queryError={catalogQuery.error?.message ?? null}
-					selectedModels={allowedModels}
-				/>
+							onWithdraw={openWithdraw}
+							refund={currentRefund}
+							session={refundSession}
+						/>
+					)}
+					{withdrawModal && data && viewer && !walletMismatch && (
+						<WithdrawModal
+							address={viewer.address}
+							busy={busy}
+							claimable={data.metrics.claimable}
+							error={error}
+							network={data.network}
+							onClose={() => setWithdrawModal(false)}
+							onSubmit={doWithdraw}
+						/>
+					)}
+					{newConnector && newConnector.model === "" && (
+						<ConnectorSetupModal
+							asset={asset}
+							busy={!!busy}
+							connection={newConnector}
+							copied={copied && !!launchCommand}
+							error={error}
+							launchCommand={launchCommand}
+							onClose={closeConnector}
+							onCopy={copy}
+							onCopyStart={copyConnectorStart}
+							onPublish={(input) =>
+								void run("publish", async (isCurrent) => {
+									await publishLocalDraft.mutateAsync({
+										id: newConnector.id,
+										...input,
+									});
+									if (!isCurrent()) return;
+									setNewConnector(null);
+									navigate("pool");
+									setNotice("模型已上架，连接器将按所选模型接单。");
+								})
+							}
+							onReset={() => resetConnector(newConnector.id)}
+						/>
+					)}
+					{newConnector && newConnector.model !== "" && (
+						<ConnectorLaunchModal
+							busy={!!busy}
+							connection={newConnector}
+							error={error}
+							launchCommand={launchCommand}
+							onClose={closeConnector}
+							onCopy={copy}
+							onCopyStart={copyConnectorStart}
+						/>
+					)}
+					{listingModal && !walletMismatch && (
+						<ListingModal
+							asset={asset}
+							busy={!!busy}
+							error={error}
+							onClose={() => !busy && setListingModal(false)}
+							onSubmit={submitListing}
+						/>
+					)}
+					{keyModal && !walletMismatch && (
+						<KeyModal
+							asset={asset}
+							busy={busy}
+							error={error}
+							keyName={keyName}
+							loading={!uiPreview && catalogQuery.isLoading}
+							models={catalog}
+							onClose={() => setKeyModal(false)}
+							onKeyNameChange={setKeyName}
+							onModelsChange={setAllowedModels}
+							onRetry={() => void catalogQuery.refetch()}
+							onSubmit={submitKey}
+							queryError={catalogQuery.error?.message ?? null}
+							selectedModels={allowedModels}
+						/>
+					)}
+				</>
 			)}
 		</div>
 	);

@@ -340,6 +340,12 @@ export async function createKey(user: Viewer, sessionId: string, name: string) {
 			"只能为自己的活跃会话创建密钥。",
 			409,
 		);
+	if (lease.fundingSource === "PREPAID")
+		throw new AppError(
+			"model_key_required",
+			"预付调用由模型 Key 管理，请为 Key 配置模型权限。",
+			409,
+		);
 	const key = newApiKey();
 	await db.accessKey.create({
 		data: {
