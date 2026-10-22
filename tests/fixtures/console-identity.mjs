@@ -8,6 +8,14 @@ let cursor = 0;
 let effects = [];
 let changed = false;
 const react = {
+	createContext(initial) {
+		const context = { current: initial };
+		context.Provider = { context };
+		return context;
+	},
+	useContext(context) {
+		return context.current;
+	},
 	useState(initial) {
 		const index = cursor++;
 		if (!(index in slots))
@@ -41,6 +49,25 @@ const react = {
 	},
 };
 const switchWallet = process.argv[2] === "switch";
+const navigatePages = process.argv[2] === "navigation";
+let currentPath = "/console/billing";
+const routeHistory = [currentPath];
+let historyIndex = 0;
+const router = {
+	push(path) {
+		currentPath = path;
+		routeHistory.splice(++historyIndex, routeHistory.length, path);
+		changed = true;
+	},
+	replace(path) {
+		currentPath = path;
+		routeHistory[historyIndex] = path;
+		changed = true;
+	},
+	back() {
+		currentPath = routeHistory[--historyIndex];
+	},
+};
 const walletA = `0x${"11".repeat(20)}`;
 const walletB = `0x${"22".repeat(20)}`;
 let currentWallet = walletA;
@@ -83,17 +110,26 @@ const api = {
 	),
 };
 const placeholder = () => null;
+function element(type, props) {
+	if (type?.context) type.context.current = props.value;
+	return { type, props };
+}
 const modules = {
 	react,
 	"react/jsx-runtime": {
-		jsx: (type, props) => ({ type, props }),
-		jsxs: (type, props) => ({ type, props }),
+		jsx: element,
+		jsxs: element,
 		Fragment: "fragment",
 	},
 	"@rainbow-me/rainbowkit": { ConnectButton: placeholder },
 	"lucide-react": new Proxy({}, { get: () => placeholder }),
 	"next/dynamic": () => placeholder,
 	"next/image": placeholder,
+	"next/link": placeholder,
+	"next/navigation": {
+		useRouter: () => router,
+		useSelectedLayoutSegment: () => currentPath.split("/")[2] ?? null,
+	},
 	"~/app/_components/asset-glyph": { AssetGlyph: placeholder },
 	"~/app/_components/chain-glyph": {
 		ChainGlyph: placeholder,
@@ -127,40 +163,52 @@ const modules = {
 	"~/shared/ui-preview": { uiPreview: false },
 	"~/trpc/react": { api },
 };
-const output = transformSync(
-	fs.readFileSync("src/app/_components/token2api-console.tsx", "utf8"),
-	{
+const browserWindow = {
+	location: {
+		hash: "",
+		get pathname() {
+			return currentPath;
+		},
+	},
+	addEventListener: () => {},
+	removeEventListener: () => {},
+	matchMedia: () => ({
+		matches: true,
+		addEventListener: () => {},
+		removeEventListener: () => {},
+	}),
+	setTimeout: () => 0,
+	clearTimeout: () => {},
+	requestAnimationFrame: (callback) => callback(),
+};
+function loadSource(path) {
+	const output = transformSync(fs.readFileSync(path, "utf8"), {
 		loader: "tsx",
 		format: "cjs",
 		jsx: "automatic",
 		target: "es2022",
-	},
-).code;
-const module = { exports: {} };
-vm.runInNewContext(output, {
-	module,
-	exports: module.exports,
-	require: (name) => {
-		if (!(name in modules)) throw new Error(`Missing stub: ${name}`);
-		return modules[name];
-	},
-	window: {
-		location: { hash: "" },
-		history: { pushState: () => {} },
-		addEventListener: () => {},
-		removeEventListener: () => {},
-		matchMedia: () => ({
-			matches: true,
-			addEventListener: () => {},
-			removeEventListener: () => {},
-		}),
-		setTimeout: () => 0,
-		clearTimeout: () => {},
-		requestAnimationFrame: (callback) => callback(),
-	},
-	console,
-});
-const root = module.exports.Token2ApiConsole;
+	}).code;
+	const module = { exports: {} };
+	vm.runInNewContext(output, {
+		module,
+		exports: module.exports,
+		require: (name) => {
+			if (!(name in modules)) throw new Error(`Missing stub: ${name}`);
+			return modules[name];
+		},
+		window: browserWindow,
+		console,
+	});
+	return module.exports;
+}
+modules["~/app/_components/console/routes"] = loadSource(
+	"src/app/_components/console/routes.ts",
+);
+const pageContent = loadSource("src/app/_components/console/page-content.tsx");
+modules["~/app/_components/console/page-content"] = pageContent;
+const root = loadSource(
+	"src/app/_components/token2api-console.tsx",
+).Token2ApiConsole;
 function render() {
 	let tree;
 	let count = 0;
@@ -168,11 +216,16 @@ function render() {
 		changed = false;
 		cursor = 0;
 		effects = [];
-		tree = root();
+		tree = root({ children: null });
 		for (const effect of effects) effect();
 		if (++count > 15) throw new Error("Render loop");
 	} while (changed);
-	return tree;
+	return [
+		tree,
+		pageContent.ConsolePageContent({
+			section: currentPath.split("/")[2] ?? "overview",
+		}),
+	];
 }
 function find(tree, predicate) {
 	if (!tree || typeof tree !== "object") return undefined;
@@ -182,8 +235,10 @@ function find(tree, predicate) {
 	return find(tree.props?.children, predicate);
 }
 let tree = render();
-slots[0] = "billing";
-tree = render();
+assert.equal(
+	find(tree, (node) => node.props?.["aria-current"] === "page").props.href,
+	"/console/billing",
+);
 const billing = find(
 	tree,
 	(node) => typeof node.props?.onConfirm === "function",
@@ -219,6 +274,37 @@ if (switchWallet) {
 	);
 } else {
 	assert.ok(keyView, "The initiating wallet receives its one-time key");
+	assert.equal(currentPath, "/console/keys");
 	assert.equal(keyView.props.data.viewer.address, walletA);
+	if (navigatePages) {
+		keyView.props.navigate("lab");
+		tree = render();
+		let lab = find(
+			tree,
+			(node) => typeof node.props?.onPromptChange === "function",
+		);
+		lab.props.onPromptChange("Keep this draft while comparing resources.");
+		lab.props.navigate("market");
+		tree = render();
+		assert.equal(currentPath, "/console/market");
+		router.back();
+		tree = render();
+		lab = find(
+			tree,
+			(node) => typeof node.props?.onPromptChange === "function",
+		);
+		assert.equal(
+			lab.props.prompt,
+			"Keep this draft while comparing resources.",
+		);
+		lab.props.navigate("keys");
+		tree = render();
+		assert.ok(
+			find(
+				tree,
+				(node) => node.props?.newKey?.key === "AUDIT_ONLY_WALLET_A_KEY",
+			),
+		);
+	}
 }
 console.log("console identity scenario passed");

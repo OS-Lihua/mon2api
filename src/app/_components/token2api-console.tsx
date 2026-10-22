@@ -24,7 +24,15 @@ import {
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSelectedLayoutSegment } from "next/navigation";
+import {
+	type FormEvent,
+	type ReactNode,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { AssetGlyph } from "~/app/_components/asset-glyph";
 import {
 	ChainGlyph,
@@ -46,6 +54,11 @@ import {
 } from "~/app/_components/console/format";
 import type { ChatMessage } from "~/app/_components/console/lab-section";
 import { OverviewSection } from "~/app/_components/console/overview-section";
+import { ConsolePagesContext } from "~/app/_components/console/page-content";
+import {
+	consoleRoutes,
+	isConsoleSection,
+} from "~/app/_components/console/routes";
 import { Badge, Loading } from "~/app/_components/console/ui";
 import { useToken2ApiWallet } from "~/app/_components/wallet-provider";
 import { connectorStartCommand } from "~/shared/connector-distribution";
@@ -135,30 +148,16 @@ const navigation = [
 	{ id: "billing", label: "账单与结算", icon: Blocks },
 	{ id: "keys", label: "API 密钥", icon: KeyRound },
 ] satisfies { id: Section; label: string; icon: LucideIcon }[];
-const titles: Record<Section, string> = {
-	overview: "概览",
-	market: "资源市场",
-	pool: "我的资源",
-	lab: "调用实验室",
-	billing: "账单与结算",
-	keys: "API 密钥",
-};
-const sectionDescriptions: Record<Section, string> = {
-	overview: "查看资源、调用活动与当前市场的结算情况。",
-	market: "比较模型与报价，选择适合你的调用资源。",
-	pool: "接入并管理资源，查看连接状态与挂牌价格。",
-	lab: "选择预算会话，发送请求并核对调用用量。",
-	billing: "核对预算、用量与链上结算，管理未用余额。",
-	keys: "为应用管理独立密钥，每个密钥绑定一个预算会话。",
-};
-
-export function Token2ApiConsole() {
+export function Token2ApiConsole({ children }: { children: ReactNode }) {
+	const router = useRouter();
+	const segment = useSelectedLayoutSegment();
+	const section = isConsoleSection(segment) ? segment : "overview";
+	const previousSectionRef = useRef(section);
 	const {
 		getWallet,
 		address: connectedAddress,
 		isConnected,
 	} = useToken2ApiWallet();
-	const [section, setSection] = useState<Section>("overview");
 	const [billingTarget, setBillingTarget] = useState(false);
 	const [mobileOpen, setMobileOpen] = useState(false);
 	const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -283,19 +282,18 @@ export function Token2ApiConsole() {
 		window.requestAnimationFrame(() => menuButtonRef.current?.focus());
 	};
 	useEffect(() => {
-		const readSection = () => {
-			const target = navigation.find(
-				(item) => item.id === window.location.hash.slice(1),
-			);
-			if (target) {
-				setSection(target.id);
-				setError(null);
-			}
-		};
-		readSection();
-		window.addEventListener("hashchange", readSection);
-		return () => window.removeEventListener("hashchange", readSection);
-	}, []);
+		const target = window.location.hash.slice(1);
+		if (window.location.pathname === "/console" && isConsoleSection(target)) {
+			router.replace(consoleRoutes[target].href, { scroll: false });
+		}
+	}, [router]);
+	useEffect(() => {
+		if (previousSectionRef.current === section) return;
+		previousSectionRef.current = section;
+		setMobileOpen(false);
+		setError(null);
+		window.requestAnimationFrame(() => headingRef.current?.focus());
+	}, [section]);
 	useEffect(() => {
 		const desktop = window.matchMedia("(min-width: 701px)");
 		const onResize = () => {
@@ -338,7 +336,7 @@ export function Token2ApiConsole() {
 		const focusTimeout = window.setTimeout(() => {
 			if (!sidebarRef.current?.contains(document.activeElement)) {
 				sidebarRef.current
-					?.querySelector<HTMLButtonElement>(".nav-item.active")
+					?.querySelector<HTMLAnchorElement>(".nav-item.active")
 					?.focus();
 			}
 		}, 220);
@@ -348,13 +346,19 @@ export function Token2ApiConsole() {
 			window.removeEventListener("keydown", onEscape);
 		};
 	}, [mobileOpen]);
-	const navigate = (value: Section) => {
-		setSection(value);
+	const prepareNavigation = (value: Section) => {
 		setError(null);
-		window.history.pushState(null, "", `#${value}`);
 		setBillingTarget(false);
 		setMobileOpen(false);
-		window.requestAnimationFrame(() => headingRef.current?.focus());
+		if (value === section) {
+			window.requestAnimationFrame(() => headingRef.current?.focus());
+		}
+	};
+	const navigate = (value: Section) => {
+		prepareNavigation(value);
+		if (value !== section) {
+			router.push(consoleRoutes[value].href, { scroll: false });
+		}
 	};
 	const run = async (
 		name: string,
@@ -619,6 +623,134 @@ export function Token2ApiConsole() {
 		}
 		setRentListing(listing);
 	};
+	const pages: Record<Section, ReactNode> | null = data
+		? {
+				overview: (
+					<OverviewSection
+						busy={!!busy}
+						data={data}
+						nativeSymbol={nativeSymbol}
+						navigate={navigate}
+						onRent={openRent}
+						sessions={sessions}
+					/>
+				),
+				market: <MarketSection busy={!!busy} data={data} onRent={openRent} />,
+				pool: (
+					<PoolSection
+						busy={!!busy}
+						data={data}
+						navigate={navigate}
+						onConnect={(item) => {
+							if (item.status === "DISCOVERING")
+								setNewConnector({ id: item.id, token: "", model: "" });
+							else
+								void run("connector", async (isCurrent) => {
+									const result = await rotateConnector.mutateAsync({
+										id: item.id,
+									});
+									if (isCurrent())
+										setNewConnector({ ...result, model: item.model });
+								});
+						}}
+						onToggle={(item) =>
+							void run("toggle", async () => {
+								await toggleListing.mutateAsync({
+									id: item.id,
+									enabled: !item.enabled,
+								});
+								setNotice(
+									item.enabled
+										? "资源已暂停，停止受理新调用。"
+										: "资源已上架，请在列表核对连接状态。",
+								);
+							})
+						}
+					/>
+				),
+				lab: (
+					<LabSection
+						asset={asset}
+						busy={busy}
+						error={chat.error?.message ?? null}
+						messages={messages}
+						navigate={navigate}
+						onNewConversation={resetConversation}
+						onOpenBilling={() => {
+							navigate("billing");
+							setBillingTarget(true);
+						}}
+						onPromptChange={setPrompt}
+						onSelectSession={(value) => {
+							setSelectedSession(value);
+							resetConversation();
+						}}
+						onSubmit={submitChat}
+						prompt={prompt}
+						sessionId={sessionId}
+						sessions={sessions}
+					/>
+				),
+				billing: (
+					<BillingSection
+						busy={!!busy}
+						data={data}
+						focusRequests={billingTarget}
+						onConfirm={(id) =>
+							void run("confirm", async (isCurrent) => {
+								const confirmed = await confirmSession.mutateAsync({
+									id,
+								});
+								if (!isCurrent()) return;
+								if (confirmed.connection) {
+									setNewKey(confirmed.connection);
+									navigate("keys");
+								}
+								setNotice("链上预算已确认，可以开始调用或创建 API 密钥。");
+							})
+						}
+						onFocused={() => setBillingTarget(false)}
+						onRefund={(session) => {
+							setError(null);
+							setRefundSession(session);
+							setRefundInfo(null);
+						}}
+						onSelfClose={selfClose}
+						onSettle={(id) =>
+							void run("settle", async () => {
+								await settle.mutateAsync({ sessionId: id });
+								setNotice("该会话的待结算费用已提交链上。");
+							})
+						}
+						onWithdraw={openWithdraw}
+					/>
+				),
+				keys: (
+					<KeysSection
+						busy={!!busy}
+						copied={copied}
+						data={data}
+						hasSessions={sessions.length > 0}
+						key={identity}
+						model={selected?.model}
+						navigate={navigate}
+						newKey={newKey}
+						onCopy={(value) => void copy(value)}
+						onCreateKey={() => {
+							setError(null);
+							setKeyModal(true);
+						}}
+						onRevoke={(id) =>
+							void run("revoke", async () => {
+								await revokeKey.mutateAsync({ id });
+								setNewKey(null);
+								setNotice("密钥已撤销，不能再用于新请求。");
+							})
+						}
+					/>
+				),
+			}
+		: null;
 	const headingAction =
 		section === "overview" ? (
 			<button
@@ -704,12 +836,13 @@ export function Token2ApiConsole() {
 				<span className="sidebar-caption">工作台</span>
 				<nav aria-label="主导航">
 					{navigation.map(({ id, label, icon: Icon }) => (
-						<button
+						<Link
 							aria-current={section === id ? "page" : undefined}
 							className={`nav-item ${section === id ? "active" : ""}`}
+							href={consoleRoutes[id].href}
 							key={id}
-							onClick={() => navigate(id)}
-							type="button"
+							onNavigate={() => prepareNavigation(id)}
+							scroll={false}
 						>
 							<Icon size={17} strokeWidth={1.6} />
 							<span>{label}</span>
@@ -718,7 +851,7 @@ export function Token2ApiConsole() {
 									{onlineListings(data.listings)}
 								</span>
 							)}
-						</button>
+						</Link>
 					))}
 				</nav>
 				<div className="sidebar-bottom">
@@ -777,7 +910,7 @@ export function Token2ApiConsole() {
 						<Menu size={21} />
 					</button>
 					<div className="breadcrumb">
-						<strong>{titles[section]}</strong>
+						<strong>{consoleRoutes[section].title}</strong>
 					</div>
 					<div className="topbar-actions">
 						<a className="text-link" href="/admin">
@@ -819,10 +952,10 @@ export function Token2ApiConsole() {
 						<div>
 							<span className="workspace-caption">TOKEN2API / 工作区</span>
 							<h1 ref={headingRef} tabIndex={-1}>
-								{titles[section]}
+								{consoleRoutes[section].title}
 							</h1>
 							<p className="workspace-description">
-								{sectionDescriptions[section]}
+								{consoleRoutes[section].description}
 							</p>
 						</div>
 						{headingAction}
@@ -989,134 +1122,9 @@ export function Token2ApiConsole() {
 									<span>连接钱包并签名登录后开始使用。</span>
 								</div>
 							)}
-							{section === "overview" && (
-								<OverviewSection
-									busy={!!busy}
-									data={data}
-									nativeSymbol={nativeSymbol}
-									navigate={navigate}
-									onRent={openRent}
-									sessions={sessions}
-								/>
-							)}
-							{section === "market" && (
-								<MarketSection busy={!!busy} data={data} onRent={openRent} />
-							)}
-							{section === "pool" && (
-								<PoolSection
-									busy={!!busy}
-									data={data}
-									navigate={navigate}
-									onConnect={(item) => {
-										if (item.status === "DISCOVERING")
-											setNewConnector({ id: item.id, token: "", model: "" });
-										else
-											void run("connector", async (isCurrent) => {
-												const result = await rotateConnector.mutateAsync({
-													id: item.id,
-												});
-												if (isCurrent())
-													setNewConnector({ ...result, model: item.model });
-											});
-									}}
-									onToggle={(item) =>
-										void run("toggle", async () => {
-											await toggleListing.mutateAsync({
-												id: item.id,
-												enabled: !item.enabled,
-											});
-											setNotice(
-												item.enabled
-													? "资源已暂停，停止受理新调用。"
-													: "资源已上架，请在列表核对连接状态。",
-											);
-										})
-									}
-								/>
-							)}
-							{section === "lab" && (
-								<LabSection
-									asset={asset}
-									busy={busy}
-									error={chat.error?.message ?? null}
-									messages={messages}
-									navigate={navigate}
-									onNewConversation={resetConversation}
-									onOpenBilling={() => {
-										navigate("billing");
-										setBillingTarget(true);
-									}}
-									onPromptChange={setPrompt}
-									onSelectSession={(value) => {
-										setSelectedSession(value);
-										resetConversation();
-									}}
-									onSubmit={submitChat}
-									prompt={prompt}
-									sessionId={sessionId}
-									sessions={sessions}
-								/>
-							)}
-							{section === "billing" && (
-								<BillingSection
-									busy={!!busy}
-									data={data}
-									focusRequests={billingTarget}
-									onConfirm={(id) =>
-										void run("confirm", async (isCurrent) => {
-											const confirmed = await confirmSession.mutateAsync({
-												id,
-											});
-											if (!isCurrent()) return;
-											if (confirmed.connection) {
-												setNewKey(confirmed.connection);
-												navigate("keys");
-											}
-											setNotice(
-												"链上预算已确认，可以开始调用或创建 API 密钥。",
-											);
-										})
-									}
-									onFocused={() => setBillingTarget(false)}
-									onRefund={(session) => {
-										setError(null);
-										setRefundSession(session);
-										setRefundInfo(null);
-									}}
-									onSelfClose={selfClose}
-									onSettle={(id) =>
-										void run("settle", async () => {
-											await settle.mutateAsync({ sessionId: id });
-											setNotice("该会话的待结算费用已提交链上。");
-										})
-									}
-									onWithdraw={openWithdraw}
-								/>
-							)}
-							{section === "keys" && (
-								<KeysSection
-									busy={!!busy}
-									copied={copied}
-									data={data}
-									hasSessions={sessions.length > 0}
-									key={identity}
-									model={selected?.model}
-									navigate={navigate}
-									newKey={newKey}
-									onCopy={(value) => void copy(value)}
-									onCreateKey={() => {
-										setError(null);
-										setKeyModal(true);
-									}}
-									onRevoke={(id) =>
-										void run("revoke", async () => {
-											await revokeKey.mutateAsync({ id });
-											setNewKey(null);
-											setNotice("密钥已撤销，不能再用于新请求。");
-										})
-									}
-								/>
-							)}
+							<ConsolePagesContext.Provider value={pages}>
+								{children}
+							</ConsolePagesContext.Provider>
 						</>
 					)}
 				</main>
@@ -1192,7 +1200,7 @@ export function Token2ApiConsole() {
 							});
 							if (!isCurrent()) return;
 							setNewConnector(null);
-							setSection("pool");
+							navigate("pool");
 							setNotice("模型已上架，连接器将按所选模型接单。");
 						})
 					}

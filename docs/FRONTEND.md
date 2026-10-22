@@ -13,7 +13,9 @@ Token2API 使用 Next.js、React、TypeScript、Tailwind CSS、Lucide 与现有 
 
 ## 用户路径
 
-首页的调用者和商家入口分别进入 `/console#market` 和 `/console#pool`；管理员进入 `/admin`。控制台支持各分区的 hash 链接和浏览器返回。
+控制台使用 Next.js App Router 的文件路由。概览为 `/console`，资源市场为 `/console/market`，我的资源为 `/console/pool`，调用实验室为 `/console/lab`，账单为 `/console/billing`，API 密钥为 `/console/keys`；管理员进入 `/admin`。每个地址可直接访问、刷新或在新标签页打开，浏览器前进和后退同步更新内容与导航。未知地址返回 404。首页的调用者和商家入口分别进入市场与我的资源页面。
+
+`console/layout.tsx` 保留钱包 Provider 与控制台的共享操作状态，子路由选择对应页面并提供独立标题。页内导航沿用 Next.js Link 和 Router，不使用手写 history 切换。切换控制台页面时保留调用草稿、当前预算会话及本次返回的密钥；钱包身份变化时仍清除敏感状态。导航后聚焦当前页面标题并关闭手机菜单。已有 `/console#market` 等已知分区链接会替换为对应的新地址。
 
 资源市场每页 9 条，支持名称、模型、提供者搜索，可用状态与接入类型筛选，输入价、输出价及上架时间排序。默认表格用于比较，也可切换卡片。创建预算再次展示网络、资产、价格快照与手续费币种。预算支持精确到六位小数，实际限制仍由共享金额解析和服务端校验。
 

@@ -157,4 +157,4 @@ verify顺序运行格式/lint、TypeScript、Vitest和生产构建。端到端sm
 
 ## 仅预览前端
 
-无需 Docker、数据库或本地链，安装依赖后运行 `NEXT_PUBLIC_UI_PREVIEW=true SKIP_ENV_VALIDATION=1 pnpm dev:web`，访问 `/console`。此开关仅在 development 生效；页面明确显示模拟资源，所有后端写入均拒绝执行。
+无需 Docker、数据库或本地链，安装依赖后运行 `NEXT_PUBLIC_UI_PREVIEW=true SKIP_ENV_VALIDATION=1 pnpm dev:web`，访问 `/console` 或直接打开 `/console/market`。控制台各模块使用独立文件路由，支持刷新、深链接和浏览器前进后退；共享布局保留钱包及操作状态。此开关仅在 development 生效；页面明确显示模拟资源，所有后端写入均拒绝执行。

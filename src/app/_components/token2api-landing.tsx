@@ -387,10 +387,10 @@ export function Token2ApiLanding() {
 								按实际用量结算，费用、收入与退款都有账可查。
 							</p>
 							<div className={styles.heroActions}>
-								<Link className={styles.primaryButton} href="/console#market">
+								<Link className={styles.primaryButton} href="/console/market">
 									浏览资源市场 <ArrowUpRight size={19} />
 								</Link>
-								<Link className={styles.textButton} href="/console#pool">
+								<Link className={styles.textButton} href="/console/pool">
 									接入我的资源 <ArrowRight size={17} />
 								</Link>
 							</div>
@@ -436,14 +436,14 @@ export function Token2ApiLanding() {
 						{
 							title: "调用者",
 							text: "比较模型与价格，锁定预算，获取应用密钥。",
-							href: "/console#market",
+							href: "/console/market",
 							action: "选择调用资源",
 							icon: Code2,
 						},
 						{
 							title: "商家",
 							text: "接入网关或 pool connector，管理资源与收入。",
-							href: "/console#pool",
+							href: "/console/pool",
 							action: "管理我的资源",
 							icon: Layers3,
 						},
