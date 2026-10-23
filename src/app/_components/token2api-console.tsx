@@ -850,9 +850,13 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 
 	return (
 		<div className="app-shell">
-			<a className="skip-link" href="#console-main">
+			<Link
+				className="skip-link"
+				href="#console-main"
+				onNavigate={() => headingRef.current?.focus()}
+			>
 				跳到主要内容
-			</a>
+			</Link>
 			<button
 				aria-hidden={!mobileOpen}
 				aria-label="关闭导航菜单"
