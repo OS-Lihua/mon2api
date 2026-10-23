@@ -132,6 +132,8 @@ jobs:
           npm install --global vercel@63.1.0
       - name: Pull production settings
         run: vercel pull --yes --environment=production
+      - name: Require production migrations to be applied separately
+        run: node --env-file=.vercel/.env.production.local node_modules/prisma/build/index.js migrate status
       - name: Build the production deployment
         run: vercel build --prod --yes
       - name: Deploy the prebuilt output

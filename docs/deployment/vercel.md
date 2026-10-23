@@ -51,7 +51,7 @@ PostgreSQL 可以直接在 Vercel Marketplace 创建并绑定到项目，由集�
 3. 在 Vercel production 保留上文的运行环境配置。工作流使用 `vercel pull`、`vercel build --prod`、`vercel deploy --prebuilt --prod`，产物不上传为 GitHub artifact，日志不打印环境文件。Actions 与 Vercel 都使用 Node.js 24；CLI 固定为已验收版本。
 4. 推送 `main` 后，在 Actions 查看 `Verify` 与 `Deploy production`。成功的部署记录和步骤摘要包含产物地址与提交 SHA；工作流还检查首页、控制台、密钥、账单、后台和 OpenAPI 地址。检查仅验证 Web 与公开接口可访问，资金链路仍需真实钱包验收。
 
-`vercel.json` 将 `git.deploymentEnabled` 设置为 `false`，由 Actions 统一控制部署。不要另外启用 Vercel Git 自动部署或调用 Deploy Hook，否则会绕过校验或重复发布。发布前检查提交仍是最新 `main`，防止旧工作流重试覆盖新版本。正在进行的发布不会被后续推送中断。
+`vercel.json` 将 `git.deploymentEnabled` 设置为 `false`，由 Actions 统一控制部署。不要另外启用 Vercel Git 自动部署或调用 Deploy Hook，否则会绕过校验或重复发布。发布前检查提交仍是最新 `main`，防止旧工作流重试覆盖新版本。正在进行的发布不会被后续推送中断。发布阶段对生产库只运行 `prisma migrate status`；有未执行或失败的迁移时停止发布，先单独处理 `DB Migrate`，再重试发布。
 
 ### 独立执行数据库迁移
 
