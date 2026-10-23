@@ -112,6 +112,25 @@ describe("actual tRPC route input limits", () => {
 			expect.objectContaining({ headers: expect.any(Headers) }),
 		);
 	});
+	it("accepts framework-wrapped requests without accessing their private state", async () => {
+		const request = new Proxy(
+			post(JSON.stringify({ json: { message: "bounded" } }), "write", {
+				cookie: "token2api_session=local-test",
+			}),
+			{
+				get(target, property) {
+					const value: unknown = Reflect.get(target, property, target);
+					return typeof value === "function" ? value.bind(target) : value;
+				},
+			},
+		);
+		const response = await POST(request);
+		expect(response.status).toBe(200);
+		expect(mocks.run).toHaveBeenCalledOnce();
+		expect(mocks.context).toHaveBeenCalledWith(
+			expect.objectContaining({ headers: expect.any(Headers) }),
+		);
+	});
 	it("counts UTF-8 bytes rather than characters", async () => {
 		const response = await POST(
 			post(

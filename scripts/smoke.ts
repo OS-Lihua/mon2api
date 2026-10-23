@@ -1,14 +1,25 @@
 import { randomUUID } from "node:crypto";
 import OpenAI from "openai";
+import { createPublicClient, type Hex, http, isHex } from "viem";
 import { z } from "zod";
+import {
+	isNativeAsset,
+	SETTLEMENT_ASSETS,
+	toChainAmount,
+} from "../src/shared/settlement-asset";
 
 // This script intentionally has no configurable remote target or real signer.
 const origin = "http://localhost:3000";
-const hash = z.string().regex(/^0x[\da-fA-F]{64}$/);
+const hash = z
+	.string()
+	.regex(/^0x[\da-fA-F]{64}$/)
+	.refine((value): value is Hex => isHex(value));
 const integer = z.number().int().nonnegative();
 const snapshotSchema = z.object({
 	viewer: z.object({ address: z.string(), demo: z.boolean() }).nullable(),
 	network: z.object({
+		asset: z.enum(SETTLEMENT_ASSETS),
+		tokenDecimals: z.number().int().min(6).max(18),
 		mode: z.enum(["local", "evm"]),
 		chainId: z.number().int(),
 		rpcUrl: z.string().url(),
@@ -376,7 +387,8 @@ async function main() {
 	);
 	check(
 		BigInt(state.metrics.claimable) >=
-			BigInt(beforeCloseClaimable) + BigInt(refund),
+			BigInt(beforeCloseClaimable) +
+				toChainAmount(refund, state.network.asset, state.network.tokenDecimals),
 		"Unused budget did not become a consumer refund.",
 	);
 	const accessKey = state.keys.find((item) => item.sessionId === opened.id);
@@ -419,15 +431,29 @@ async function main() {
 		z.object({ mode: z.literal("demo"), txHash: hash }),
 	);
 	const providerAfter = await snapshot();
+	const client = createPublicClient({
+		transport: http(providerAfter.network.rpcUrl),
+	});
+	const receipt = await client.getTransactionReceipt({
+		hash: withdrawal.txHash,
+	});
+	check(receipt.status === "success", "Provider withdrawal receipt failed.");
+	const gasCost = isNativeAsset(providerAfter.network.asset)
+		? receipt.gasUsed * receipt.effectiveGasPrice
+		: 0n;
 	check(
 		providerAfter.metrics.walletBalance !== null,
 		"Provider balance could not be read after withdrawal.",
 	);
 	check(
-		BigInt(providerAfter.metrics.walletBalance) >=
+		BigInt(providerAfter.metrics.walletBalance) + gasCost ===
 			BigInt(providerBefore.metrics.walletBalance) +
 				BigInt(providerBefore.metrics.claimable),
 		"Provider wallet did not receive claimable revenue.",
+	);
+	check(
+		providerAfter.metrics.claimable === "0",
+		"Provider withdrawal did not clear its claimable balance.",
 	);
 	pass(
 		`provider wallet received settlement income; withdrawal tx ${withdrawal.txHash}`,

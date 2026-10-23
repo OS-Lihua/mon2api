@@ -1,6 +1,6 @@
 # CI/CD 与可选 GitHub Actions 模板
 
-自动校验和 Vercel 发布已移至 [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)。Pull Request 运行校验；推送 `main` 或在 `main` 手动运行工作流时，校验成功后发布到 Vercel production。校验使用临时 PostgreSQL 和本地 EVM，不读取生产凭证。`pnpm verify` 按顺序执行格式、lint、类型、测试和生产构建，之后运行 HTTP、钱包登录和账本恢复验收。
+自动校验和 Vercel 发布已移至 [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)。Pull Request 运行校验；推送 `main` 或在 `main` 手动运行工作流时，校验成功后发布到 Vercel production。校验使用临时 PostgreSQL 和本地 EVM，不读取生产凭证。`pnpm verify` 按顺序执行格式、lint、类型、测试和生产构建，之后运行原生资产与 ERC20 模型预付路由、HTTP、钱包登录和账本恢复验收。
 
 正式发布使用 GitHub `production` Environment 中的 `VERCEL_TOKEN`、`VERCEL_ORG_ID` 和 `VERCEL_PROJECT_ID`。所有 Actions 固定到提交 SHA，Vercel CLI 固定版本，Node.js 使用 24。校验未通过时不会发布。`vercel.json` 关闭 Vercel Git 自动部署，避免绕过校验或重复发布。构建读取 Vercel production 配置，`vercel deploy --prebuilt --prod` 上传构建产物。
 

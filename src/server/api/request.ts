@@ -63,6 +63,15 @@ export function withTRPCRequestLimits(
 				? denied(error.status, error.message)
 				: denied(400, "Request body could not be read");
 		}
-		return handler(new Request(request, { body: text }));
+		// Frameworks can wrap Request in a Proxy. Native Request cloning reads
+		// private fields directly, so rebuild from the public request properties.
+		return handler(
+			new Request(request.url, {
+				method: request.method,
+				headers: Array.from(request.headers.entries()),
+				signal: request.signal,
+				body: text,
+			}),
+		);
 	};
 }

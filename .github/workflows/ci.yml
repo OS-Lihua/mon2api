@@ -60,6 +60,10 @@ jobs:
           pnpm db:seed
       - name: Check formatting, lint, types, tests and production build
         run: pnpm verify
+      - name: Test prepaid model routing with native and ERC20 settlement
+        run: |
+          pnpm test:native
+          pnpm test:stable
       - name: Test production HTTP and ledger recovery on local EVM
         shell: bash
         run: |

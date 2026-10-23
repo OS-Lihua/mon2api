@@ -6,6 +6,10 @@ import { PrismaClient } from "@prisma/client";
 import { createPublicClient, getAddress, type Hex, http } from "viem";
 import { z } from "zod";
 import { escrowAbi } from "../src/lib/abi";
+import {
+	SETTLEMENT_ASSETS,
+	toChainAmount,
+} from "../src/shared/settlement-asset";
 
 /**
  * Explicit local fault injection, never part of the ordinary unit test suite.
@@ -18,6 +22,8 @@ const origin = "http://localhost:3000";
 const hash = z.string().regex(/^0x[\da-fA-F]{64}$/);
 const address = z.string().regex(/^0x[\da-fA-F]{40}$/);
 const configSchema = z.object({
+	asset: z.enum(SETTLEMENT_ASSETS),
+	tokenDecimals: z.number().int().min(6).max(18).optional(),
 	mode: z.literal("local"),
 	chainId: z.literal(31337),
 	rpcUrl: z.string().url(),
@@ -188,7 +194,8 @@ async function scenario(withLaterUsage: boolean) {
 		});
 	const originalChain = await readChain();
 	check(
-		originalChain[4] === BigInt(job.cumulative) &&
+		originalChain[4] ===
+			toChainAmount(job.cumulative, config.asset, config.tokenDecimals) &&
 			originalChain[5] === 1n &&
 			!originalChain[8],
 		"The original settlement was not confirmed on the local EVM.",
@@ -288,7 +295,8 @@ async function scenario(withLaterUsage: boolean) {
 	);
 	const afterChain = await readChain();
 	check(
-		afterChain[4] === BigInt(expectedSpent) &&
+		afterChain[4] ===
+			toChainAmount(expectedSpent, config.asset, config.tokenDecimals) &&
 			afterChain[5] === (withLaterUsage ? 2n : originalChain[5]),
 		"Recovery must charge each bill exactly once and preserve the original batch nonce.",
 	);
@@ -340,7 +348,12 @@ async function scenario(withLaterUsage: boolean) {
 	);
 	check(
 		(await claimable()) >=
-			beforeRefund + BigInt(session.budget - expectedSpent),
+			beforeRefund +
+				toChainAmount(
+					session.budget - expectedSpent,
+					config.asset,
+					config.tokenDecimals,
+				),
 		"Recovered test session did not release its unused budget to the consumer.",
 	);
 	check(

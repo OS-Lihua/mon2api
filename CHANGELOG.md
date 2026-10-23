@@ -9,6 +9,8 @@ Tag format:
 
 ## Unreleased
 
+- 修复 Next.js 包装的 POST Request 在 Node.js 24 上重建时触发私有字段错误的问题，保留请求头、取消信号、160 KiB 请求体限制和读取超时，恢复 tRPC 钱包登录与表单提交。
+
 - 修复 Node.js 24 上网关代理的 fetch 与 Undici dispatcher 版本不匹配，统一代理传输实现并保留原生 Request、响应状态与流式响应；与 Vercel 使用相同 Node 主版本进行 CI 校验。
 
 - 启用 GitHub Actions 校验与 Vercel 自动发布：推送 main 后先运行隔离数据库、本地 EVM、pnpm verify 和 HTTP 恢复测试，成功后发布 production 构建产物。生产数据库迁移保留为独立手动工作流，凭证使用分离的 GitHub Environments；关闭 Vercel 重复 Git 自动部署。
