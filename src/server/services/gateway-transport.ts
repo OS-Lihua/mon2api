@@ -1,4 +1,4 @@
-import { ProxyAgent } from "undici";
+import { ProxyAgent, fetch as proxyFetch } from "undici";
 import { type GatewayProxy, proxyInput } from "~/shared/gateway-config";
 
 /** A resource-scoped dispatcher; never changes the process-wide proxy or retries. */
@@ -18,9 +18,37 @@ export async function withGatewayTransport<T>(
 				}
 			: {}),
 	});
-	const fetcher: typeof fetch = (input, init) => {
-		const options = { ...init, dispatcher, redirect: "error" as const };
-		return fetch(input, options);
+	const fetcher: typeof fetch = async (input, init) => {
+		// Node 24's native fetch and Undici 8 use different dispatcher protocols.
+		// Normalize the bounded JSON request across their Request/Response classes.
+		const options = { ...init, redirect: "error" as const, duplex: "half" };
+		const request = new Request(input, options);
+		const response = await proxyFetch(request.url, {
+			dispatcher,
+			method: request.method,
+			headers: Array.from(request.headers.entries()),
+			body: request.body ? await request.arrayBuffer() : undefined,
+			signal: request.signal,
+			redirect: "error",
+		});
+		const reader = response.body?.getReader();
+		const body = reader
+			? new ReadableStream<Uint8Array>({
+					async pull(controller) {
+						const chunk = await reader.read();
+						if (chunk.done) controller.close();
+						else controller.enqueue(chunk.value);
+					},
+					cancel(reason) {
+						return reader.cancel(reason);
+					},
+				})
+			: null;
+		return new Response(body, {
+			status: response.status,
+			statusText: response.statusText,
+			headers: Array.from(response.headers.entries()),
+		});
 	};
 	try {
 		return await action(fetcher);

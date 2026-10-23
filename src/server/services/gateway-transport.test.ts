@@ -57,6 +57,16 @@ describe("real HTTP gateway proxy transport", () => {
 					res.end(JSON.stringify({ data: [{ id: "test-model" }] }));
 					return;
 				}
+				if (req.url === "/echo") {
+					let body = "";
+					req.on("data", (chunk) => {
+						body += chunk;
+					});
+					req.on("end", () => {
+						res.writeHead(201, { "x-result": "created" }).end(body);
+					});
+					return;
+				}
 				if (req.url !== "/v1/chat/completions") {
 					res.writeHead(404).end();
 					return;
@@ -126,7 +136,23 @@ describe("real HTTP gateway proxy transport", () => {
 			outputTokens: 2,
 			pendingReview: false,
 		});
-		expect(auth).toHaveLength(2);
+		await withGatewayTransport(config, async (fetcher) => {
+			const response = await fetcher(
+				new Request(`${upstream}/echo`, {
+					method: "POST",
+					headers: {
+						authorization: "Bearer request-key",
+						"content-type": "application/json",
+					},
+					body: JSON.stringify({ message: "native Request body" }),
+				}),
+			);
+			expect(response).toBeInstanceOf(Response);
+			expect(response.status).toBe(201);
+			expect(response.headers.get("x-result")).toBe("created");
+			expect(await response.json()).toEqual({ message: "native Request body" });
+		});
+		expect(auth).toHaveLength(3);
 		expect(
 			auth.every(
 				(value) =>
@@ -137,12 +163,13 @@ describe("real HTTP gateway proxy transport", () => {
 		expect(headers).toEqual([
 			{ authorization: "Bearer upstream-key", proxy: undefined },
 			{ authorization: "Bearer upstream-key", proxy: undefined },
+			{ authorization: "Bearer request-key", proxy: undefined },
 		]);
 		// Omitting the optional proxy really makes a direct request.
 		await withGatewayTransport(undefined, (fetcher) =>
 			discoverModels(`${upstream}/v1`, "direct-key", fetcher),
 		);
-		expect(auth).toHaveLength(2);
+		expect(auth).toHaveLength(3);
 		expect(headers.at(-1)?.authorization).toBe("Bearer direct-key");
 	});
 	it("does not fall back to direct access if the chosen proxy refuses authentication", async () => {
