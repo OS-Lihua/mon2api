@@ -106,7 +106,12 @@ async function scenario(withLaterUsage: boolean) {
 		(await client.getChainId()) === 31337,
 		"Fault injection refuses any chain other than local 31337.",
 	);
-	const state = await trpc("snapshot", null, snapshotSchema, false);
+	const state = await trpc(
+		"snapshot",
+		{ gatewayOnly: false },
+		snapshotSchema,
+		false,
+	);
 	check(
 		getAddress(state.network.token) === getAddress(config.token) &&
 			getAddress(state.network.escrow) === getAddress(config.escrow),

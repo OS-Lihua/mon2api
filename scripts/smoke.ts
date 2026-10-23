@@ -109,7 +109,7 @@ async function trpc<T extends z.ZodTypeAny>(
 	return schema.parse(envelope.result.data.json);
 }
 async function snapshot(): Promise<Snapshot> {
-	return trpc("snapshot", null, snapshotSchema, false);
+	return trpc("snapshot", { gatewayOnly: false }, snapshotSchema, false);
 }
 function localOnly(value: Snapshot) {
 	const rpc = new URL(value.network.rpcUrl);
