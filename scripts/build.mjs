@@ -3,6 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { buildConnector } from "./build-connector.mjs";
 
+// Vercel can restore dependencies without rerunning their install hooks.
+const generated = spawnSync(
+	process.execPath,
+	["node_modules/prisma/build/index.js", "generate"],
+	{ stdio: "inherit" },
+);
+if (generated.status !== 0) process.exit(generated.status || 1);
+
 // Public downloads must exist before Next collects the deployment's static files.
 await buildConnector();
 
