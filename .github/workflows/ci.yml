@@ -1,0 +1,155 @@
+name: CI and Vercel
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  validate:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: token2api_ci
+          POSTGRES_PASSWORD: local_ci_only
+          POSTGRES_USER: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d token2api_ci"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:local_ci_only@127.0.0.1:5432/token2api_ci
+      APP_ENV: test
+      TOKEN2API_MODE: local
+      ALLOW_DEMO: "true"
+      APP_ORIGIN: http://localhost:3000
+      SESSION_PASSWORD: local-ci-only-not-a-deployment-secret-000000000000
+      TOKEN2API_DATA_DIR: .runtime/ci
+      LOG_LEVEL: warn
+      RATE_LIMIT_REQUESTS: "1000"
+      VITEST_MAX_WORKERS: "2"
+      NEXT_TELEMETRY_DISABLED: "1"
+      npm_config_audit: "false"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check migrations on the disposable CI database
+        run: |
+          pnpm db:migrate
+          pnpm db:migrate
+          pnpm db:seed
+      - name: Check formatting, lint, types, tests and production build
+        run: pnpm verify
+      - name: Test production HTTP and ledger recovery on local EVM
+        shell: bash
+        run: |
+          pnpm preview:local > "$RUNNER_TEMP/token2api-preview.log" 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
+          ready=false
+          for attempt in $(seq 1 120); do
+            if curl --fail --silent http://localhost:3000/api/v1/openapi.json > /dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            cat "$RUNNER_TEMP/token2api-preview.log"
+            exit 1
+          fi
+          pnpm test:e2e
+          pnpm test:api
+          TOKEN2API_RECOVERY_TEST=true pnpm test:recovery
+      - name: Show local server logs after a failure
+        if: failure()
+        run: |
+          if [ -f "$RUNNER_TEMP/token2api-preview.log" ]; then
+            cat "$RUNNER_TEMP/token2api-preview.log"
+          fi
+
+  deploy:
+    name: Deploy production
+    needs: validate
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    concurrency:
+      group: token2api-production
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      NEXT_TELEMETRY_DISABLED: "1"
+      npm_config_audit: "false"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Require deployment credentials and the latest main commit
+        shell: bash
+        run: |
+          : "${VERCEL_ORG_ID:?Set VERCEL_ORG_ID in the production environment}"
+          : "${VERCEL_PROJECT_ID:?Set VERCEL_PROJECT_ID in the production environment}"
+          : "${VERCEL_TOKEN:?Set VERCEL_TOKEN in the production environment}"
+          latest_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [ "$latest_sha" != "$GITHUB_SHA" ]; then
+            echo "::error::This commit is no longer the latest main. Deploy the latest workflow run."
+            exit 1
+          fi
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install locked dependencies and Vercel CLI
+        run: |
+          pnpm install --frozen-lockfile
+          npm install --global vercel@63.1.0
+      - name: Pull production settings
+        run: vercel pull --yes --environment=production
+      - name: Build the production deployment
+        run: vercel build --prod --yes
+      - name: Deploy the prebuilt output
+        id: deploy
+        shell: bash
+        run: |
+          deployment_url="$(vercel deploy --prebuilt --prod --yes \
+            --meta githubCommitSha="$GITHUB_SHA" \
+            --meta githubCommitRef="$GITHUB_REF_NAME" \
+            --meta githubCommitOrg="$GITHUB_REPOSITORY_OWNER" \
+            --meta githubCommitRepo="${GITHUB_REPOSITORY#*/}")"
+          printf 'url=%s\n' "$deployment_url" >> "$GITHUB_OUTPUT"
+          printf 'Production deployment: %s\nCommit: `%s`\n' "$deployment_url" "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+      - name: Check deployed pages and public API
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          for route in / /console /console/keys /console/billing /admin /api/v1/openapi.json; do
+            curl --fail --silent --show-error --retry 3 --retry-all-errors \
+              --connect-timeout 10 --max-time 45 "$DEPLOYMENT_URL$route" --output /dev/null
+          done

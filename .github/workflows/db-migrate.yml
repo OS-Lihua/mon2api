@@ -1,0 +1,49 @@
+name: DB Migrate
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type migrate to apply pending production migrations"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    name: Apply production migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: token2api-production
+      cancel-in-progress: false
+    environment: production-migrations
+    steps:
+      - name: Require main and explicit confirmation
+        env:
+          MIGRATION_CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$GITHUB_REF" != refs/heads/main ] || [ "$MIGRATION_CONFIRM" != migrate ]; then
+            echo "::error::Run this workflow on main and type migrate to confirm."
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply pending migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          : "${DATABASE_URL:?Set the direct production DATABASE_URL in production-migrations}"
+          pnpm db:migrate
+          pnpm exec prisma migrate status
+          printf 'Production migrations applied from `%s`.\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"

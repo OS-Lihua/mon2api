@@ -149,7 +149,7 @@ verify顺序运行格式/lint、TypeScript、Vitest和生产构建。端到端sm
 - [开发任务和验收状态](docs/TASKS.md)
 - [号池连接器与用量核对](docs/POOL.md)
 - [部署说明](docs/deployment/vercel.md)
-- [可选自动化模板](docs/ci/README.md)
+- [CI/CD 与可选自动化模板](docs/ci/README.md)：推送 `main` 后自动校验并发布 Vercel；生产数据库迁移独立手动执行。
 
 ## 开源基础
 
