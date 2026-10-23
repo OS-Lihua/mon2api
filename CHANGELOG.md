@@ -13,7 +13,7 @@ Tag format:
 
 - 修复 Node.js 24 上网关代理的 fetch 与 Undici dispatcher 版本不匹配，统一代理传输实现并保留原生 Request、响应状态与流式响应；与 Vercel 使用相同 Node 主版本进行 CI 校验。
 
-- 启用 GitHub Actions 校验与 Vercel 自动发布：推送 main 后先运行隔离数据库、本地 EVM、pnpm verify 和 HTTP 恢复测试，成功后发布 production 构建产物。生产数据库迁移保留为独立手动工作流，凭证使用分离的 GitHub Environments；关闭 Vercel 重复 Git 自动部署。
+- 启用 GitHub Actions 校验与 Vercel 自动发布：推送 main 后先运行隔离数据库、本地 EVM、pnpm verify 和 HTTP 恢复测试，成功后由 Vercel 使用 production 敏感变量构建和发布。生产数据库迁移保留为独立手动工作流，凭证使用分离的 GitHub Environments；关闭 Vercel 重复 Git 自动部署。
 
 - 结算配置缺失时继续隐藏历史金额和报价弹窗，防止默认资产误标旧账；区分预付退款去向，阻止为内部预付预留创建旧式会话 Key。
 

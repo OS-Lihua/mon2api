@@ -48,7 +48,7 @@ PostgreSQL 可以直接在 Vercel Marketplace 创建并绑定到项目，由集�
 
 1. 在 GitHub 仓库 Settings → Environments 创建 `production`，仅允许 `main` 分支部署。自动发布环境不要添加人工审批要求。
 2. 为当前 Vercel 项目创建专用部署 token，将其保存为 `production` 的 `VERCEL_TOKEN` secret。将本地 `.vercel/project.json` 的组织和项目标识分别保存为 `VERCEL_ORG_ID`、`VERCEL_PROJECT_ID` secrets。不要将这些值写入源码、工作流、聊天或 `.env.example`。
-3. 在 Vercel production 保留上文的运行环境配置。工作流使用 `vercel pull`、`vercel build --prod`、`vercel deploy --prebuilt --prod`，产物不上传为 GitHub artifact，日志不打印环境文件。Actions 与 Vercel 都使用 Node.js 24；CLI 固定为已验收版本。
+3. 在 Vercel production 保留上文的运行环境配置。工作流先用 `vercel pull` 获取配置并只读检查迁移，再以 `vercel deploy --prod` 上传当前提交，由 Vercel 构建和发布。生产构建直接读取 Vercel 保存的敏感变量；`vercel pull` 中的脱敏占位值不能用于本地生产构建。日志不打印环境文件，`.vercelignore` 排除环境文件与本地状态。Actions 与 Vercel 都使用 Node.js 24；CLI 固定为已验收版本。
 4. 推送 `main` 后，在 Actions 查看 `Verify` 与 `Deploy production`。成功的部署记录和步骤摘要包含产物地址与提交 SHA；工作流还检查首页、控制台、密钥、账单、后台和 OpenAPI 地址。检查仅验证 Web 与公开接口可访问，资金链路仍需真实钱包验收。
 
 `vercel.json` 将 `git.deploymentEnabled` 设置为 `false`，由 Actions 统一控制部署。不要另外启用 Vercel Git 自动部署或调用 Deploy Hook，否则会绕过校验或重复发布。发布前检查提交仍是最新 `main`，防止旧工作流重试覆盖新版本。正在进行的发布不会被后续推送中断。发布阶段对生产库只运行 `prisma migrate status`；有未执行或失败的迁移时停止发布，先单独处理 `DB Migrate`，再重试发布。
@@ -61,7 +61,7 @@ PostgreSQL 可以直接在 Vercel Marketplace 创建并绑定到项目，由集�
 
 迁移不会部署或替换托管合约，也不会转换历史余额。启用模型预付路由还须满足 [MODEL_ROUTING.md](../MODEL_ROUTING.md) 的新版合约和独立账本要求。Vercel Web 自动发布也不会启动或更新常驻结算 worker。
 
-上述命令模式遵循 [Vercel GitHub Actions 指南](https://vercel.com/kb/guide/how-can-i-use-github-actions-with-vercel)。专用 token 的有效期和轮换由维护者管理；到期前更新 GitHub secret 即可，不需修改工作流。
+命令和敏感变量行为见 [Vercel CLI 发布文档](https://vercel.com/docs/cli/deploying-from-cli)与 [Secret 变量说明](https://vercel.com/changelog/environment-variables-now-use-config-and-secret-types)。专用 token 的有效期和轮换由维护者管理；到期前更新 GitHub secret 即可，不需修改工作流。
 
 单机入口限流使用内存。多Web实例需要模板支持的共享Redis限流，只信任部署平台覆盖的IP头。已验证的 API Key、连接器凭证和已登录钱包按凭证单独计数（`RATE_LIMIT_CREDENTIAL_REQUESTS`，默认每窗口 600 次），不再与同一代理后的其他客户端共用 IP 配额；匿名请求与认证失败仍按 IP 计数。高并发时在 `DATABASE_URL` 设置 `connection_limit` 与 `pool_timeout`，所有进程的连接总数应低于数据库 `max_connections`。数据库和签名发送已有跨进程锁，多实例故障切换仍需压力与故障注入验收。
 

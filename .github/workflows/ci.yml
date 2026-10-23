@@ -138,13 +138,11 @@ jobs:
         run: vercel pull --yes --environment=production
       - name: Require production migrations to be applied separately
         run: node --env-file=.vercel/.env.production.local node_modules/prisma/build/index.js migrate status
-      - name: Build the production deployment
-        run: vercel build --prod --yes
-      - name: Deploy the prebuilt output
+      - name: Build and deploy on Vercel
         id: deploy
         shell: bash
         run: |
-          deployment_url="$(vercel deploy --prebuilt --prod --yes \
+          deployment_url="$(vercel deploy --prod --yes \
             --meta githubCommitSha="$GITHUB_SHA" \
             --meta githubCommitRef="$GITHUB_REF_NAME" \
             --meta githubCommitOrg="$GITHUB_REPOSITORY_OWNER" \
