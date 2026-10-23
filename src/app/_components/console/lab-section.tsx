@@ -76,7 +76,7 @@ export function LabSection({
 		<div className="chat-layout">
 			<Panel className="chat-settings" title="调用配置">
 				<div className="panel-body">
-					<div className="field">
+					<div className="field lab-selector">
 						<label htmlFor="lab-key">API Key</label>
 						<ConsoleSelect
 							disabled={!!busy}
@@ -92,7 +92,7 @@ export function LabSection({
 							value={keyId}
 						/>
 					</div>
-					<div className="field">
+					<div className="field lab-selector">
 						<label htmlFor="lab-model">模型</label>
 						<ConsoleSelect
 							disabled={!!busy || !selected}
@@ -107,7 +107,7 @@ export function LabSection({
 							value={modelId}
 						/>
 					</div>
-					<div className="field">
+					<div className="field lab-balance">
 						<span className="field-label">账户可用余额</span>
 						<div
 							className="stat-value"

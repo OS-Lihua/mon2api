@@ -38,12 +38,14 @@ export function ResourceTable({
 	return (
 		<TableScroll>
 			<table>
+				<caption className="sr-only">报价单位：{asset} / 百万 Token</caption>
 				<thead>
 					<tr>
 						<th>资源 / 模型</th>
 						<th>接入类型</th>
-						<th>输入 / 输出（{asset} / 百万 Token）</th>
-						<th>并发</th>
+						<th className="numeric">输入价格</th>
+						<th className="numeric">输出价格</th>
+						<th className="numeric">并发</th>
 						<th>状态</th>
 						<th>操作</th>
 					</tr>
@@ -72,10 +74,9 @@ export function ResourceTable({
 									{listingKind(item, { demo: "模拟资源", api: "网关直连" })}
 								</span>
 							</td>
-							<td className="mono">
-								{usd(item.inputRate)} / {usd(item.outputRate)}
-							</td>
-							<td className="mono">
+							<td className="mono numeric">{usd(item.inputRate)}</td>
+							<td className="mono numeric">{usd(item.outputRate)}</td>
+							<td className="mono numeric">
 								{item.activeRequests}
 								<span className="table-muted"> / {item.concurrency}</span>
 							</td>

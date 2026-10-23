@@ -814,15 +814,34 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 		: null;
 	const headingAction =
 		section === "overview" ? (
-			<button
-				className="button"
-				disabled={snapshot.isFetching}
-				onClick={() => void snapshot.refetch()}
-				type="button"
-			>
-				<RefreshCw className={snapshot.isFetching ? "spin" : ""} size={12} />
-				刷新数据
-			</button>
+			<div className="page-actions">
+				<button
+					className="button"
+					disabled={snapshot.isFetching}
+					onClick={() => void snapshot.refetch()}
+					type="button"
+				>
+					<RefreshCw className={snapshot.isFetching ? "spin" : ""} size={12} />
+					刷新数据
+				</button>
+				{data?.network.escrow && (
+					<button
+						className="button primary"
+						onClick={() =>
+							navigate(
+								data.keys.some((key) => !key.revoked && !key.sessionId)
+									? "lab"
+									: "keys",
+							)
+						}
+						type="button"
+					>
+						{data.keys.some((key) => !key.revoked && !key.sessionId)
+							? "继续调用"
+							: "创建 API Key"}
+					</button>
+				)}
+			</div>
 		) : section === "pool" ? (
 			<button
 				className="button primary"
@@ -1012,7 +1031,6 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 						className={`page-heading ${section === "overview" ? "overview-heading" : ""}`}
 					>
 						<div>
-							<span className="workspace-caption">TOKEN2API / 工作区</span>
 							<h1 ref={headingRef} tabIndex={-1}>
 								{consoleRoutes[section].title}
 							</h1>

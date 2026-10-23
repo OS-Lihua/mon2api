@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Globe2 } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { useState } from "react";
 import type { ModelView } from "~/shared/model-routing";
 import { formatAmount } from "~/shared/money";
@@ -56,12 +56,6 @@ export function MarketSection({
 	if (error) return <QueryError message={error} onRetry={onRetry} />;
 	return (
 		<>
-			<div className="notice info">
-				<Globe2 size={16} />
-				<span>
-					按平台统一报价调用。创建 Key 并选择允许使用的模型，上游由平台路由。
-				</span>
-			</div>
 			<CollectionToolbar>
 				<SearchField
 					label="搜索模型"
@@ -110,7 +104,8 @@ export function MarketSection({
 						<thead>
 							<tr>
 								<th>模型</th>
-								<th>输入 / 输出（{asset} / 百万 Token）</th>
+								<th className="numeric">输入价格</th>
+								<th className="numeric">输出价格</th>
 								<th>路由状态</th>
 								<th>操作</th>
 							</tr>
@@ -122,8 +117,10 @@ export function MarketSection({
 										<strong>{model.name}</strong>
 										<small className="table-secondary mono">{model.id}</small>
 									</td>
-									<td className="mono">
-										{formatAmount(model.inputRate, true)} /{" "}
+									<td className="mono numeric">
+										{formatAmount(model.inputRate, true)}
+									</td>
+									<td className="mono numeric">
 										{formatAmount(model.outputRate, true)}
 									</td>
 									<td>

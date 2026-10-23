@@ -64,6 +64,7 @@ export function PrepaidAccountPanel({
 		<>
 			<Panel
 				action={<Wallet size={18} />}
+				className="prepaid-account"
 				subtitle={`${network.name} · ${network.asset} · 所有模型 Key 共用，创建 Key 不会分配或复制余额。`}
 				title="统一预付余额"
 			>

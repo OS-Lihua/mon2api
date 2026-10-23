@@ -1,25 +1,10 @@
 "use client";
 
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import {
-	Activity,
-	ArrowRight,
-	ArrowUpRight,
-	Coins,
-	Layers3,
-	Wallet,
-} from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import type { Snapshot } from "~/shared/token2api";
 import type { Section } from "./format";
 import { Stats, UsageChart } from "./stats";
 import { Panel } from "./ui";
-
-const flow = [
-	{ icon: Layers3, title: "模型" },
-	{ icon: Wallet, title: "密钥" },
-	{ icon: Activity, title: "用量" },
-	{ icon: Coins, title: "结算" },
-];
 
 export function OverviewSection({
 	data,
@@ -33,60 +18,6 @@ export function OverviewSection({
 	const asset = data.network.asset;
 	return (
 		<>
-			<section className="hero">
-				<div className="hero-copy">
-					<span className="hero-eyebrow">模型 · 密钥 · 按量结算</span>
-					<h2>创建密钥，开始调用。</h2>
-					<p className="settlement-intro">
-						在同一工作台核对预算、用量与结算记录。
-					</p>
-					<div className="hero-actions">
-						<button
-							className="button lime"
-							onClick={() =>
-								navigate(
-									data.keys.some((key) => !key.revoked && !key.sessionId)
-										? "lab"
-										: "keys",
-								)
-							}
-							type="button"
-						>
-							{data.keys.some((key) => !key.revoked && !key.sessionId)
-								? "继续调用"
-								: "创建 API Key"}{" "}
-							<ArrowRight size={16} />
-						</button>
-						{!data.viewer && (
-							<ConnectButton
-								accountStatus="address"
-								chainStatus="icon"
-								label="连接钱包"
-								showBalance={false}
-							/>
-						)}
-					</div>
-				</div>
-				<div className="hero-route">
-					<div className="hero-flow">
-						{flow.map(({ icon: Icon, title }, index) => (
-							<div className="flow-item" key={title}>
-								<div
-									className={`flow-node ${index === flow.length - 1 ? "flow-node-final" : ""}`}
-								>
-									<span className="flow-node-icon">
-										<Icon size={18} strokeWidth={1.6} />
-									</span>
-									<span className="flow-node-title">{title}</span>
-								</div>
-								{index < flow.length - 1 && (
-									<span aria-hidden="true" className="flow-connector" />
-								)}
-							</div>
-						))}
-					</div>
-				</div>
-			</section>
 			<Stats data={data} />
 			<div className="two-columns">
 				<Panel title="调用活动">
@@ -151,7 +82,6 @@ export function OverviewSection({
 						查看市场 <ArrowUpRight size={11} />
 					</button>
 				}
-				subtitle="创建 Key、授权模型、使用统一预付余额"
 				title="接入应用"
 			>
 				<div className="panel-body">

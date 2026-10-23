@@ -12,7 +12,7 @@ export const consoleRoutes: Record<
 	market: {
 		href: "/console/market",
 		title: "模型市场",
-		description: "查看平台统一模型报价，为应用 Key 授权可用模型。",
+		description: "查看平台统一报价，为应用 Key 授权模型；上游由平台路由。",
 	},
 	pool: {
 		href: "/console/pool",
