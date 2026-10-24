@@ -4,6 +4,12 @@
 .admin-shell .content {
 	max-width: 1180px;
 }
+.admin-navigation {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 24px;
+}
 .admin-sections {
 	display: grid;
 	gap: 24px;
@@ -113,7 +119,17 @@
 }
 @media (max-width: 640px) {
 	.admin-shell .topbar {
-		padding: 0 16px;
+		height: auto;
+		min-height: 72px;
+		flex-wrap: wrap;
+		gap: 12px;
+		padding: 14px 16px;
+	}
+	.admin-navigation {
+		gap: 16px;
+	}
+	.admin-navigation .brand-logo {
+		height: 32px;
 	}
 	.admin-shell .content {
 		padding: 24px 16px;

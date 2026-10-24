@@ -2,7 +2,9 @@
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { ArrowLeft, Globe2, Plus, RefreshCw, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { BrandLogo } from "~/app/_components/brand-logo";
 import {
 	CollectionToolbar,
 	FilterField,
@@ -50,9 +52,14 @@ export function Token2ApiAdmin() {
 	return (
 		<div className="admin-shell">
 			<header className="topbar">
-				<a className="text-link" href="/console">
-					<ArrowLeft size={14} /> 返回控制台
-				</a>
+				<div className="admin-navigation">
+					<Link aria-label="Token2API 首页" href="/">
+						<BrandLogo />
+					</Link>
+					<a className="text-link" href="/console">
+						<ArrowLeft size={14} /> 返回控制台
+					</a>
+				</div>
 				{uiPreview ? (
 					<span className="demo-pill">UI 预览</span>
 				) : (

@@ -30,6 +30,7 @@ import {
 } from "react";
 import { SETTLEMENT_CHAINS } from "~/shared/network";
 import { AssetGlyph } from "./asset-glyph";
+import { BrandLogo } from "./brand-logo";
 import { ChainGlyph, chainColor, chainLabel } from "./chain-glyph";
 import styles from "./token2api-landing.module.css";
 
@@ -103,12 +104,7 @@ function SpotlightCard({
 function Brand() {
 	return (
 		<Link aria-label="Token2API 首页" className={styles.brand} href="/">
-			<span className={styles.brandMark}>
-				<Image alt="" height={38} src="/icon.svg" width={38} />
-			</span>
-			<span>
-				Token2API<span className={styles.brandDot}>.</span>
-			</span>
+			<BrandLogo className={styles.brandLogo} />
 		</Link>
 	);
 }

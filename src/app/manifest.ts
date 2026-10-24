@@ -8,8 +8,8 @@ export default function manifest(): MetadataRoute.Manifest {
 			"面向 AI 资源交易的多链结算平台。锁定预算、按量计费，核对收入与退款。",
 		start_url: "/",
 		display: "standalone",
-		background_color: "#f4f8f7",
-		theme_color: "#0f766e",
+		background_color: "#F7F9EE",
+		theme_color: "#171C13",
 		icons: [
 			{ src: "/icon.svg", sizes: "any", type: "image/svg+xml" },
 			{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },

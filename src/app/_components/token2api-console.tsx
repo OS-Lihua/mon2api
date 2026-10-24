@@ -34,6 +34,7 @@ import {
 	useState,
 } from "react";
 import { AssetGlyph } from "~/app/_components/asset-glyph";
+import { BrandLogo } from "~/app/_components/brand-logo";
 import {
 	ChainGlyph,
 	chainColor,
@@ -890,21 +891,7 @@ export function Token2ApiConsole({ children }: { children: ReactNode }) {
 				ref={sidebarRef}
 			>
 				<a aria-label="Token2API 首页" className="brand" href="/">
-					<span className="brand-mark">
-						<Image
-							alt=""
-							height={36}
-							loading="eager"
-							src="/token2api-mark.svg"
-							unoptimized
-							width={36}
-						/>
-					</span>
-					<div>
-						<div className="brand-name">
-							Token2API<span className="brand-dot">.</span>
-						</div>
-					</div>
+					<BrandLogo tone="dark" />
 				</a>
 				<button
 					aria-label="关闭导航菜单"

@@ -134,6 +134,7 @@ const modules = {
 		useSelectedLayoutSegment: () => currentPath.split("/")[2] ?? null,
 	},
 	"~/app/_components/asset-glyph": { AssetGlyph: placeholder },
+	"~/app/_components/brand-logo": { BrandLogo: placeholder },
 	"~/app/_components/chain-glyph": {
 		ChainGlyph: placeholder,
 		chainColor: () => "#000",
